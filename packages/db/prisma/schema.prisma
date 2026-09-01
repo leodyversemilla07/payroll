@@ -1,0 +1,469 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. ORGANIZATION & STRUCTURE
+// ----------------------------------------------------
+
+enum EmploymentType {
+  REGULAR
+  PROBATIONARY
+  CONTRACTUAL
+  PROJECT_BASED
+  PART_TIME
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  RESIGNED
+  TERMINATED
+  RETIRED
+}
+
+enum PayBasis {
+  MONTHLY
+  DAILY
+  HOURLY
+}
+
+enum Role {
+  SUPER_ADMIN
+  HR_ADMIN
+  PAYROLL_SPECIALIST
+  DEPARTMENT_MANAGER
+  EMPLOYEE
+}
+
+model Organization {
+  id                String       @id @default(uuid())
+  name              String
+  tin               String       // Employer TIN (9-12 digits)
+  sssNumber         String?      // Employer SSS ID
+  philhealthNumber  String?      // Employer PhilHealth ID
+  pagibigNumber     String?      // Employer Pag-IBIG ID
+  rdoCode           String       // BIR Revenue District Office Code
+  registeredAddress String
+  branches          Branch[]
+  departments       Department[]
+  employees         Employee[]
+  payrollRuns       PayrollRun[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model Branch {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  address         String
+  employees       Employee[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Department {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  managerId       String?
+  employees       Employee[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+// ----------------------------------------------------
+// 2. EMPLOYEE & COMPENSATION PROFILES
+// ----------------------------------------------------
+
+model Employee {
+  id                String            @id @default(uuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  branchId          String
+  branch            Branch            @relation(fields: [branchId], references: [id])
+  departmentId      String
+  department        Department        @relation(fields: [departmentId], references: [id])
+  
+  employeeNumber    String            @unique
+  firstName         String
+  middleName        String?
+  lastName          String
+  suffix            String?
+  dateOfBirth       DateTime
+  gender            String
+  civilStatus       String            // Single, Married, etc.
+  email             String            @unique
+  contactNumber     String
+  residentialAddress String
+
+  // Government & Statutory Identifiers
+  tin               String            // Tax Identification No.
+  sssNo             String            // SSS No.
+  philhealthNo      String            // PhilHealth No.
+  pagibigNo         String            // Pag-IBIG MID
+  
+  // Employment Details
+  hireDate          DateTime
+  regularizationDate DateTime?
+  resignationDate   DateTime?
+  employmentType    EmploymentType    @default(PROBATIONARY)
+  employmentStatus  EmploymentStatus  @default(ACTIVE)
+  role              Role              @default(EMPLOYEE)
+  payBasis          PayBasis          @default(MONTHLY)
+
+  // Bank Disbursement Details
+  bankName          String            // BDO, BPI, UnionBank, etc.
+  bankAccountNumber String
+  bankAccountName   String
+
+  // Relationships
+  compensation      Compensation?
+  allowances        EmployeeAllowance[]
+  attendances       DailyTimeRecord[]
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  overtimeRequests  OvertimeRequest[]
+  loans             EmployeeLoan[]
+  payslips          Payslip[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Compensation {
+  id                String       @id @default(uuid())
+  employeeId        String       @unique
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Stored in Philippine Centavos (Minor Units: e.g., 3000000 = PHP 30,000.00)
+  basicRateMonthlyCents  BigInt
+  basicRateDailyCents    BigInt
+  basicRateHourlyCents   BigInt
+  
+  isTaxExempt       Boolean      @default(false) // Minimum Wage Earners (MWE)
+  customSssDeductionCents      BigInt?
+  customPhilhealthDeductionCents BigInt?
+  customPagibigDeductionCents   BigInt?
+  
+  effectiveDate     DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+enum AllowanceType {
+  TAXABLE
+  DE_MINIMIS
+  NON_TAXABLE_FIXED
+}
+
+enum DeMinimisCategory {
+  RICE_SUBSIDY           // Max 2,000/mo
+  UNIFORM_CLOTHING       // Max 6,000/yr
+  MEDICAL_CASH_ALLOWANCE // Max 1,500/semester
+  LAUNDRY_ALLOWANCE      // Max 300/mo
+  DAILY_MEAL_OVERTIME    // 25% of basic min wage
+  OTHER
+}
+
+model EmployeeAllowance {
+  id                String            @id @default(uuid())
+  employeeId        String
+  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name              String
+  type              AllowanceType
+  deMinimisCategory DeMinimisCategory?
+  amountCents       BigInt            // In Centavos
+  frequency         String            // PER_CUTOFF, MONTHLY
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+// ----------------------------------------------------
+// 3. TIMEKEEPING & DAILY TIME RECORDS (DTR)
+// ----------------------------------------------------
+
+enum DayType {
+  REGULAR_WORKDAY
+  REST_DAY
+  SPECIAL_NON_WORKING_HOLIDAY
+  SPECIAL_WORKING_HOLIDAY
+  REGULAR_HOLIDAY
+  DOUBLE_HOLIDAY
+}
+
+model DailyTimeRecord {
+  id                String       @id @default(uuid())
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date              DateTime     @db.Date
+  dayType           DayType      @default(REGULAR_WORKDAY)
+  
+  // Ingested Times
+  timeIn            DateTime?
+  timeOut           DateTime?
+  
+  // Computed Durations (in minutes)
+  actualWorkedMinutes Int        @default(0)
+  tardinessMinutes    Int        @default(0)
+  undertimeMinutes    Int        @default(0)
+  overtimeMinutes     Int        @default(0)
+  nightDiffMinutes    Int        @default(0)
+  
+  // Holiday & Rest Day OT breakdown
+  restDayOTMinutes    Int        @default(0)
+  specialHolidayMinutes Int      @default(0)
+  regularHolidayMinutes Int      @default(0)
+  
+  isApproved        Boolean      @default(false)
+  isAbsent          Boolean      @default(false)
+  remarks           String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([employeeId, date])
+}
+
+model OvertimeRequest {
+  id                String       @id @default(uuid())
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date              DateTime     @db.Date
+  requestedMinutes  Int
+  actualMinutes     Int?
+  reason            String
+  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model LeaveBalance {
+  id                String       @id @default(uuid())
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType         String       // SIL, VACATION, SICK, MATERNITY, PATERNITY, SOLO_PARENT
+  totalCredits      Decimal      @default(0) @db.Decimal(5, 2)
+  usedCredits       Decimal      @default(0) @db.Decimal(5, 2)
+  balance           Decimal      @default(0) @db.Decimal(5, 2)
+  year              Int
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([employeeId, leaveType, year])
+}
+
+model LeaveRequest {
+  id                String       @id @default(uuid())
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType         String
+  startDate         DateTime     @db.Date
+  endDate           DateTime     @db.Date
+  daysCount         Decimal      @db.Decimal(5, 2)
+  isPaid            Boolean      @default(true)
+  reason            String
+  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+// ----------------------------------------------------
+// 4. LOANS & AMORTIZATION LEDGER
+// ----------------------------------------------------
+
+enum LoanType {
+  SSS_SALARY_LOAN
+  SSS_CALAMITY_LOAN
+  PAGIBIG_MULTI_PURPOSE
+  PAGIBIG_HOUSING
+  COMPANY_CASH_ADVANCE
+  COMPANY_EMERGENCY_LOAN
+}
+
+model EmployeeLoan {
+  id                String            @id @default(uuid())
+  employeeId        String
+  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  loanType          LoanType
+  referenceNumber   String?
+  principalCents    BigInt
+  totalAmountCents  BigInt
+  amortizationCents BigInt            // Deduction amount per pay cutoff
+  balanceCents      BigInt
+  
+  startDate         DateTime
+  endDate           DateTime?
+  isActive          Boolean           @default(true)
+  payments          LoanPayment[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model LoanPayment {
+  id                String       @id @default(uuid())
+  loanId            String
+  loan              EmployeeLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  payslipId         String?
+  payslip           Payslip?     @relation(fields: [payslipId], references: [id])
+  amountPaidCents   BigInt
+  balanceAfterCents BigInt
+  paymentDate       DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+}
+
+// ----------------------------------------------------
+// 5. PAYROLL RUNS & DETAILED PAYSLIPS
+// ----------------------------------------------------
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  AUDITED
+  APPROVED
+  DISBURSED
+  CANCELLED
+}
+
+enum CutoffSequence {
+  FIRST_CUTOFF   // e.g. 1st - 15th
+  SECOND_CUTOFF  // e.g. 16th - 30th/31st
+  SPECIAL_RUN    // 13th month or bonus
+}
+
+model PayrollRun {
+  id                String         @id @default(uuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  cutoffSequence    CutoffSequence
+  cutoffStartDate   DateTime       @db.Date
+  cutoffEndDate     DateTime       @db.Date
+  paymentDate       DateTime       @db.Date
+  status            PayrollStatus  @default(DRAFT)
+  
+  totalGrossCents   BigInt         @default(0)
+  totalDeductionsCents BigInt      @default(0)
+  totalNetCents     BigInt         @default(0)
+  totalEmployerCostCents BigInt    @default(0)
+  
+  payslips          Payslip[]
+  bankTransmittals  BankTransmittalBatch[]
+  processedById     String?
+  approvedById      String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model Payslip {
+  id                    String        @id @default(uuid())
+  payrollRunId          String
+  payrollRun            PayrollRun    @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee      @relation(fields: [employeeId], references: [id])
+  
+  // Earnings (Centavos)
+  basicPayCents         BigInt
+  overtimePayCents      BigInt        @default(0)
+  nightDiffPayCents     BigInt        @default(0)
+  holidayPayCents       BigInt        @default(0)
+  restDayPayCents       BigInt        @default(0)
+  taxableAllowancesCents BigInt       @default(0)
+  nonTaxableAllowancesCents BigInt    @default(0)
+  grossPayCents         BigInt
+  
+  // Timekeeping Deductions
+  tardinessDeductionCents BigInt      @default(0)
+  undertimeDeductionCents BigInt      @default(0)
+  absenceDeductionCents   BigInt      @default(0)
+  
+  // Statutory Employee Deductions
+  sssEmployeeCents      BigInt        @default(0)
+  sssWispEmployeeCents  BigInt        @default(0)
+  philhealthEmployeeCents BigInt      @default(0)
+  pagibigEmployeeCents  BigInt        @default(0)
+  withholdingTaxCents   BigInt        @default(0)
+  
+  // Statutory Employer Shares (for Cost/Ledger)
+  sssEmployerCents      BigInt        @default(0)
+  sssWispEmployerCents  BigInt        @default(0)
+  sssECCents            BigInt        @default(0) // Employees' Compensation
+  philhealthEmployerCents BigInt      @default(0)
+  pagibigEmployerCents  BigInt        @default(0)
+  
+  // Other Deductions
+  loanDeductionsCents   BigInt        @default(0)
+  otherDeductionsCents  BigInt        @default(0)
+  totalDeductionsCents  BigInt
+  
+  // Net Pay
+  netPayCents           BigInt
+  
+  // 13th Month Accrual
+  thirteenthMonthAccrualCents BigInt  @default(0)
+  
+  // PDF Storage & Security
+  pdfStoragePath        String?
+  pdfPasswordHash       String?       // Encrypted with employee DOB (MMDDYYYY)
+  isSentToEmployee      Boolean       @default(false)
+  
+  loanPayments          LoanPayment[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@unique([payrollRunId, employeeId])
+}
+
+// ----------------------------------------------------
+// 6. BANK BATCH TRANSMITTALS & AUDIT LOGS
+// ----------------------------------------------------
+
+enum BankCode {
+  BDO
+  BPI
+  UNIONBANK
+  METROBANK
+  SECURITY_BANK
+  RCBC
+  LANDBANK
+  CHECK_VOUCHER
+  CASH_PAYOUT
+}
+
+model BankTransmittalBatch {
+  id              String       @id @default(uuid())
+  payrollRunId    String
+  payrollRun      PayrollRun   @relation(fields: [payrollRunId], references: [id])
+  bankCode        BankCode
+  batchReference  String       @unique
+  totalRecords    Int
+  totalAmountCents BigInt
+  fileExportPath  String
+  generatedById   String
+  createdAt       DateTime     @default(now())
+}
+
+model AuditLog {
+  id              String       @id @default(uuid())
+  userId          String
+  userEmail       String
+  action          String       // e.g. "RECALCULATE_PAYROLL", "APPROVE_LOAN"
+  entityType      String       // "PayrollRun", "Employee", "Compensation"
+  entityId        String
+  previousData    Json?
+  newData         Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime     @default(now())
+}
