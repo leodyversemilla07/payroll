@@ -158,4 +158,49 @@ export class TimekeepingService {
       },
     });
   }
+
+  async importBiometricsCsv(csvContent: string) {
+    const { parseBiometricCsv, processBiometricLogs } = await import("@workspace/payroll-engine");
+    const rawLogs = parseBiometricCsv(csvContent);
+    const processedDays = processBiometricLogs(rawLogs);
+
+    let importedDaysCount = 0;
+    let anomalyCount = 0;
+
+    for (const day of processedDays) {
+      if (day.hasMissingPunch) {
+        anomalyCount += 1;
+      }
+
+      const emp = await prisma.employee.findUnique({
+        where: { employeeNumber: day.employeeNumber },
+      });
+
+      if (!emp) continue;
+
+      await this.adjustAttendanceRecord({
+        employeeId: emp.id,
+        date: new Date(day.dateStr),
+        dayType: "REGULAR_WORKDAY",
+        timeIn: day.timeIn,
+        timeOut: day.timeOut,
+        actualWorkedMinutes: day.actualWorkedMinutes,
+        tardinessMinutes: day.tardinessMinutes,
+        undertimeMinutes: day.undertimeMinutes,
+        overtimeMinutes: day.overtimeMinutes,
+        nightDiffMinutes: day.nightDiffMinutes,
+        isAbsent: false,
+        isApproved: !day.hasMissingPunch,
+      });
+
+      importedDaysCount += 1;
+    }
+
+    return {
+      totalPunchesParsed: rawLogs.length,
+      daysImported: importedDaysCount,
+      anomaliesDetected: anomalyCount,
+      details: processedDays,
+    };
+  }
 }

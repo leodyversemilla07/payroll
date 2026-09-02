@@ -21,16 +21,19 @@ import {
   FileText,
   Lock,
   X,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import {
   calculatePhilippinePayroll,
+  parseBiometricCsv,
+  processBiometricLogs,
   CutoffType,
   PayBasis,
   WorkDayDivisor,
   DeMinimisCategory,
 } from "@workspace/payroll-engine";
-import type { PayrollCalculationInput } from "@workspace/payroll-engine";
+import type { PayrollCalculationInput, ProcessedDtrDay } from "@workspace/payroll-engine";
 
 // Helper to format Centavos to Philippine Pesos string
 function formatPHP(cents: bigint | number): string {
@@ -199,6 +202,16 @@ export default function PayrollDashboard() {
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
   const [isDtrModalOpen, setIsDtrModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+  const [isBiometricsModalOpen, setIsBiometricsModalOpen] = useState(false);
+
+  // Biometrics Import state
+  const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
+EMP-2026-001,2026-08-25 09:18:00,CHECK_IN
+EMP-2026-001,2026-08-25 20:30:00,CHECK_OUT
+EMP-2026-002,2026-08-25 08:50:00,CHECK_IN
+EMP-2026-002,2026-08-25 18:05:00,CHECK_OUT
+EMP-2026-003,2026-08-25 09:00:00,CHECK_IN
+EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
   // New Employee Form State
   const [empForm, setEmpForm] = useState({
@@ -386,6 +399,41 @@ export default function PayrollDashboard() {
     );
     setIsLoanModalOpen(false);
     showToast("✅ Loan deduction registered and amortized for this pay cycle!");
+  }
+
+  // Parse Biometrics Logs Preview
+  const parsedBiometricDays: ProcessedDtrDay[] = (() => {
+    try {
+      const logs = parseBiometricCsv(biometricsCsv);
+      return processBiometricLogs(logs);
+    } catch {
+      return [];
+    }
+  })();
+
+  function handleApplyBiometrics() {
+    if (parsedBiometricDays.length === 0) return;
+
+    setEmployees(
+      employees.map((emp) => {
+        const matchingDay = parsedBiometricDays.find((d) => d.employeeNumber === emp.employeeNo);
+        if (matchingDay && !matchingDay.hasMissingPunch) {
+          return {
+            ...emp,
+            attendance: {
+              ...emp.attendance,
+              tardinessMinutes: matchingDay.tardinessMinutes,
+              regularOvertimeHours: matchingDay.overtimeMinutes / 60,
+              regularNightDiffHours: matchingDay.nightDiffMinutes / 60,
+            },
+          };
+        }
+        return emp;
+      })
+    );
+
+    setIsBiometricsModalOpen(false);
+    showToast(`✅ Successfully ingested biometric punches for ${parsedBiometricDays.length} records!`);
   }
 
   // Export File Generators
@@ -713,18 +761,28 @@ export default function PayrollDashboard() {
         {/* ========================================================================= */}
         {activeTab === "timekeeping" && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-semibold text-white">Daily Time Records & Attendance Logs</h2>
-                <p className="text-xs text-slate-400">Biometric punches, tardiness, overtime, and night shift differentials</p>
+                <p className="text-xs text-slate-400">Biometric clock punches, tardiness, overtime, and night shift differentials</p>
               </div>
-              <Button
-                size="sm"
-                onClick={() => setIsDtrModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white"
-              >
-                <Plus className="size-3.5 mr-1" /> Record / Adjust Attendance
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsBiometricsModalOpen(true)}
+                  className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
+                >
+                  <FileSpreadsheet className="size-3.5 mr-1.5" /> Import Biometrics CSV
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setIsDtrModalOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  <Plus className="size-3.5 mr-1" /> Record / Adjust Attendance
+                </Button>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-800">
@@ -1455,6 +1513,119 @@ export default function PayrollDashboard() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: BIOMETRICS CSV IMPORT & PREVIEW MODAL */}
+      {/* ========================================================================= */}
+      {isBiometricsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-2xl w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <UploadCloud className="size-4 text-blue-400" /> Biometric Time Clock Ingestion
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Parse ZKTeco, Granding, or facial biometric logs with automatic DOLE overtime & late computation
+                </p>
+              </div>
+              <button onClick={() => setIsBiometricsModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-medium">Paste Biometric Punch CSV Log:</label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setBiometricsCsv(`Employee_ID,Timestamp,Punch_Type
+EMP-2026-001,2026-08-25 09:18:00,CHECK_IN
+EMP-2026-001,2026-08-25 20:30:00,CHECK_OUT
+EMP-2026-002,2026-08-25 08:50:00,CHECK_IN
+EMP-2026-002,2026-08-25 18:05:00,CHECK_OUT
+EMP-2026-003,2026-08-25 09:00:00,CHECK_IN
+EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
+                  }
+                  className="text-blue-400 hover:underline text-[11px]"
+                >
+                  Load Sample ZKTeco Log
+                </button>
+              </div>
+
+              <textarea
+                rows={5}
+                value={biometricsCsv}
+                onChange={(e) => setBiometricsCsv(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
+              />
+
+              {/* Live Parsed Preview Table */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="bg-slate-950 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between">
+                  <span>Parsed Punch Preview ({parsedBiometricDays.length} Days Detected)</span>
+                  <span>DOLE Compliance Evaluated</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto divide-y divide-slate-800/60 text-[11px]">
+                  {parsedBiometricDays.map((day, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-800/30">
+                      <div>
+                        <span className="font-semibold text-white font-mono">{day.employeeNumber}</span>
+                        <span className="text-slate-500 ml-2">{day.dateStr}</span>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          In: {day.timeIn ? day.timeIn.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"} • Out: {day.timeOut ? day.timeOut.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {day.tardinessMinutes > 0 && (
+                          <span className="text-rose-400 font-mono block text-[10px]">
+                            {day.tardinessMinutes}m Late
+                          </span>
+                        )}
+                        {day.overtimeMinutes > 0 && (
+                          <span className="text-emerald-400 font-mono block text-[10px]">
+                            +{(day.overtimeMinutes / 60).toFixed(1)}h OT
+                          </span>
+                        )}
+                        {day.nightDiffMinutes > 0 && (
+                          <span className="text-purple-400 font-mono block text-[10px]">
+                            +{(day.nightDiffMinutes / 60).toFixed(1)}h NSD
+                          </span>
+                        )}
+                        {day.tardinessMinutes === 0 && day.overtimeMinutes === 0 && (
+                          <span className="text-emerald-400 text-[10px]">Standard 8h Shift</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsBiometricsModalOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleApplyBiometrics}
+                  disabled={parsedBiometricDays.length === 0}
+                  className="bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  Apply & Ingest to DTR
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

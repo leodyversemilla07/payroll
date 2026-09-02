@@ -150,6 +150,12 @@ export function createApiRouter(
             isApproved: input.isApproved,
           });
         }),
+
+      importBiometricsCsv: p
+        .input(z.object({ csvContent: z.string() }))
+        .mutation(async ({ input }) => {
+          return timekeepingService.importBiometricsCsv(input.csvContent);
+        }),
     }),
 
     payroll: trpc.router({
