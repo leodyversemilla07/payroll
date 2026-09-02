@@ -20,6 +20,7 @@ import {
   AlertCircle,
   FileText,
   Lock,
+  X,
 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -41,6 +42,19 @@ function formatPHP(cents: bigint | number): string {
   }).format(pesos);
 }
 
+// Helper to download content as client-side file
+function downloadFile(filename: string, content: string, mimeType = "text/csv;charset=utf-8;") {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 interface DemoEmployee {
   id: string;
   employeeNo: string;
@@ -57,6 +71,14 @@ interface DemoEmployee {
   bankName: string;
   bankAccount: string;
   activeLoanCents: bigint;
+  attendance: {
+    regularHoursWorked: number;
+    tardinessMinutes: number;
+    undertimeMinutes: number;
+    absentDays: number;
+    regularOvertimeHours: number;
+    regularNightDiffHours: number;
+  };
 }
 
 const INITIAL_EMPLOYEES: DemoEmployee[] = [
@@ -76,6 +98,14 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "BDO Unibank",
     bankAccount: "001234567890",
     activeLoanCents: 1500000n,
+    attendance: {
+      regularHoursWorked: 80,
+      tardinessMinutes: 15,
+      undertimeMinutes: 0,
+      absentDays: 0,
+      regularOvertimeHours: 4,
+      regularNightDiffHours: 0,
+    },
   },
   {
     id: "emp-002",
@@ -93,6 +123,14 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "BPI",
     bankAccount: "1234567890",
     activeLoanCents: 0n,
+    attendance: {
+      regularHoursWorked: 80,
+      tardinessMinutes: 0,
+      undertimeMinutes: 0,
+      absentDays: 0,
+      regularOvertimeHours: 0,
+      regularNightDiffHours: 0,
+    },
   },
   {
     id: "emp-003",
@@ -110,6 +148,14 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "UnionBank",
     bankAccount: "109876543210",
     activeLoanCents: 500000n,
+    attendance: {
+      regularHoursWorked: 80,
+      tardinessMinutes: 0,
+      undertimeMinutes: 0,
+      absentDays: 0,
+      regularOvertimeHours: 6,
+      regularNightDiffHours: 8,
+    },
   },
   {
     id: "emp-004",
@@ -127,6 +173,14 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "Metrobank",
     bankAccount: "209876543211",
     activeLoanCents: 0n,
+    attendance: {
+      regularHoursWorked: 80,
+      tardinessMinutes: 0,
+      undertimeMinutes: 0,
+      absentDays: 0,
+      regularOvertimeHours: 0,
+      regularNightDiffHours: 0,
+    },
   },
 ];
 
@@ -139,6 +193,46 @@ export default function PayrollDashboard() {
   const [selectedCutoff, setSelectedCutoff] = useState<"FIRST_CUTOFF" | "SECOND_CUTOFF">("FIRST_CUTOFF");
   const [payrollStatus, setPayrollStatus] = useState<"READY" | "RUNNING" | "COMPLETED">("READY");
   const [searchQuery, setSearchQuery] = useState("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Modals state
+  const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
+  const [isDtrModalOpen, setIsDtrModalOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+
+  // New Employee Form State
+  const [empForm, setEmpForm] = useState({
+    firstName: "",
+    lastName: "",
+    department: "Software Engineering",
+    role: "",
+    monthlySalaryPesos: 35000,
+    isMinimumWage: false,
+    bankName: "BDO Unibank",
+    bankAccount: "",
+  });
+
+  // DTR Form State
+  const [dtrForm, setDtrForm] = useState({
+    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    date: "2026-08-25",
+    tardinessMinutes: 0,
+    regularOvertimeHours: 2,
+    regularNightDiffHours: 0,
+  });
+
+  // Loan Form State
+  const [loanForm, setLoanForm] = useState({
+    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    loanType: "SSS Salary Loan",
+    principalPesos: 15000,
+    amortizationPesos: 500,
+  });
+
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  }
 
   // Live Payroll Calculation across all employees for selected cutoff
   const computedPayrollResults = employees.map((emp) => {
@@ -157,11 +251,11 @@ export default function PayrollDashboard() {
         isMinimumWageEarner: emp.isMinimumWageEarner,
       },
       attendance: {
-        regularHoursWorked: 80,
-        tardinessMinutes: emp.id === "emp-001" ? 15 : 0,
-        undertimeMinutes: 0,
-        absentDays: 0,
-        regularOvertimeHours: emp.id === "emp-001" ? 4 : emp.id === "emp-003" ? 6 : 0,
+        regularHoursWorked: emp.attendance.regularHoursWorked,
+        tardinessMinutes: emp.attendance.tardinessMinutes,
+        undertimeMinutes: emp.attendance.undertimeMinutes,
+        absentDays: emp.attendance.absentDays,
+        regularOvertimeHours: emp.attendance.regularOvertimeHours,
         restDayHours: 0,
         restDayOvertimeHours: 0,
         specialHolidayHours: 0,
@@ -172,7 +266,7 @@ export default function PayrollDashboard() {
         regularHolidayOvertimeHours: 0,
         regularHolidayRestDayHours: 0,
         regularHolidayRestDayOvertimeHours: 0,
-        regularNightDiffHours: emp.id === "emp-003" ? 8 : 0,
+        regularNightDiffHours: emp.attendance.regularNightDiffHours,
         overtimeNightDiffHours: 0,
         restDayNightDiffHours: 0,
         holidayNightDiffHours: 0,
@@ -180,18 +274,21 @@ export default function PayrollDashboard() {
       allowances: [
         {
           name: "Rice Subsidy",
-          amountCents: 100000n, // PHP 1,000.00 / cutoff
+          amountCents: 100000n, // PHP 1,000 / cutoff
           isTaxable: false,
           deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
         },
       ],
-      loans: emp.activeLoanCents > 0n ? [
-        {
-          loanId: `loan-${emp.id}`,
-          name: "SSS Salary Loan",
-          amountCents: 50000n, // PHP 500.00 amortization
-        },
-      ] : [],
+      loans:
+        emp.activeLoanCents > 0n
+          ? [
+              {
+                loanId: `loan-${emp.id}`,
+                name: "Mandatory/Statutory Loan",
+                amountCents: emp.activeLoanCents > 50000n ? 50000n : emp.activeLoanCents,
+              },
+            ]
+          : [],
     };
 
     return {
@@ -200,102 +297,249 @@ export default function PayrollDashboard() {
     };
   });
 
-  const totalGrossCents = computedPayrollResults.reduce((sum, item) => sum + item.calc.grossPayCents, 0n);
-  const totalDeductionsCents = computedPayrollResults.reduce((sum, item) => sum + item.calc.totalDeductionsCents, 0n);
-  const totalNetCents = computedPayrollResults.reduce((sum, item) => sum + item.calc.netPayCents, 0n);
-  const totalEmployerCostCents = computedPayrollResults.reduce((sum, item) => sum + item.calc.totalStatutoryEmployerCents, 0n);
+  // Aggregated Summary
+  const totalGrossCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.grossPayCents, 0n);
+  const totalNetCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.netPayCents, 0n);
+  const totalDeductionsCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.totalDeductionsCents, 0n);
+  const totalEmployerCostCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.totalStatutoryEmployerCents, 0n);
+
+  // Form Handlers
+  function handleAddEmployee(e: React.FormEvent) {
+    e.preventDefault();
+    if (!empForm.firstName || !empForm.lastName) return;
+
+    const newEmp: DemoEmployee = {
+      id: `emp-${Date.now()}`,
+      employeeNo: `EMP-2026-00${employees.length + 1}`,
+      name: `${empForm.firstName} ${empForm.lastName}`,
+      department: empForm.department,
+      role: empForm.role || "Associate",
+      payBasis: PayBasis.MONTHLY,
+      monthlyBasicRateCents: BigInt(Math.round(empForm.monthlySalaryPesos * 100)),
+      isMinimumWageEarner: empForm.isMinimumWage,
+      tin: "888-999-000-000",
+      sssNo: "09-8877665-4",
+      philhealthNo: "78-990011223-4",
+      pagibigNo: "9988-7766-5544",
+      bankName: empForm.bankName,
+      bankAccount: empForm.bankAccount || "1122334455",
+      activeLoanCents: 0n,
+      attendance: {
+        regularHoursWorked: 80,
+        tardinessMinutes: 0,
+        undertimeMinutes: 0,
+        absentDays: 0,
+        regularOvertimeHours: 0,
+        regularNightDiffHours: 0,
+      },
+    };
+
+    setEmployees([...employees, newEmp]);
+    setIsAddEmployeeOpen(false);
+    setEmpForm({
+      firstName: "",
+      lastName: "",
+      department: "Software Engineering",
+      role: "",
+      monthlySalaryPesos: 35000,
+      isMinimumWage: false,
+      bankName: "BDO Unibank",
+      bankAccount: "",
+    });
+    showToast(`✅ Successfully registered employee: ${newEmp.name} (${newEmp.employeeNo})`);
+  }
+
+  function handleSaveAttendance(e: React.FormEvent) {
+    e.preventDefault();
+    setEmployees(
+      employees.map((emp) => {
+        if (emp.id === dtrForm.employeeId) {
+          return {
+            ...emp,
+            attendance: {
+              ...emp.attendance,
+              tardinessMinutes: Number(dtrForm.tardinessMinutes),
+              regularOvertimeHours: Number(dtrForm.regularOvertimeHours),
+              regularNightDiffHours: Number(dtrForm.regularNightDiffHours),
+            },
+          };
+        }
+        return emp;
+      })
+    );
+    setIsDtrModalOpen(false);
+    showToast("✅ Attendance adjustments applied and recalculated across live payroll!");
+  }
+
+  function handleSaveLoan(e: React.FormEvent) {
+    e.preventDefault();
+    setEmployees(
+      employees.map((emp) => {
+        if (emp.id === loanForm.employeeId) {
+          return {
+            ...emp,
+            activeLoanCents: BigInt(Math.round(loanForm.principalPesos * 100)),
+          };
+        }
+        return emp;
+      })
+    );
+    setIsLoanModalOpen(false);
+    showToast("✅ Loan deduction registered and amortized for this pay cycle!");
+  }
+
+  // Export File Generators
+  function exportBankTransmittal(bank: string) {
+    const matching = computedPayrollResults.filter((r) =>
+      r.employee.bankName.toLowerCase().includes(bank.toLowerCase())
+    );
+    const records = matching.length > 0 ? matching : computedPayrollResults;
+
+    const rows = [
+      "Account_Number,Beneficiary_Name,Amount_PHP,Employee_ID,Reference",
+      ...records.map(
+        (r) =>
+          `"${r.employee.bankAccount}","${r.employee.name}",${(Number(r.calc.netPayCents) / 100).toFixed(2)},"${r.employee.employeeNo}","PAYROLL-${selectedCutoff}"`
+      ),
+    ];
+
+    downloadFile(`${bank}_Transmittal_${selectedCutoff}.csv`, rows.join("\r\n"));
+    showToast(`📥 Exported ${bank} Direct Deposit batch file with ${records.length} records!`);
+  }
+
+  function exportBir1601C() {
+    const grossPesos = (Number(totalGrossCents) / 100).toFixed(2);
+    const deductionsPesos = (Number(totalDeductionsCents) / 100).toFixed(2);
+    const content = [
+      "BUREAU OF INTERNAL REVENUE - FORM 1601-C SUMMARY",
+      "Monthly Remittance Return of Income Taxes Withheld on Compensation",
+      `Taxable Period: 2026-08`,
+      `Employer: Acme Philippines Technologies Inc.`,
+      `Employer TIN: 123-456-789-000 | RDO: 047`,
+      "--------------------------------------------------",
+      `Total Headcount: ${employees.length}`,
+      `Total Gross Compensation: PHP ${grossPesos}`,
+      `Total Non-Taxable / Exempt / Statutory: PHP ${deductionsPesos}`,
+      `Total Tax Withheld Due for Remittance: PHP ${(Number(computedPayrollResults.reduce((acc, c) => acc + c.calc.withholdingTaxCents, 0n)) / 100).toFixed(2)}`,
+    ].join("\r\n");
+
+    downloadFile("BIR_1601C_Monthly_Return_Aug2026.txt", content, "text/plain;charset=utf-8;");
+    showToast("📥 Exported official BIR 1601-C Monthly Remittance Summary!");
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/20">
-            ₱
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-base tracking-tight text-white">Acme Enterprise Philippines</span>
-              <span className="text-[11px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">
-                DOLE & BIR Compliant
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">Philippine Payroll Management System (PMS)</p>
-          </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-blue-600 selection:text-white">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs border border-emerald-400/30 animate-in fade-in slide-in-from-top-3">
+          <CheckCircle2 className="size-4" />
+          <span className="font-medium">{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-2 hover:opacity-75">
+            <X className="size-3.5" />
+          </button>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/60 rounded-xl px-3 py-1.5 text-xs text-slate-300">
-            <Calendar className="size-3.5 text-blue-400" />
-            <span>Pay Cutoff: <strong>Aug 16 – 31, 2026</strong></span>
+      {/* Top Navigation Bar */}
+      <header className="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+              🇵🇭
+            </div>
+            <div>
+              <div className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+                SweldoPH Enterprise
+                <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.2 rounded font-medium">
+                  DOLE & BIR 2026
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">Acme Philippines Technologies Inc. • RDO 047</p>
+            </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setActiveTab("payroll-wizard")}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-medium"
-          >
-            <Play className="size-3.5 mr-1.5 fill-current" />
-            Run Payroll
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 hidden sm:inline">Pay Cycle:</span>
+            <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center gap-1 text-xs">
+              <button
+                onClick={() => setSelectedCutoff("FIRST_CUTOFF")}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  selectedCutoff === "FIRST_CUTOFF"
+                    ? "bg-blue-600 text-white font-medium shadow-sm"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                1st Cutoff (1st–15th)
+              </button>
+              <button
+                onClick={() => setSelectedCutoff("SECOND_CUTOFF")}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  selectedCutoff === "SECOND_CUTOFF"
+                    ? "bg-blue-600 text-white font-medium shadow-sm"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                2nd Cutoff (16th–31st)
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-slate-800 bg-slate-900/40 px-6">
-        <nav className="flex space-x-6">
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3 overflow-x-auto text-xs">
           {[
             { id: "overview", label: "Overview & Metrics", icon: TrendingUp },
-            { id: "employees", label: "Employees Directory", icon: Users },
-            { id: "timekeeping", label: "Daily Time Records (DTR)", icon: Clock },
-            { id: "payroll-wizard", label: "Payroll Processing Wizard", icon: Banknote },
-            { id: "compliance", label: "Government & Banking Exports", icon: FileSpreadsheet },
-            { id: "ess-portal", label: "Employee Self-Service (ESS)", icon: UserCheck },
+            { id: "employees", label: `Employees (${employees.length})`, icon: Users },
+            { id: "timekeeping", label: "DTR & Attendance", icon: Clock },
+            { id: "payroll-wizard", label: "Payroll Run Wizard", icon: Banknote },
+            { id: "compliance", label: "Bank & Tax Exports", icon: FileSpreadsheet },
+            { id: "ess-portal", label: "ESS Digital Payslip", icon: Lock },
           ].map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const active = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 py-3.5 text-xs font-medium border-b-2 transition-colors ${
-                  isActive
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  active
+                    ? "bg-blue-600/10 text-blue-400 font-semibold border border-blue-500/20"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
                 }`}
               >
-                <Icon className="size-4" />
+                <Icon className="size-3.5" />
                 {tab.label}
               </button>
             );
           })}
-        </nav>
-      </div>
+        </div>
 
-      {/* Main Content Area */}
-      <main className="p-6 max-w-7xl mx-auto space-y-6">
         {/* ========================================================================= */}
         {/* TAB 1: OVERVIEW & METRICS */}
         {/* ========================================================================= */}
         {activeTab === "overview" && (
           <div className="space-y-6">
-            {/* Top Stat Cards */}
+            {/* Top Metric Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Total Gross Compensation</span>
+                  <span className="text-xs font-medium">Gross Payroll (Cutoff)</span>
                   <Banknote className="size-4 text-emerald-400" />
                 </div>
                 <div className="text-2xl font-bold text-white">{formatPHP(totalGrossCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">For Semi-Monthly Cutoff</p>
+                <p className="text-[11px] text-slate-400 mt-1">Basic + Overtime + De Minimis</p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
                   <span className="text-xs font-medium">Net Take-Home Pay</span>
-                  <CheckCircle2 className="size-4 text-blue-400" />
+                  <CreditCard className="size-4 text-blue-400" />
                 </div>
                 <div className="text-2xl font-bold text-white">{formatPHP(totalNetCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">{employees.length} Active Employees</p>
+                <p className="text-[11px] text-slate-400 mt-1">Disbursement batch total</p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
@@ -373,7 +617,11 @@ export default function PayrollDashboard() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="bg-slate-950 border border-slate-800 text-xs px-3.5 py-2 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 w-full md:w-64"
                 />
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setIsAddEmployeeOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-500 text-white shrink-0"
+                >
                   <Plus className="size-3.5 mr-1" /> Add Employee
                 </Button>
               </div>
@@ -387,14 +635,18 @@ export default function PayrollDashboard() {
                     <th className="py-3.5 px-4">Department & Role</th>
                     <th className="py-3.5 px-4">Monthly Basic Rate</th>
                     <th className="py-3.5 px-4">Tax Status</th>
-                    <th className="py-3.5 px-4">Government IDs</th>
+                    <th className="py-3.5 px-4">Active Loan</th>
                     <th className="py-3.5 px-4">Disbursement Bank</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                   {employees
-                    .filter((e) => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.employeeNo.includes(searchQuery))
+                    .filter(
+                      (e) =>
+                        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        e.employeeNo.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
                     .map((emp) => (
                       <tr key={emp.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="py-3 px-4 font-medium text-white">
@@ -419,17 +671,33 @@ export default function PayrollDashboard() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-400">
-                          <div>TIN: {emp.tin}</div>
-                          <div>SSS: {emp.sssNo}</div>
+                        <td className="py-3 px-4 font-mono text-[11px]">
+                          {emp.activeLoanCents > 0n ? (
+                            <span className="text-amber-400 font-medium">
+                              {formatPHP(emp.activeLoanCents)} Bal
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">None</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <div className="font-medium text-slate-200">{emp.bankName}</div>
                           <div className="font-mono text-[11px] text-slate-500">{emp.bankAccount}</div>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <Button size="xs" variant="outline" className="border-slate-700 hover:bg-slate-800 text-xs">
-                            Edit Rates
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => {
+                              setLoanForm({
+                                ...loanForm,
+                                employeeId: emp.id,
+                              });
+                              setIsLoanModalOpen(true);
+                            }}
+                            className="border-slate-700 hover:bg-slate-800 text-xs"
+                          >
+                            Add Loan
                           </Button>
                         </td>
                       </tr>
@@ -448,62 +716,60 @@ export default function PayrollDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-white">Daily Time Records & Attendance Logs</h2>
-                <p className="text-xs text-slate-400">Ingested biometric punches, overtime hours, and tardiness adjustments</p>
+                <p className="text-xs text-slate-400">Biometric punches, tardiness, overtime, and night shift differentials</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="border-slate-700 text-slate-300">
-                  <Download className="size-3.5 mr-1.5" /> Import Biometric CSV
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                onClick={() => setIsDtrModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white"
+              >
+                <Plus className="size-3.5 mr-1" /> Record / Adjust Attendance
+              </Button>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
                   <tr>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Regular Work Hours</th>
-                    <th className="py-3 px-4">Tardiness / Undertime</th>
-                    <th className="py-3 px-4">Regular Overtime</th>
-                    <th className="py-3 px-4">Night Shift Diff</th>
-                    <th className="py-3 px-4">Holiday / Rest Day</th>
-                    <th className="py-3 px-4 text-right">Approval Status</th>
+                    <th className="py-3.5 px-4">Employee</th>
+                    <th className="py-3.5 px-4">Regular Hours</th>
+                    <th className="py-3.5 px-4">Tardiness / Lates</th>
+                    <th className="py-3.5 px-4">Overtime Hours</th>
+                    <th className="py-3.5 px-4">Night Diff (10PM-6AM)</th>
+                    <th className="py-3.5 px-4 text-right">Approval Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                  {computedPayrollResults.map(({ employee, calc }) => (
-                    <tr key={employee.id} className="hover:bg-slate-800/40 transition-colors">
+                  {employees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4 font-medium text-white">
-                        {employee.name}
-                        <div className="text-[11px] text-slate-500">{employee.department}</div>
+                        <div>{emp.name}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{emp.employeeNo}</div>
                       </td>
-                      <td className="py-3 px-4">80.0 hrs</td>
-                      <td className="py-3 px-4">
-                        {calc.tardinessDeductionCents > 0n ? (
-                          <span className="text-rose-400 font-mono font-medium">
-                            -{formatPHP(calc.tardinessDeductionCents)} (15 mins)
-                          </span>
+                      <td className="py-3 px-4 font-mono">{emp.attendance.regularHoursWorked} hrs</td>
+                      <td className="py-3 px-4 font-mono">
+                        {emp.attendance.tardinessMinutes > 0 ? (
+                          <span className="text-rose-400 font-semibold">{emp.attendance.tardinessMinutes} mins</span>
                         ) : (
                           <span className="text-slate-500">0 mins</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono">
-                        {calc.overtimePayCents > 0n ? (
-                          <span className="text-emerald-400 font-medium">+{formatPHP(calc.overtimePayCents)}</span>
+                        {emp.attendance.regularOvertimeHours > 0 ? (
+                          <span className="text-emerald-400 font-semibold">+{emp.attendance.regularOvertimeHours} hrs (125%)</span>
                         ) : (
-                          <span className="text-slate-500">0.0 hrs</span>
+                          <span className="text-slate-500">0 hrs</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono">
-                        {calc.nightDiffPayCents > 0n ? (
-                          <span className="text-purple-400 font-medium">+{formatPHP(calc.nightDiffPayCents)}</span>
+                        {emp.attendance.regularNightDiffHours > 0 ? (
+                          <span className="text-purple-400 font-semibold">+{emp.attendance.regularNightDiffHours} hrs (+10%)</span>
                         ) : (
-                          <span className="text-slate-500">0.0 hrs</span>
+                          <span className="text-slate-500">0 hrs</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-slate-500">None</td>
                       <td className="py-3 px-4 text-right">
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
                           Approved
                         </span>
                       </td>
@@ -516,35 +782,37 @@ export default function PayrollDashboard() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 4: PAYROLL PROCESSING WIZARD */}
+        {/* TAB 4: PAYROLL RUN WIZARD */}
         {/* ========================================================================= */}
         {activeTab === "payroll-wizard" && (
           <div className="space-y-6">
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-white">Payroll Calculation & Run Wizard</h2>
-                <p className="text-xs text-slate-400">Review real-time DOLE, SSS, PhilHealth, Pag-IBIG & BIR tax computations before finalizing</p>
+                <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-medium uppercase">
+                  Active Cutoff
+                </span>
+                <h2 className="text-lg font-bold text-white mt-1">
+                  {selectedCutoff === "FIRST_CUTOFF" ? "1st Cutoff (Aug 1 - 15, 2026)" : "2nd Cutoff (Aug 16 - 31, 2026)"}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Statutory Deductions (SSS, PhilHealth, Pag-IBIG) & TRAIN Law Withholding Taxes will be applied.
+                </p>
               </div>
 
               <div className="flex items-center gap-3">
-                <select
-                  value={selectedCutoff}
-                  onChange={(e) => setSelectedCutoff(e.target.value as any)}
-                  className="bg-slate-950 border border-slate-800 text-xs px-3 py-2 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="FIRST_CUTOFF">1st Cutoff (1st – 15th of the month)</option>
-                  <option value="SECOND_CUTOFF">2nd Cutoff (16th – 30th/31st of the month)</option>
-                </select>
-
                 <Button
                   onClick={() => {
                     setPayrollStatus("RUNNING");
-                    setTimeout(() => setPayrollStatus("COMPLETED"), 1000);
+                    setTimeout(() => {
+                      setPayrollStatus("COMPLETED");
+                      showToast("🎉 Payroll Run Finalized and ready for Bank Disbursement!");
+                    }, 800);
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-500/20"
+                  disabled={payrollStatus === "RUNNING"}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
                 >
-                  <CheckCircle2 className="size-3.5 mr-1.5" />
-                  {payrollStatus === "RUNNING" ? "Processing..." : "Finalize & Disburse"}
+                  <Play className="size-3.5 mr-1.5" />
+                  {payrollStatus === "RUNNING" ? "Computing Engine..." : "Finalize & Disburse Run"}
                 </Button>
               </div>
             </div>
@@ -555,8 +823,13 @@ export default function PayrollDashboard() {
                   <CheckCircle2 className="size-4 shrink-0" />
                   <span>Payroll run finalized successfully! Payslips generated and ready for disbursement.</span>
                 </div>
-                <Button size="xs" variant="outline" className="border-emerald-500/30 text-emerald-300">
-                  View Disbursement Batch
+                <Button
+                  size="xs"
+                  onClick={() => setActiveTab("compliance")}
+                  variant="outline"
+                  className="border-emerald-500/30 text-emerald-300"
+                >
+                  View Bank Transmittal Files
                 </Button>
               </div>
             )}
@@ -637,17 +910,22 @@ export default function PayrollDashboard() {
 
               <div className="space-y-2 pt-2">
                 {[
-                  { name: "BDO Electronic Payroll (.csv)", count: 1, total: "₱32,842.10" },
-                  { name: "BPI ExpressLink / BizLink (.txt)", count: 1, total: "₱22,500.00" },
-                  { name: "UnionBank The Portal (.csv)", count: 1, total: "₱11,850.40" },
-                  { name: "Metrobank Direct Export (.txt)", count: 1, total: "₱8,200.00" },
+                  { name: "BDO Electronic Payroll (.csv)", bank: "BDO", total: formatPHP(totalNetCents) },
+                  { name: "BPI ExpressLink / BizLink (.csv)", bank: "BPI", total: formatPHP(totalNetCents) },
+                  { name: "UnionBank The Portal (.csv)", bank: "UnionBank", total: formatPHP(totalNetCents) },
+                  { name: "Metrobank Direct Export (.csv)", bank: "Metrobank", total: formatPHP(totalNetCents) },
                 ].map((b) => (
                   <div key={b.name} className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs">
                     <div>
                       <div className="font-medium text-white">{b.name}</div>
-                      <div className="text-[11px] text-slate-500">{b.count} Record • {b.total}</div>
+                      <div className="text-[11px] text-slate-500">{employees.length} Records • Total {b.total}</div>
                     </div>
-                    <Button size="xs" variant="outline" className="border-slate-700 hover:bg-slate-800 text-xs">
+                    <Button
+                      size="xs"
+                      onClick={() => exportBankTransmittal(b.bank)}
+                      variant="outline"
+                      className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
+                    >
                       <Download className="size-3 mr-1" /> Download
                     </Button>
                   </div>
@@ -667,18 +945,57 @@ export default function PayrollDashboard() {
 
               <div className="space-y-2 pt-2">
                 {[
-                  { name: "BIR Form 1601-C Summary", desc: "Monthly Remittance Return of Income Taxes" },
-                  { name: "BIR Form 2316 Batch (PDF)", desc: "Annual Certificate of Compensation" },
-                  { name: "BIR Alphalist Data (.DAT)", desc: "Formatted for BIR Validation Engine" },
-                  { name: "SSS R-3 Transmittal File", desc: "Monthly SSS Contribution Collection List" },
-                  { name: "PhilHealth EPRS Report", desc: "Electronic Premium Remittance System" },
+                  {
+                    name: "BIR Form 1601-C Summary",
+                    desc: "Monthly Remittance Return of Income Taxes",
+                    action: () => exportBir1601C(),
+                  },
+                  {
+                    name: "BIR Form 2316 Batch (Summary)",
+                    desc: "Annual Certificate of Compensation & Withholding Tax",
+                    action: () => {
+                      const text = [
+                        "BIR FORM 2316 - CERTIFICATE OF COMPENSATION PAYMENT / TAX WITHHELD",
+                        `Employer: Acme Philippines Technologies Inc. (TIN: 123-456-789-000)`,
+                        "----------------------------------------------------------------",
+                        ...computedPayrollResults.map(
+                          (r) =>
+                            `Employee: ${r.employee.name} | TIN: ${r.employee.tin} | Gross Annualized: ${formatPHP(r.employee.monthlyBasicRateCents * 12n)} | Tax Status: ${r.employee.isMinimumWageEarner ? "MWE (EXEMPT)" : "GRADUATED"}`
+                        ),
+                      ].join("\r\n");
+                      downloadFile("BIR_2316_Batch_Summary.txt", text, "text/plain;charset=utf-8;");
+                      showToast("📥 Exported BIR Form 2316 Annual Certificate Summary!");
+                    },
+                  },
+                  {
+                    name: "SSS R-3 Transmittal Summary",
+                    desc: "Monthly SSS Contribution Collection List",
+                    action: () => {
+                      const text = [
+                        "SSS R-3 MONTHLY COLLECTION LIST",
+                        "Employer SSS: 03-9876543-2 | Acme Philippines Technologies Inc.",
+                        "SS_Number,Employee_Name,EE_Share,ER_Share,EC_Share,Total",
+                        ...computedPayrollResults.map(
+                          (r) =>
+                            `"${r.employee.sssNo}","${r.employee.name}",${(Number(r.calc.sssContribution.employeeShareCents) / 100).toFixed(2)},${(Number(r.calc.sssContribution.employerShareCents) / 100).toFixed(2)},30.00,${(Number(r.calc.sssContribution.totalCents) / 100).toFixed(2)}`
+                        ),
+                      ].join("\r\n");
+                      downloadFile("SSS_R3_Monthly_Collection.csv", text);
+                      showToast("📥 Exported SSS R-3 Collection Schedule!");
+                    },
+                  },
                 ].map((g) => (
                   <div key={g.name} className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs">
                     <div>
                       <div className="font-medium text-white">{g.name}</div>
                       <div className="text-[11px] text-slate-500">{g.desc}</div>
                     </div>
-                    <Button size="xs" variant="outline" className="border-slate-700 hover:bg-slate-800 text-xs">
+                    <Button
+                      size="xs"
+                      onClick={g.action}
+                      variant="outline"
+                      className="border-slate-700 hover:bg-slate-800 text-xs text-purple-400"
+                    >
                       <Download className="size-3 mr-1" /> Generate
                     </Button>
                   </div>
@@ -783,13 +1100,364 @@ export default function PayrollDashboard() {
                 <span className="text-[10px] text-blue-400 uppercase font-bold">Net Take-Home Pay</span>
                 <div className="text-2xl font-black text-white font-mono">₱30,884.24</div>
               </div>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
-                <Download className="size-3.5 mr-1.5" /> Download Encrypted PDF
+              <Button
+                size="sm"
+                onClick={() => {
+                  const content = [
+                    "===========================================================",
+                    "            ACME PHILIPPINES TECHNOLOGIES INC.            ",
+                    "                OFFICIAL DIGITAL PAYSLIP                  ",
+                    "===========================================================",
+                    "Employee: Juan Dela Cruz (EMP-2026-001)",
+                    "Department: Software Engineering",
+                    "Pay Period: Aug 16 - 31, 2026",
+                    "PIN Security: Password Encrypted",
+                    "-----------------------------------------------------------",
+                    "EARNINGS:",
+                    "  Basic Pay: PHP 32,500.00",
+                    "  Overtime (4 hrs): PHP 1,556.52",
+                    "  De Minimis (Rice): PHP 1,000.00",
+                    "  GROSS PAY: PHP 35,056.52",
+                    "-----------------------------------------------------------",
+                    "DEDUCTIONS:",
+                    "  Tardiness (15m): PHP 97.28",
+                    "  SSS & WISP: PHP 1,750.00",
+                    "  PhilHealth: PHP 1,625.00",
+                    "  Pag-IBIG: PHP 200.00",
+                    "  SSS Salary Loan: PHP 500.00",
+                    "  TOTAL DEDUCTIONS: PHP 4,172.28",
+                    "-----------------------------------------------------------",
+                    "NET TAKE-HOME PAY: PHP 30,884.24",
+                    "===========================================================",
+                  ].join("\r\n");
+                  downloadFile("Payslip_Juan_Dela_Cruz_Aug2026.txt", content, "text/plain;charset=utf-8;");
+                  showToast("📥 Exported Official Payslip (Protected)!");
+                }}
+                className="bg-blue-600 hover:bg-blue-500 text-white"
+              >
+                <Download className="size-3.5 mr-1.5" /> Download Payslip
               </Button>
             </div>
           </div>
         )}
       </main>
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: ADD EMPLOYEE MODAL */}
+      {/* ========================================================================= */}
+      {isAddEmployeeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="size-4 text-blue-400" /> Add New Employee
+              </h3>
+              <button
+                onClick={() => setIsAddEmployeeOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEmployee} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">First Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Maria"
+                    value={empForm.firstName}
+                    onChange={(e) => setEmpForm({ ...empForm, firstName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Clara"
+                    value={empForm.lastName}
+                    onChange={(e) => setEmpForm({ ...empForm, lastName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Department</label>
+                  <select
+                    value={empForm.department}
+                    onChange={(e) => setEmpForm({ ...empForm, department: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Software Engineering">Software Engineering</option>
+                    <option value="Product & Design">Product & Design</option>
+                    <option value="Operations & Logistics">Operations & Logistics</option>
+                    <option value="Finance & Accounting">Finance & Accounting</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Role / Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. QA Engineer"
+                    value={empForm.role}
+                    onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Monthly Basic Rate (PHP)</label>
+                  <input
+                    type="number"
+                    required
+                    min={10000}
+                    step={500}
+                    value={empForm.monthlySalaryPesos}
+                    onChange={(e) => setEmpForm({ ...empForm, monthlySalaryPesos: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="isMwe"
+                    checked={empForm.isMinimumWage}
+                    onChange={(e) => setEmpForm({ ...empForm, isMinimumWage: e.target.checked })}
+                    className="size-4 rounded border-slate-800 bg-slate-950 text-blue-600 focus:ring-0"
+                  />
+                  <label htmlFor="isMwe" className="text-slate-300 select-none cursor-pointer">
+                    Minimum Wage Earner (Tax Exempt)
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Disbursement Bank</label>
+                  <select
+                    value={empForm.bankName}
+                    onChange={(e) => setEmpForm({ ...empForm, bankName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="BDO Unibank">BDO Unibank</option>
+                    <option value="BPI">BPI</option>
+                    <option value="UnionBank">UnionBank</option>
+                    <option value="Metrobank">Metrobank</option>
+                    <option value="Security Bank">Security Bank</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Bank Account Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 001234567890"
+                    value={empForm.bankAccount}
+                    onChange={(e) => setEmpForm({ ...empForm, bankAccount: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddEmployeeOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                  Register Employee
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: DTR / ATTENDANCE ADJUSTMENT MODAL */}
+      {/* ========================================================================= */}
+      {isDtrModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Clock className="size-4 text-emerald-400" /> Attendance Adjustment
+              </h3>
+              <button onClick={() => setIsDtrModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAttendance} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <select
+                  value={dtrForm.employeeId}
+                  onChange={(e) => setDtrForm({ ...dtrForm, employeeId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.employeeNo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Tardiness (Mins)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={dtrForm.tardinessMinutes}
+                    onChange={(e) => setDtrForm({ ...dtrForm, tardinessMinutes: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Overtime (Hrs)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={dtrForm.regularOvertimeHours}
+                    onChange={(e) => setDtrForm({ ...dtrForm, regularOvertimeHours: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Night Diff (Hrs)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={dtrForm.regularNightDiffHours}
+                    onChange={(e) => setDtrForm({ ...dtrForm, regularNightDiffHours: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsDtrModalOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
+                  Save Adjustments
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: APPLY / RECORD LOAN MODAL */}
+      {/* ========================================================================= */}
+      {isLoanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Banknote className="size-4 text-amber-400" /> Apply / File Loan Deduction
+              </h3>
+              <button onClick={() => setIsLoanModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLoan} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <select
+                  value={loanForm.employeeId}
+                  onChange={(e) => setLoanForm({ ...loanForm, employeeId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.employeeNo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Loan Facility</label>
+                <select
+                  value={loanForm.loanType}
+                  onChange={(e) => setLoanForm({ ...loanForm, loanType: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="SSS Salary Loan">SSS Salary Loan</option>
+                  <option value="SSS Calamity Loan">SSS Calamity Loan</option>
+                  <option value="Pag-IBIG Multi-Purpose">Pag-IBIG Multi-Purpose Loan</option>
+                  <option value="Company Emergency Advance">Company Emergency Advance</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Total Principal (PHP)</label>
+                  <input
+                    type="number"
+                    min={1000}
+                    step={500}
+                    value={loanForm.principalPesos}
+                    onChange={(e) => setLoanForm({ ...loanForm, principalPesos: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Cutoff Deduction (PHP)</label>
+                  <input
+                    type="number"
+                    min={100}
+                    step={50}
+                    value={loanForm.amortizationPesos}
+                    onChange={(e) => setLoanForm({ ...loanForm, amortizationPesos: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsLoanModalOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
+                  Record Loan
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

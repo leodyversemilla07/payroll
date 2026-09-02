@@ -1,12 +1,13 @@
 import { NestFactory } from "@nestjs/core";
 import * as trpcExpress from "@trpc/server/adapters/express";
-import { AppModule } from "./app.module.js";
-import { TrpcService } from "./trpc/trpc.service.js";
-import { createApiRouter } from "./trpc/routers/app.router.js";
-import { EmployeesService } from "./modules/employees/employees.service.js";
-import { TimekeepingService } from "./modules/timekeeping/timekeeping.service.js";
-import { PayrollService } from "./modules/payroll/payroll.service.js";
-import { LoansService } from "./modules/loans/loans.service.js";
+import { AppModule } from "./app.module";
+import { TrpcService } from "./trpc/trpc.service";
+import { createApiRouter } from "./trpc/routers/app.router";
+import { EmployeesService } from "./modules/employees/employees.service";
+import { TimekeepingService } from "./modules/timekeeping/timekeeping.service";
+import { PayrollService } from "./modules/payroll/payroll.service";
+import { LoansService } from "./modules/loans/loans.service";
+import { ComplianceService } from "./modules/compliance/compliance.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,13 +22,15 @@ async function bootstrap() {
   const timekeepingService = app.get(TimekeepingService);
   const payrollService = app.get(PayrollService);
   const loansService = app.get(LoansService);
+  const complianceService = app.get(ComplianceService);
 
   const appRouter = createApiRouter(
     trpcService,
     employeesService,
     timekeepingService,
     payrollService,
-    loansService
+    loansService,
+    complianceService
   );
 
   app.use(

@@ -4,6 +4,23 @@ import type { AttendanceSummary } from "@workspace/payroll-engine";
 
 @Injectable()
 export class TimekeepingService {
+  async listRecentRecords(limit = 50) {
+    return prisma.dailyTimeRecord.findMany({
+      take: limit,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { date: "desc" },
+    });
+  }
+
   async getEmployeeDTR(employeeId: string, startDate: Date, endDate: Date) {
     return prisma.dailyTimeRecord.findMany({
       where: {
@@ -91,6 +108,53 @@ export class TimekeepingService {
         date,
         timeIn,
         timeOut,
+      },
+    });
+  }
+
+  async adjustAttendanceRecord(data: {
+    employeeId: string;
+    date: Date;
+    dayType?: "REGULAR_WORKDAY" | "REST_DAY" | "SPECIAL_NON_WORKING_HOLIDAY" | "REGULAR_HOLIDAY" | "DOUBLE_HOLIDAY";
+    timeIn?: Date;
+    timeOut?: Date;
+    actualWorkedMinutes: number;
+    tardinessMinutes?: number;
+    undertimeMinutes?: number;
+    overtimeMinutes?: number;
+    nightDiffMinutes?: number;
+    isAbsent?: boolean;
+    isApproved?: boolean;
+  }) {
+    return prisma.dailyTimeRecord.upsert({
+      where: {
+        employeeId_date: { employeeId: data.employeeId, date: data.date },
+      },
+      update: {
+        dayType: data.dayType,
+        timeIn: data.timeIn,
+        timeOut: data.timeOut,
+        actualWorkedMinutes: data.actualWorkedMinutes,
+        tardinessMinutes: data.tardinessMinutes ?? 0,
+        undertimeMinutes: data.undertimeMinutes ?? 0,
+        overtimeMinutes: data.overtimeMinutes ?? 0,
+        nightDiffMinutes: data.nightDiffMinutes ?? 0,
+        isAbsent: data.isAbsent ?? false,
+        isApproved: data.isApproved ?? true,
+      },
+      create: {
+        employeeId: data.employeeId,
+        date: data.date,
+        dayType: data.dayType || "REGULAR_WORKDAY",
+        timeIn: data.timeIn,
+        timeOut: data.timeOut,
+        actualWorkedMinutes: data.actualWorkedMinutes,
+        tardinessMinutes: data.tardinessMinutes ?? 0,
+        undertimeMinutes: data.undertimeMinutes ?? 0,
+        overtimeMinutes: data.overtimeMinutes ?? 0,
+        nightDiffMinutes: data.nightDiffMinutes ?? 0,
+        isAbsent: data.isAbsent ?? false,
+        isApproved: data.isApproved ?? true,
       },
     });
   }

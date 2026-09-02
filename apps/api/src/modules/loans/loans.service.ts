@@ -4,6 +4,23 @@ import type { LoanType } from "@workspace/db";
 
 @Injectable()
 export class LoansService {
+  async listAllActiveLoans() {
+    return prisma.employeeLoan.findMany({
+      where: { isActive: true },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   async getEmployeeActiveLoans(employeeId: string) {
     return prisma.employeeLoan.findMany({
       where: {
