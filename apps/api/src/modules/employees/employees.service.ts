@@ -198,4 +198,76 @@ export class EmployeesService {
       },
     });
   }
+
+  async calculateFinalPaySettlement(input: {
+    employeeId: string;
+    separationType: "RESIGNATION" | "REDUNDANCY" | "RETRENCHMENT" | "CLOSURE_NON_BANKRUPT" | "DISEASE" | "RETIREMENT";
+    yearsOfService?: number;
+    unpaidDaysWorked?: number;
+    unusedLeaveDays?: number;
+    exitDate?: Date;
+  }) {
+    const { calculateFinalPay } = await import("@workspace/payroll-engine");
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      include: {
+        compensation: true,
+        loans: { where: { isActive: true } },
+        leaveBalances: { where: { year: new Date().getFullYear() } },
+      },
+    });
+
+    if (!employee || !employee.compensation) {
+      throw new Error(`Employee ${input.employeeId} or active compensation record not found`);
+    }
+
+    const monthlyBasicRateCents = employee.compensation.basicRateMonthlyCents;
+    const dailyRateCents = employee.compensation.basicRateDailyCents;
+
+    const exitDate = input.exitDate || new Date();
+    const hireDate = employee.hireDate || new Date(Date.now() - 365 * 24 * 3600 * 1000);
+    const serviceYears = input.yearsOfService !== undefined
+      ? input.yearsOfService
+      : Math.max(0.5, (exitDate.getTime() - hireDate.getTime()) / (365.25 * 24 * 3600 * 1000));
+
+    const outstandingLoanBalanceCents = employee.loans.reduce(
+      (acc: bigint, loan: { balanceCents: bigint }) => acc + loan.balanceCents,
+      0n
+    );
+
+    const silBalanceRecord = employee.leaveBalances.find((b: { leaveType: string }) => b.leaveType === "SIL");
+    const unusedLeaveDays = input.unusedLeaveDays !== undefined
+      ? input.unusedLeaveDays
+      : silBalanceRecord ? Number((silBalanceRecord as any).balance) : 5.0;
+
+    const monthIndex = exitDate.getMonth() + 1;
+    const totalYtdBasicEarnedCents = monthlyBasicRateCents * BigInt(monthIndex);
+    const ytdTaxableCompensationCents = totalYtdBasicEarnedCents;
+    const totalYtdTaxWithheldCents = (ytdTaxableCompensationCents * 10n) / 100n;
+
+    const settlement = calculateFinalPay({
+      separationType: input.separationType as any,
+      monthlyBasicRateCents,
+      dailyRateCents,
+      yearsOfService: serviceYears,
+      unpaidDaysWorkedInLastPeriod: input.unpaidDaysWorked ?? 0,
+      totalYtdBasicEarnedCents,
+      unusedLeaveDays,
+      ytdTaxableCompensationCents,
+      totalYtdTaxWithheldCents,
+      outstandingLoanBalanceCents,
+    });
+
+    return {
+      employee: {
+        id: employee.id,
+        name: `${employee.firstName} ${employee.lastName}`,
+        employeeNumber: employee.employeeNumber,
+        tin: employee.tin,
+      },
+      yearsOfService: serviceYears,
+      ...settlement,
+    };
+  }
 }

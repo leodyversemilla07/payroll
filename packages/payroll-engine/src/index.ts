@@ -23,6 +23,7 @@ export * from "./de-minimis";
 export * from "./thirteenth-month";
 export * from "./biometrics";
 export * from "./sil-conversion";
+export * from "./final-pay";
 
 /**
  * Master Philippine Payroll Calculation Engine

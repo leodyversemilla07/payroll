@@ -24,6 +24,8 @@ import {
   X,
   UploadCloud,
   Coins,
+  UserMinus,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -31,6 +33,8 @@ import {
   parseBiometricCsv,
   processBiometricLogs,
   calculateSilCashConversion,
+  calculateFinalPay,
+  SeparationType,
   deriveRates,
   CutoffType,
   PayBasis,
@@ -260,6 +264,12 @@ export default function PayrollDashboard() {
   const [isBiometricsModalOpen, setIsBiometricsModalOpen] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [isSilModalOpen, setIsSilModalOpen] = useState(false);
+  const [isFinalPayModalOpen, setIsFinalPayModalOpen] = useState(false);
+  const [selectedFinalPayEmpId, setSelectedFinalPayEmpId] = useState<string>(INITIAL_EMPLOYEES[0]!.id);
+  const [finalPayReason, setFinalPayReason] = useState<SeparationType>(SeparationType.RESIGNATION);
+  const [finalPayYearsOfService, setFinalPayYearsOfService] = useState<number>(2.5);
+  const [finalPayUnpaidDays, setFinalPayUnpaidDays] = useState<number>(5);
+  const [finalPayUnusedLeaves, setFinalPayUnusedLeaves] = useState<number>(5);
 
   // Biometrics Import state
   const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
@@ -554,6 +564,35 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
     showToast(
       `💰 Monetized ${silDaysToMonetize} days SIL (${formatPHP(silMonetizationCalc.totalMonetizedCashCents)}) credited to ${selectedSilEmp.name}!`
     );
+  }
+
+  // Selected Employee for DOLE Final Pay & Separation Settlement
+  const selectedFinalPayEmp = employees.find((e) => e.id === selectedFinalPayEmpId) || employees[0]!;
+  const finalPayDailyRateResult = deriveRates({
+    payBasis: selectedFinalPayEmp.payBasis,
+    monthlyBasicRateCents: selectedFinalPayEmp.monthlyBasicRateCents,
+    divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+    isMinimumWageEarner: selectedFinalPayEmp.isMinimumWageEarner,
+  });
+  const finalPayDailyRateCents = finalPayDailyRateResult.dailyRateCents;
+
+  const finalPayResult = calculateFinalPay({
+    separationType: finalPayReason,
+    monthlyBasicRateCents: selectedFinalPayEmp.monthlyBasicRateCents,
+    dailyRateCents: finalPayDailyRateCents,
+    yearsOfService: finalPayYearsOfService,
+    unpaidDaysWorkedInLastPeriod: finalPayUnpaidDays,
+    totalYtdBasicEarnedCents: selectedFinalPayEmp.monthlyBasicRateCents * 8n,
+    unusedLeaveDays: finalPayUnusedLeaves,
+    ytdTaxableCompensationCents: selectedFinalPayEmp.monthlyBasicRateCents * 8n,
+    totalYtdTaxWithheldCents: (selectedFinalPayEmp.monthlyBasicRateCents * 8n * 10n) / 100n,
+    outstandingLoanBalanceCents: selectedFinalPayEmp.activeLoanCents,
+  });
+
+  function handleFinalizeSeparation() {
+    setEmployees(employees.filter((emp) => emp.id !== selectedFinalPayEmp.id));
+    setIsFinalPayModalOpen(false);
+    showToast(`🕊️ Completed Separation Clearance & Final Pay for ${selectedFinalPayEmp.name}!`);
   }
 
   // Parse Biometrics Logs Preview
@@ -891,20 +930,33 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                           <div className="font-mono text-[11px] text-slate-500">{emp.bankAccount}</div>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                              setLoanForm({
-                                ...loanForm,
-                                employeeId: emp.id,
-                              });
-                              setIsLoanModalOpen(true);
-                            }}
-                            className="border-slate-700 hover:bg-slate-800 text-xs"
-                          >
-                            Add Loan
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => {
+                                setLoanForm({
+                                  ...loanForm,
+                                  employeeId: emp.id,
+                                });
+                                setIsLoanModalOpen(true);
+                              }}
+                              className="border-slate-700 hover:bg-slate-800 text-xs"
+                            >
+                              Add Loan
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedFinalPayEmpId(emp.id);
+                                setIsFinalPayModalOpen(true);
+                              }}
+                              className="border-rose-900/60 text-rose-400 hover:bg-rose-950/40 text-xs"
+                            >
+                              Final Pay
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2134,6 +2186,230 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                 >
                   Credit Cash to Next Payroll Run
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 7: DOLE FINAL PAY & SEPARATION CLEARANCE SETTLEMENT */}
+      {/* ========================================================================= */}
+      {isFinalPayModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <UserMinus className="size-4 text-rose-400" /> DOLE Final Pay & Separation Clearance
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Labor Advisory No. 06-2020 • 30-day statutory release mandate • Art. 298-299
+                </p>
+              </div>
+              <button onClick={() => setIsFinalPayModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Employee for Separation</label>
+                <select
+                  value={selectedFinalPayEmpId}
+                  onChange={(e) => setSelectedFinalPayEmpId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.employeeNo}) — Basic: {formatPHP(emp.monthlyBasicRateCents)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Separation Reason / Cause</label>
+                  <select
+                    value={finalPayReason}
+                    onChange={(e) => setFinalPayReason(e.target.value as SeparationType)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value={SeparationType.RESIGNATION}>Voluntary Resignation (No Sep Pay)</option>
+                    <option value={SeparationType.REDUNDANCY}>Redundancy (Art. 298: 1 mo/yr)</option>
+                    <option value={SeparationType.RETRENCHMENT}>Retrenchment / Losses (Art. 298: 0.5 mo/yr)</option>
+                    <option value={SeparationType.CLOSURE_NON_BANKRUPT}>Closure of Business (0.5 mo/yr)</option>
+                    <option value={SeparationType.DISEASE}>Disease / Health (Art. 299: 0.5 mo/yr)</option>
+                    <option value={SeparationType.RETIREMENT}>Retirement (RA 7641: 22.5 days/yr)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Tenure / Years of Service</label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={finalPayYearsOfService}
+                    onChange={(e) => setFinalPayYearsOfService(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500">$\ge 6$ mos counted as 1 yr per DOLE</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Unpaid Days Worked (Exit Cutoff)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={finalPayUnpaidDays}
+                    onChange={(e) => setFinalPayUnpaidDays(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Rate: {formatPHP(finalPayDailyRateCents)}/day</span>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Unused Leave Credits (SIL / VL)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={finalPayUnusedLeaves}
+                    onChange={(e) => setFinalPayUnusedLeaves(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Up to 10d tax-exempt (BIR)</span>
+                </div>
+              </div>
+
+              {/* Settlement Engine Breakdown Card */}
+              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-2.5">
+                <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex justify-between items-center">
+                  <span>DOLE Itemized Final Settlement</span>
+                  <span className="text-blue-400 font-mono text-[10px]">30-Day Clearance</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-slate-400">1. Unpaid Salary ({finalPayUnpaidDays} days):</span>
+                  <span className="font-mono text-white">{formatPHP(finalPayResult.unpaidSalaryCents)}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-slate-400">2. Pro-rated 13th Month Pay (Tax-Exempt):</span>
+                  <span className="font-mono text-emerald-400">+{formatPHP(finalPayResult.proratedThirteenthMonthCents)}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-slate-400">3. Monetized Unused Leaves ({finalPayUnusedLeaves} days):</span>
+                  <span className="font-mono text-purple-400">+{formatPHP(finalPayResult.monetizedLeaveCents)}</span>
+                </div>
+
+                {finalPayResult.separationPayCents > 0n && (
+                  <div className="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-xl">
+                    <div>
+                      <span className="text-emerald-300 font-medium">4. Statutory Separation Pay:</span>
+                      <div className="text-[10px] text-emerald-400/80">
+                        {finalPayReason} ({finalPayYearsOfService} yrs) • 100% Tax-Exempt
+                      </div>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-300 text-sm">
+                      +{formatPHP(finalPayResult.separationPayCents)}
+                    </span>
+                  </div>
+                )}
+
+                {finalPayResult.taxAdjustmentCents !== 0n && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">5. BIR 2316 Tax Annualization:</span>
+                    <span className={`font-mono ${finalPayResult.taxAdjustmentCents < 0n ? "text-emerald-400" : "text-rose-400"}`}>
+                      {finalPayResult.taxAdjustmentCents < 0n
+                        ? `Refund +${formatPHP(-finalPayResult.taxAdjustmentCents)}`
+                        : `Deficiency -${formatPHP(finalPayResult.taxAdjustmentCents)}`}
+                    </span>
+                  </div>
+                )}
+
+                {finalPayResult.outstandingLoanDeductionsCents > 0n && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">6. Company Loan Deductions:</span>
+                    <span className="font-mono text-rose-400">
+                      -{formatPHP(finalPayResult.outstandingLoanDeductionsCents)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-sm font-bold">
+                  <span className="text-white">NET FINAL PAY PAYOUT:</span>
+                  <span className="text-emerald-400 font-mono text-base">
+                    {formatPHP(finalPayResult.netFinalPayCents)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const text = [
+                      "===========================================================",
+                      "         ACME PHILIPPINES TECHNOLOGIES INC.                ",
+                      "       DOLE FINAL PAY & SEPARATION SETTLEMENT              ",
+                      "    Compliant with DOLE Labor Advisory No. 06-2020        ",
+                      "===========================================================",
+                      `Employee Name: ${selectedFinalPayEmp.name}`,
+                      `Employee ID: ${selectedFinalPayEmp.employeeNo}`,
+                      `TIN: ${selectedFinalPayEmp.tin}`,
+                      `Separation Cause: ${finalPayReason}`,
+                      `Years of Service: ${finalPayYearsOfService} year(s)`,
+                      "-----------------------------------------------------------",
+                      "FINAL PAY BREAKDOWN:",
+                      `  Unpaid Salary (${finalPayUnpaidDays} days): PHP ${(Number(finalPayResult.unpaidSalaryCents) / 100).toFixed(2)}`,
+                      `  Pro-rated 13th Month Pay: PHP ${(Number(finalPayResult.proratedThirteenthMonthCents) / 100).toFixed(2)}`,
+                      `  Monetized Leaves (${finalPayUnusedLeaves} days): PHP ${(Number(finalPayResult.monetizedLeaveCents) / 100).toFixed(2)}`,
+                      `  Statutory Separation Pay: PHP ${(Number(finalPayResult.separationPayCents) / 100).toFixed(2)}`,
+                      `  Tax Annualization Adjustment: PHP ${(Number(-finalPayResult.taxAdjustmentCents) / 100).toFixed(2)}`,
+                      `  Less Outstanding Loans: PHP ${(Number(finalPayResult.outstandingLoanDeductionsCents) / 100).toFixed(2)}`,
+                      "-----------------------------------------------------------",
+                      `NET FINAL SETTLEMENT: PHP ${(Number(finalPayResult.netFinalPayCents) / 100).toFixed(2)}`,
+                      "===========================================================",
+                      "RELEASE, WAIVER, AND QUITCLAIM:",
+                      "I hereby acknowledge receipt of the full and final settlement of all",
+                      "monetary claims arising from my employment with the Company.",
+                      "",
+                      "Employee Signature: _______________________ Date: ____________",
+                    ].join("\r\n");
+                    downloadFile(`Final_Pay_${selectedFinalPayEmp.name.replace(/\s+/g, "_")}.txt`, text, "text/plain;charset=utf-8;");
+                    showToast("📥 Exported Official DOLE Final Pay & Quitclaim Document!");
+                  }}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  <Download className="size-3.5 mr-1.5" /> Download Settlement Slip
+                </Button>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsFinalPayModalOpen(false)}
+                    className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleFinalizeSeparation}
+                    className="bg-rose-600 hover:bg-rose-500 text-white"
+                  >
+                    Release & Finalize Separation
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

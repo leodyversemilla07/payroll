@@ -68,6 +68,31 @@ export function createApiRouter(
         .mutation(async ({ input }) => {
           return employeesService.registerEmployee(input);
         }),
+
+      calculateFinalPay: p
+        .input(
+          z.object({
+            employeeId: z.string(),
+            separationType: z.enum([
+              "RESIGNATION",
+              "REDUNDANCY",
+              "RETRENCHMENT",
+              "CLOSURE_NON_BANKRUPT",
+              "DISEASE",
+              "RETIREMENT",
+            ]),
+            yearsOfService: z.number().optional(),
+            unpaidDaysWorked: z.number().optional(),
+            unusedLeaveDays: z.number().optional(),
+            exitDate: z.string().optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          return employeesService.calculateFinalPaySettlement({
+            ...input,
+            exitDate: input.exitDate ? new Date(input.exitDate) : undefined,
+          });
+        }),
     }),
 
     timekeeping: trpc.router({
