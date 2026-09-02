@@ -22,6 +22,7 @@ export * from "./withholding-tax";
 export * from "./de-minimis";
 export * from "./thirteenth-month";
 export * from "./biometrics";
+export * from "./sil-conversion";
 
 /**
  * Master Philippine Payroll Calculation Engine

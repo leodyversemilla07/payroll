@@ -8,6 +8,7 @@ import { TimekeepingService } from "./modules/timekeeping/timekeeping.service";
 import { PayrollService } from "./modules/payroll/payroll.service";
 import { LoansService } from "./modules/loans/loans.service";
 import { ComplianceService } from "./modules/compliance/compliance.service";
+import { LeavesService } from "./modules/leaves/leaves.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,6 +24,7 @@ async function bootstrap() {
   const payrollService = app.get(PayrollService);
   const loansService = app.get(LoansService);
   const complianceService = app.get(ComplianceService);
+  const leavesService = app.get(LeavesService);
 
   const appRouter = createApiRouter(
     trpcService,
@@ -30,7 +32,8 @@ async function bootstrap() {
     timekeepingService,
     payrollService,
     loansService,
-    complianceService
+    complianceService,
+    leavesService
   );
 
   app.use(

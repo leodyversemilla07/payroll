@@ -5,6 +5,7 @@ import { TimekeepingService } from "../../modules/timekeeping/timekeeping.servic
 import { PayrollService } from "../../modules/payroll/payroll.service";
 import { LoansService } from "../../modules/loans/loans.service";
 import { ComplianceService } from "../../modules/compliance/compliance.service";
+import { LeavesService } from "../../modules/leaves/leaves.service";
 
 export function createApiRouter(
   trpc: TrpcService,
@@ -12,7 +13,8 @@ export function createApiRouter(
   timekeepingService: TimekeepingService,
   payrollService: PayrollService,
   loansService: LoansService,
-  complianceService: ComplianceService
+  complianceService: ComplianceService,
+  leavesService: LeavesService
 ) {
   const p = trpc.procedure;
 
@@ -265,6 +267,50 @@ export function createApiRouter(
         )
         .query(async ({ input }) => {
           return complianceService.getBir1601CSummary(input.month, input.year);
+        }),
+    }),
+
+    leaves: trpc.router({
+      getBalances: p
+        .input(z.object({ employeeId: z.string(), year: z.number().optional() }))
+        .query(async ({ input }) => {
+          return leavesService.getEmployeeLeaveBalances(input.employeeId, input.year);
+        }),
+
+      request: p
+        .input(
+          z.object({
+            employeeId: z.string(),
+            leaveType: z.string(),
+            startDate: z.string(),
+            endDate: z.string(),
+            daysCount: z.number(),
+            isPaid: z.boolean().default(true),
+            reason: z.string(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          return leavesService.fileLeaveRequest({
+            employeeId: input.employeeId,
+            leaveType: input.leaveType,
+            startDate: new Date(input.startDate),
+            endDate: new Date(input.endDate),
+            daysCount: input.daysCount,
+            isPaid: input.isPaid,
+            reason: input.reason,
+          });
+        }),
+
+      approve: p
+        .input(z.object({ requestId: z.string(), approvedById: z.string().optional() }))
+        .mutation(async ({ input }) => {
+          return leavesService.approveLeaveRequest(input.requestId, input.approvedById);
+        }),
+
+      monetizeSil: p
+        .input(z.object({ employeeId: z.string(), daysToMonetize: z.number().optional() }))
+        .query(async ({ input }) => {
+          return leavesService.calculateSilMonetization(input.employeeId, input.daysToMonetize);
         }),
     }),
   });

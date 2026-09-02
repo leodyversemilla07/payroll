@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   FileCheck2,
   Calendar,
+  CalendarDays,
   Building2,
   Download,
   Plus,
@@ -22,12 +23,15 @@ import {
   Lock,
   X,
   UploadCloud,
+  Coins,
 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import {
   calculatePhilippinePayroll,
   parseBiometricCsv,
   processBiometricLogs,
+  calculateSilCashConversion,
+  deriveRates,
   CutoffType,
   PayBasis,
   WorkDayDivisor,
@@ -74,6 +78,8 @@ interface DemoEmployee {
   bankName: string;
   bankAccount: string;
   activeLoanCents: bigint;
+  silBalanceDays: number;
+  silCashBonusCents: bigint;
   attendance: {
     regularHoursWorked: number;
     tardinessMinutes: number;
@@ -82,6 +88,19 @@ interface DemoEmployee {
     regularOvertimeHours: number;
     regularNightDiffHours: number;
   };
+}
+
+interface DemoLeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  daysCount: number;
+  isPaid: boolean;
+  reason: string;
+  status: "APPROVED" | "PENDING";
 }
 
 const INITIAL_EMPLOYEES: DemoEmployee[] = [
@@ -101,6 +120,8 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "BDO Unibank",
     bankAccount: "001234567890",
     activeLoanCents: 1500000n,
+    silBalanceDays: 5.0,
+    silCashBonusCents: 0n,
     attendance: {
       regularHoursWorked: 80,
       tardinessMinutes: 15,
@@ -126,6 +147,8 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "BPI",
     bankAccount: "1234567890",
     activeLoanCents: 0n,
+    silBalanceDays: 5.0,
+    silCashBonusCents: 0n,
     attendance: {
       regularHoursWorked: 80,
       tardinessMinutes: 0,
@@ -151,6 +174,8 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "UnionBank",
     bankAccount: "109876543210",
     activeLoanCents: 500000n,
+    silBalanceDays: 4.0,
+    silCashBonusCents: 0n,
     attendance: {
       regularHoursWorked: 80,
       tardinessMinutes: 0,
@@ -176,6 +201,8 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
     bankName: "Metrobank",
     bankAccount: "209876543211",
     activeLoanCents: 0n,
+    silBalanceDays: 5.0,
+    silCashBonusCents: 0n,
     attendance: {
       regularHoursWorked: 80,
       tardinessMinutes: 0,
@@ -187,12 +214,40 @@ const INITIAL_EMPLOYEES: DemoEmployee[] = [
   },
 ];
 
+const INITIAL_LEAVE_REQUESTS: DemoLeaveRequest[] = [
+  {
+    id: "req-001",
+    employeeId: "emp-001",
+    employeeName: "Juan Dela Cruz",
+    leaveType: "Vacation Leave",
+    startDate: "2026-08-10",
+    endDate: "2026-08-11",
+    daysCount: 2,
+    isPaid: true,
+    reason: "Family vacation to Batangas",
+    status: "APPROVED",
+  },
+  {
+    id: "req-002",
+    employeeId: "emp-003",
+    employeeName: "Carlos Reyes",
+    leaveType: "Sick Leave",
+    startDate: "2026-08-14",
+    endDate: "2026-08-14",
+    daysCount: 1,
+    isPaid: true,
+    reason: "Acute migraine & rest advised",
+    status: "APPROVED",
+  },
+];
+
 export default function PayrollDashboard() {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "employees" | "timekeeping" | "payroll-wizard" | "ess-portal" | "compliance"
+    "overview" | "employees" | "timekeeping" | "leaves-sil" | "payroll-wizard" | "ess-portal" | "compliance"
   >("overview");
 
   const [employees, setEmployees] = useState<DemoEmployee[]>(INITIAL_EMPLOYEES);
+  const [leaveRequests, setLeaveRequests] = useState<DemoLeaveRequest[]>(INITIAL_LEAVE_REQUESTS);
   const [selectedCutoff, setSelectedCutoff] = useState<"FIRST_CUTOFF" | "SECOND_CUTOFF">("FIRST_CUTOFF");
   const [payrollStatus, setPayrollStatus] = useState<"READY" | "RUNNING" | "COMPLETED">("READY");
   const [searchQuery, setSearchQuery] = useState("");
@@ -203,6 +258,8 @@ export default function PayrollDashboard() {
   const [isDtrModalOpen, setIsDtrModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
   const [isBiometricsModalOpen, setIsBiometricsModalOpen] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isSilModalOpen, setIsSilModalOpen] = useState(false);
 
   // Biometrics Import state
   const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
@@ -241,6 +298,21 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
     principalPesos: 15000,
     amortizationPesos: 500,
   });
+
+  // Leave Form State
+  const [leaveForm, setLeaveForm] = useState({
+    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    leaveType: "Service Incentive Leave (SIL)",
+    startDate: "2026-08-28",
+    endDate: "2026-08-29",
+    daysCount: 2,
+    isPaid: true,
+    reason: "Personal / Annual SIL utilization",
+  });
+
+  // SIL Monetization State
+  const [silEmployeeId, setSilEmployeeId] = useState(INITIAL_EMPLOYEES[0]!.id);
+  const [silDaysToMonetize, setSilDaysToMonetize] = useState(5.0);
 
   function showToast(msg: string) {
     setToastMessage(msg);
@@ -291,6 +363,16 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           isTaxable: false,
           deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
         },
+        ...(emp.silCashBonusCents > 0n
+          ? [
+              {
+                name: "Monetized SIL (De Minimis)",
+                amountCents: emp.silCashBonusCents,
+                isTaxable: false,
+                deMinimisCategory: DeMinimisCategory.OTHER,
+              },
+            ]
+          : []),
       ],
       loans:
         emp.activeLoanCents > 0n
@@ -337,6 +419,8 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       bankName: empForm.bankName,
       bankAccount: empForm.bankAccount || "1122334455",
       activeLoanCents: 0n,
+      silBalanceDays: 5.0,
+      silCashBonusCents: 0n,
       attendance: {
         regularHoursWorked: 80,
         tardinessMinutes: 0,
@@ -399,6 +483,77 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
     );
     setIsLoanModalOpen(false);
     showToast("✅ Loan deduction registered and amortized for this pay cycle!");
+  }
+
+  function handleSaveLeaveRequest(e: React.FormEvent) {
+    e.preventDefault();
+    const emp = employees.find((e) => e.id === leaveForm.employeeId);
+    if (!emp) return;
+
+    const newReq: DemoLeaveRequest = {
+      id: `req-${Date.now()}`,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      leaveType: leaveForm.leaveType,
+      startDate: leaveForm.startDate,
+      endDate: leaveForm.endDate,
+      daysCount: Number(leaveForm.daysCount),
+      isPaid: leaveForm.isPaid,
+      reason: leaveForm.reason,
+      status: "APPROVED",
+    };
+
+    if (leaveForm.isPaid) {
+      setEmployees(
+        employees.map((e) => {
+          if (e.id === emp.id && leaveForm.leaveType.includes("SIL")) {
+            return {
+              ...e,
+              silBalanceDays: Math.max(0, e.silBalanceDays - newReq.daysCount),
+            };
+          }
+          return e;
+        })
+      );
+    }
+
+    setLeaveRequests([newReq, ...leaveRequests]);
+    setIsLeaveModalOpen(false);
+    showToast(`✅ Approved ${newReq.daysCount} days ${newReq.leaveType} for ${emp.name}!`);
+  }
+
+  // Selected Employee for SIL Monetization Calculation
+  const selectedSilEmp = employees.find((e) => e.id === silEmployeeId) || employees[0]!;
+  const silDailyRateResult = deriveRates({
+    payBasis: selectedSilEmp.payBasis,
+    monthlyBasicRateCents: selectedSilEmp.monthlyBasicRateCents,
+    divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+    isMinimumWageEarner: selectedSilEmp.isMinimumWageEarner,
+  });
+  const silDailyRateCents = silDailyRateResult.dailyRateCents;
+
+  const silMonetizationCalc = calculateSilCashConversion({
+    dailyRateCents: silDailyRateCents,
+    unusedLeaveDays: silDaysToMonetize,
+  });
+
+  function handleApplySilMonetization() {
+    setEmployees(
+      employees.map((emp) => {
+        if (emp.id === selectedSilEmp.id) {
+          return {
+            ...emp,
+            silBalanceDays: Math.max(0, emp.silBalanceDays - silDaysToMonetize),
+            silCashBonusCents: silMonetizationCalc.totalMonetizedCashCents,
+          };
+        }
+        return emp;
+      })
+    );
+    setIsSilModalOpen(false);
+    showToast(
+      `💰 Monetized ${silDaysToMonetize} days SIL (${formatPHP(silMonetizationCalc.totalMonetizedCashCents)}) credited to ${selectedSilEmp.name}!`
+    );
   }
 
   // Parse Biometrics Logs Preview
@@ -542,6 +697,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             { id: "overview", label: "Overview & Metrics", icon: TrendingUp },
             { id: "employees", label: `Employees (${employees.length})`, icon: Users },
             { id: "timekeeping", label: "DTR & Attendance", icon: Clock },
+            { id: "leaves-sil", label: "Leaves & SIL", icon: CalendarDays },
             { id: "payroll-wizard", label: "Payroll Run Wizard", icon: Banknote },
             { id: "compliance", label: "Bank & Tax Exports", icon: FileSpreadsheet },
             { id: "ess-portal", label: "ESS Digital Payslip", icon: Lock },
@@ -570,7 +726,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         {/* ========================================================================= */}
         {activeTab === "overview" && (
           <div className="space-y-6">
-            {/* Top Metric Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
@@ -609,7 +764,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             </div>
 
-            {/* Statutory Compliance Table Overview */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -683,6 +837,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     <th className="py-3.5 px-4">Department & Role</th>
                     <th className="py-3.5 px-4">Monthly Basic Rate</th>
                     <th className="py-3.5 px-4">Tax Status</th>
+                    <th className="py-3.5 px-4">SIL Balance</th>
                     <th className="py-3.5 px-4">Active Loan</th>
                     <th className="py-3.5 px-4">Disbursement Bank</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
@@ -718,6 +873,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                               TRAIN Graduated
                             </span>
                           )}
+                        </td>
+                        <td className="py-3 px-4 font-mono">
+                          <span className="text-purple-400 font-semibold">{emp.silBalanceDays.toFixed(1)} Days</span>
                         </td>
                         <td className="py-3 px-4 font-mono text-[11px]">
                           {emp.activeLoanCents > 0n ? (
@@ -840,7 +998,123 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 4: PAYROLL RUN WIZARD */}
+        {/* TAB 4: LEAVES & SIL MONETIZATION */}
+        {/* ========================================================================= */}
+        {activeTab === "leaves-sil" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                <div className="text-xs font-semibold text-purple-400 flex items-center justify-between">
+                  <span>Mandatory SIL (DOLE Art. 95)</span>
+                  <CalendarDays className="size-4" />
+                </div>
+                <div className="text-xl font-bold text-white mt-1">5 Days / Year</div>
+                <p className="text-[11px] text-slate-400 mt-1">Legally convertible to cash at year-end</p>
+              </div>
+
+              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                <div className="text-xs font-semibold text-blue-400 flex items-center justify-between">
+                  <span>Vacation Leave (VL)</span>
+                  <Calendar className="size-4" />
+                </div>
+                <div className="text-xl font-bold text-white mt-1">10 Days / Year</div>
+                <p className="text-[11px] text-slate-400 mt-1">Company-provided paid annual leave</p>
+              </div>
+
+              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                <div className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
+                  <span>Sick Leave (SL)</span>
+                  <ShieldCheck className="size-4" />
+                </div>
+                <div className="text-xl font-bold text-white mt-1">5 Days / Year</div>
+                <p className="text-[11px] text-slate-400 mt-1">Medical recuperation & doctor certificate</p>
+              </div>
+
+              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                <div className="text-xs font-semibold text-amber-400 flex items-center justify-between">
+                  <span>BIR De Minimis Exemption</span>
+                  <Coins className="size-4" />
+                </div>
+                <div className="text-xl font-bold text-white mt-1">Max 10 Days</div>
+                <p className="text-[11px] text-slate-400 mt-1">100% Tax-Exempt leave cash conversion</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white">Leave Requests & Statutory Absence Ledger</h2>
+                  <p className="text-xs text-slate-400">Track approved paid leaves, unpaid leave (LWOP), and SIL credits</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsSilModalOpen(true)}
+                    className="border-slate-700 hover:bg-slate-800 text-xs text-amber-400"
+                  >
+                    <Coins className="size-3.5 mr-1.5" /> Monetize Unused SIL to Cash
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setIsLeaveModalOpen(true)}
+                    className="bg-purple-600 hover:bg-purple-500 text-white"
+                  >
+                    <Plus className="size-3.5 mr-1" /> File Leave Request
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="py-3.5 px-4">Employee</th>
+                      <th className="py-3.5 px-4">Leave Type</th>
+                      <th className="py-3.5 px-4">Inclusive Dates</th>
+                      <th className="py-3.5 px-4">Duration</th>
+                      <th className="py-3.5 px-4">Pay Status</th>
+                      <th className="py-3.5 px-4">Reason</th>
+                      <th className="py-3.5 px-4 text-right">Approval Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {leaveRequests.map((req) => (
+                      <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-medium text-white">{req.employeeName}</td>
+                        <td className="py-3 px-4 font-semibold text-purple-400">{req.leaveType}</td>
+                        <td className="py-3 px-4 font-mono text-slate-400">
+                          {req.startDate} to {req.endDate}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-semibold text-white">{req.daysCount} Day(s)</td>
+                        <td className="py-3 px-4">
+                          {req.isPaid ? (
+                            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                              Paid Leave
+                            </span>
+                          ) : (
+                            <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                              Unpaid (LWOP)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400">{req.reason}</td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                            {req.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: PAYROLL RUN WIZARD */}
         {/* ========================================================================= */}
         {activeTab === "payroll-wizard" && (
           <div className="space-y-6">
@@ -892,7 +1166,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             )}
 
-            {/* Detailed Itemized Payslip Table */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="overflow-x-auto rounded-xl border border-slate-800">
                 <table className="w-full text-left text-xs text-slate-300">
@@ -901,6 +1174,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                       <th className="py-3 px-3">Employee</th>
                       <th className="py-3 px-3">Basic Pay</th>
                       <th className="py-3 px-3">Overtime / Premiums</th>
+                      <th className="py-3 px-3">De Minimis & SIL</th>
                       <th className="py-3 px-3">Gross Pay</th>
                       <th className="py-3 px-3">SSS & WISP</th>
                       <th className="py-3 px-3">PhilHealth</th>
@@ -919,6 +1193,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                         <td className="py-3 px-3 font-mono">{formatPHP(calc.basicPayForPeriodCents)}</td>
                         <td className="py-3 px-3 font-mono text-emerald-400">
                           {calc.totalPremiumPayCents > 0n ? `+${formatPHP(calc.totalPremiumPayCents)}` : "₱0.00"}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-purple-400">
+                          {calc.nonTaxableAllowancesCents > 0n ? `+${formatPHP(calc.nonTaxableAllowancesCents)}` : "₱0.00"}
                         </td>
                         <td className="py-3 px-3 font-mono font-semibold text-white">{formatPHP(calc.grossPayCents)}</td>
                         <td className="py-3 px-3 font-mono text-amber-400">
@@ -952,11 +1229,10 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 5: GOVERNMENT & BANKING EXPORTS */}
+        {/* TAB 6: GOVERNMENT & BANKING EXPORTS */}
         {/* ========================================================================= */}
         {activeTab === "compliance" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Bank Transmittal Exporter */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <CreditCard className="size-5 text-blue-400" />
@@ -991,7 +1267,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             </div>
 
-            {/* Government Filings Exporter */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <FileCheck2 className="size-5 text-purple-400" />
@@ -1064,7 +1339,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 6: EMPLOYEE SELF-SERVICE (ESS) */}
+        {/* TAB 7: EMPLOYEE SELF-SERVICE (ESS) */}
         {/* ========================================================================= */}
         {activeTab === "ess-portal" && (
           <div className="max-w-2xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
@@ -1081,7 +1356,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             </div>
 
-            {/* Employee Info Header */}
             <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
               <div>
                 <div className="text-slate-500 text-[10px] uppercase">Employee Name</div>
@@ -1095,9 +1369,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             </div>
 
-            {/* Earnings & Deductions Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Earnings */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
                   Earnings
@@ -1120,7 +1392,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 </div>
               </div>
 
-              {/* Deductions */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
                   Deductions
@@ -1152,7 +1423,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
             </div>
 
-            {/* Net Take-Home Pay Banner */}
             <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-blue-400 uppercase font-bold">Net Take-Home Pay</span>
@@ -1564,7 +1834,6 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
               />
 
-              {/* Live Parsed Preview Table */}
               <div className="border border-slate-800 rounded-xl overflow-hidden">
                 <div className="bg-slate-950 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between">
                   <span>Parsed Punch Preview ({parsedBiometricDays.length} Days Detected)</span>
@@ -1623,6 +1892,247 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   className="bg-blue-600 hover:bg-blue-500 text-white"
                 >
                   Apply & Ingest to DTR
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: FILE LEAVE REQUEST MODAL */}
+      {/* ========================================================================= */}
+      {isLeaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <CalendarDays className="size-4 text-purple-400" /> File Leave Request
+              </h3>
+              <button onClick={() => setIsLeaveModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLeaveRequest} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <select
+                  value={leaveForm.employeeId}
+                  onChange={(e) => setLeaveForm({ ...leaveForm, employeeId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} (SIL: {emp.silBalanceDays}d remaining)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Leave Classification</label>
+                <select
+                  value={leaveForm.leaveType}
+                  onChange={(e) => setLeaveForm({ ...leaveForm, leaveType: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="Service Incentive Leave (SIL)">Service Incentive Leave (SIL - Art. 95)</option>
+                  <option value="Vacation Leave">Vacation Leave (VL)</option>
+                  <option value="Sick Leave">Sick Leave (SL)</option>
+                  <option value="Maternity Leave">Maternity Leave (RA 11210 - 105 Days)</option>
+                  <option value="Paternity Leave">Paternity Leave (RA 8187 - 7 Days)</option>
+                  <option value="Solo Parent Leave">Solo Parent Leave (RA 8972 - 7 Days)</option>
+                  <option value="Emergency Leave">Emergency / Compassionate Leave</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={leaveForm.startDate}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={leaveForm.endDate}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Days Count</label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={leaveForm.daysCount}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, daysCount: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="isPaidLeave"
+                    checked={leaveForm.isPaid}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, isPaid: e.target.checked })}
+                    className="size-4 rounded border-slate-800 bg-slate-950 text-purple-600 focus:ring-0"
+                  />
+                  <label htmlFor="isPaidLeave" className="text-slate-300 select-none cursor-pointer">
+                    Paid Leave Credit
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Reason / Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Annual leave with family"
+                  value={leaveForm.reason}
+                  onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsLeaveModalOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-purple-600 hover:bg-purple-500 text-white">
+                  Approve & Record Leave
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: SIL CASH MONETIZATION CALCULATOR MODAL */}
+      {/* ========================================================================= */}
+      {isSilModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Coins className="size-4 text-amber-400" /> DOLE SIL Cash Monetization
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Convert unused Service Incentive Leave credits into cash at daily rate (BIR De Minimis exempt)
+                </p>
+              </div>
+              <button onClick={() => setIsSilModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <select
+                  value={silEmployeeId}
+                  onChange={(e) => {
+                    setSilEmployeeId(e.target.value);
+                    const emp = employees.find((emp) => emp.id === e.target.value);
+                    if (emp) setSilDaysToMonetize(emp.silBalanceDays);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} — Balance: {emp.silBalanceDays.toFixed(1)} Days
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Derived Daily Rate</span>
+                  <div className="text-base font-bold text-emerald-400 font-mono mt-0.5">
+                    {formatPHP(silDailyRateCents)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Divisor: 261 days/yr</span>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Days to Monetize</label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    max={selectedSilEmp.silBalanceDays}
+                    step={0.5}
+                    value={silDaysToMonetize}
+                    onChange={(e) => setSilDaysToMonetize(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-base focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Max balance: {selectedSilEmp.silBalanceDays} days
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-300">Total Cash Payout:</span>
+                  <span className="font-bold text-amber-300 font-mono text-sm">
+                    {formatPHP(silMonetizationCalc.totalMonetizedCashCents)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>Tax-Exempt De Minimis (Up to 10 days):</span>
+                  <span className="text-emerald-400 font-mono">
+                    {formatPHP(silMonetizationCalc.taxExemptDeMinimisCents)}
+                  </span>
+                </div>
+                {silMonetizationCalc.taxablePortionCents > 0n && (
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Taxable Excess (over 10-day cap):</span>
+                    <span className="text-rose-400 font-mono">
+                      {formatPHP(silMonetizationCalc.taxablePortionCents)}
+                    </span>
+                  </div>
+                )}
+                <div className="text-[10px] text-amber-400/90 pt-1 border-t border-amber-500/20">
+                  {silMonetizationCalc.remarks}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsSilModalOpen(false)}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleApplySilMonetization}
+                  disabled={silDaysToMonetize <= 0}
+                  className="bg-amber-600 hover:bg-amber-500 text-white"
+                >
+                  Credit Cash to Next Payroll Run
                 </Button>
               </div>
             </div>

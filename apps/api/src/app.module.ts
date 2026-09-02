@@ -7,6 +7,7 @@ import { TimekeepingService } from "./modules/timekeeping/timekeeping.service";
 import { PayrollService } from "./modules/payroll/payroll.service";
 import { LoansService } from "./modules/loans/loans.service";
 import { ComplianceService } from "./modules/compliance/compliance.service";
+import { LeavesService } from "./modules/leaves/leaves.service";
 
 @Module({
   imports: [TrpcModule],
@@ -18,6 +19,7 @@ import { ComplianceService } from "./modules/compliance/compliance.service";
     PayrollService,
     LoansService,
     ComplianceService,
+    LeavesService,
   ],
   exports: [
     EmployeesService,
@@ -25,6 +27,7 @@ import { ComplianceService } from "./modules/compliance/compliance.service";
     PayrollService,
     LoansService,
     ComplianceService,
+    LeavesService,
   ],
 })
 export class AppModule {}
