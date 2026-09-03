@@ -1,11 +1,12 @@
-import { Injectable } from "@nestjs/common";
-import { prisma } from "@workspace/db";
-import type { AttendanceSummary } from "@workspace/payroll-engine";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { prisma } from '@workspace/db';
+import type { AttendanceSummary } from '@workspace/payroll-engine';
 
 @Injectable()
 export class TimekeepingService {
-  async listRecentRecords(limit = 50) {
+  async listRecentRecords(organizationId: string, limit = 50) {
     return prisma.dailyTimeRecord.findMany({
+      where: { employee: { organizationId } },
       take: limit,
       include: {
         employee: {
@@ -17,27 +18,39 @@ export class TimekeepingService {
           },
         },
       },
-      orderBy: { date: "desc" },
+      orderBy: { date: 'desc' },
     });
   }
 
-  async getEmployeeDTR(employeeId: string, startDate: Date, endDate: Date) {
+  async getEmployeeDTR(
+    employeeId: string,
+    organizationId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
     return prisma.dailyTimeRecord.findMany({
       where: {
         employeeId,
+        employee: { organizationId },
         date: {
           gte: startDate,
           lte: endDate,
         },
       },
-      orderBy: { date: "asc" },
+      orderBy: { date: 'asc' },
     });
   }
 
-  async getCutoffAttendanceSummary(employeeId: string, startDate: Date, endDate: Date): Promise<AttendanceSummary> {
+  async getCutoffAttendanceSummary(
+    employeeId: string,
+    organizationId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<AttendanceSummary> {
     const records = await prisma.dailyTimeRecord.findMany({
       where: {
         employeeId,
+        employee: { organizationId },
         date: {
           gte: startDate,
           lte: endDate,
@@ -50,12 +63,12 @@ export class TimekeepingService {
     let undertimeMinutes = 0;
     let absentDays = 0;
     let regularOvertimeMinutes = 0;
-    let restDayMinutes = 0;
+    const restDayMinutes = 0;
     let restDayOTMinutes = 0;
     let specialHolidayMinutes = 0;
-    let specialHolidayOTMinutes = 0;
+    const specialHolidayOTMinutes = 0;
     let regularHolidayMinutes = 0;
-    let regularHolidayOTMinutes = 0;
+    const regularHolidayOTMinutes = 0;
     let regularNightDiffMinutes = 0;
 
     for (const r of records) {
@@ -97,7 +110,15 @@ export class TimekeepingService {
     };
   }
 
-  async recordPunch(employeeId: string, date: Date, timeIn?: Date, timeOut?: Date) {
+  async recordPunch(
+    employeeId: string,
+    organizationId: string,
+    date: Date,
+    timeIn?: Date,
+    timeOut?: Date,
+  ) {
+    await this.assertEmployeeInOrganization(employeeId, organizationId);
+
     return prisma.dailyTimeRecord.upsert({
       where: {
         employeeId_date: { employeeId, date },
@@ -114,8 +135,14 @@ export class TimekeepingService {
 
   async adjustAttendanceRecord(data: {
     employeeId: string;
+    organizationId: string;
     date: Date;
-    dayType?: "REGULAR_WORKDAY" | "REST_DAY" | "SPECIAL_NON_WORKING_HOLIDAY" | "REGULAR_HOLIDAY" | "DOUBLE_HOLIDAY";
+    dayType?:
+      | 'REGULAR_WORKDAY'
+      | 'REST_DAY'
+      | 'SPECIAL_NON_WORKING_HOLIDAY'
+      | 'REGULAR_HOLIDAY'
+      | 'DOUBLE_HOLIDAY';
     timeIn?: Date;
     timeOut?: Date;
     actualWorkedMinutes: number;
@@ -126,6 +153,11 @@ export class TimekeepingService {
     isAbsent?: boolean;
     isApproved?: boolean;
   }) {
+    await this.assertEmployeeInOrganization(
+      data.employeeId,
+      data.organizationId,
+    );
+
     return prisma.dailyTimeRecord.upsert({
       where: {
         employeeId_date: { employeeId: data.employeeId, date: data.date },
@@ -145,7 +177,7 @@ export class TimekeepingService {
       create: {
         employeeId: data.employeeId,
         date: data.date,
-        dayType: data.dayType || "REGULAR_WORKDAY",
+        dayType: data.dayType || 'REGULAR_WORKDAY',
         timeIn: data.timeIn,
         timeOut: data.timeOut,
         actualWorkedMinutes: data.actualWorkedMinutes,
@@ -159,8 +191,9 @@ export class TimekeepingService {
     });
   }
 
-  async importBiometricsCsv(csvContent: string) {
-    const { parseBiometricCsv, processBiometricLogs } = await import("@workspace/payroll-engine");
+  async importBiometricsCsv(csvContent: string, organizationId: string) {
+    const { parseBiometricCsv, processBiometricLogs } =
+      await import('@workspace/payroll-engine');
     const rawLogs = parseBiometricCsv(csvContent);
     const processedDays = processBiometricLogs(rawLogs);
 
@@ -172,16 +205,20 @@ export class TimekeepingService {
         anomalyCount += 1;
       }
 
-      const emp = await prisma.employee.findUnique({
-        where: { employeeNumber: day.employeeNumber },
+      const emp = await prisma.employee.findFirst({
+        where: {
+          employeeNumber: day.employeeNumber,
+          organizationId,
+        },
       });
 
       if (!emp) continue;
 
       await this.adjustAttendanceRecord({
         employeeId: emp.id,
+        organizationId,
         date: new Date(day.dateStr),
-        dayType: "REGULAR_WORKDAY",
+        dayType: 'REGULAR_WORKDAY',
         timeIn: day.timeIn,
         timeOut: day.timeOut,
         actualWorkedMinutes: day.actualWorkedMinutes,
@@ -202,5 +239,19 @@ export class TimekeepingService {
       anomaliesDetected: anomalyCount,
       details: processedDays,
     };
+  }
+
+  private async assertEmployeeInOrganization(
+    employeeId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, organizationId },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
   }
 }

@@ -5,8 +5,15 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "auth:bootstrap": "pnpm build && pnpm --filter @workspace/api auth:bootstrap:prod",
+    "db:migrate:deploy": "pnpm --filter @workspace/db db:migrate:deploy",
     "lint": "turbo lint",
     "format": "turbo format",
+    "test": "turbo test",
+    "test:e2e": "pnpm --filter @workspace/api test:e2e",
+    "test:smoke": "pnpm build && pnpm --filter @workspace/api test:smoke",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
@@ -19,6 +26,6 @@
   },
   "packageManager": "pnpm@10.33.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }

@@ -5,7 +5,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Starting Philippine Payroll Database Seed...");
 
-  // 1. Clear existing records safely
+  // 1. Clear existing records safely (development/demo environments only)
+  await prisma.authSession.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.loanPayment.deleteMany();
   await prisma.payslip.deleteMany();
   await prisma.bankTransmittalBatch.deleteMany();
@@ -35,7 +38,7 @@ async function main() {
     },
   });
 
-  console.log(`✅ Created Organization: ${org.name}`);
+  console.log(`✅ Created Organization: ${org.name} (${org.id})`);
 
   // 3. Create Branches
   const makatiBranch = await prisma.branch.create({

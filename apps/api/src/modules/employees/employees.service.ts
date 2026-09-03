@@ -1,9 +1,8 @@
-import { Injectable } from "@nestjs/common";
-import { prisma } from "@workspace/db";
-import type { Prisma } from "@workspace/db";
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { prisma } from '@workspace/db';
 
 export interface RegisterEmployeeInput {
-  organizationId?: string;
+  organizationId: string;
   branchId?: string;
   departmentId?: string;
   firstName: string;
@@ -19,7 +18,12 @@ export interface RegisterEmployeeInput {
   philhealthNo?: string;
   pagibigNo?: string;
   hireDate?: string;
-  employmentType?: "REGULAR" | "PROBATIONARY" | "CONTRACTUAL" | "PROJECT_BASED" | "PART_TIME";
+  employmentType?:
+    | 'REGULAR'
+    | 'PROBATIONARY'
+    | 'CONTRACTUAL'
+    | 'PROJECT_BASED'
+    | 'PART_TIME';
   bankName?: string;
   bankAccountNumber?: string;
   bankAccountName?: string;
@@ -29,22 +33,22 @@ export interface RegisterEmployeeInput {
 
 @Injectable()
 export class EmployeesService {
-  async listEmployees(organizationId?: string) {
+  async listEmployees(organizationId: string) {
     return prisma.employee.findMany({
-      where: organizationId ? { organizationId } : undefined,
+      where: { organizationId },
       include: {
         department: true,
         branch: true,
         compensation: true,
         allowances: true,
       },
-      orderBy: { lastName: "asc" },
+      orderBy: { lastName: 'asc' },
     });
   }
 
-  async getEmployeeById(id: string) {
-    return prisma.employee.findUnique({
-      where: { id },
+  async getEmployeeById(id: string, organizationId: string) {
+    return prisma.employee.findFirst({
+      where: { id, organizationId },
       include: {
         organization: true,
         branch: true,
@@ -60,92 +64,83 @@ export class EmployeesService {
   }
 
   async registerEmployee(input: RegisterEmployeeInput) {
-    // 1. Resolve default Organization, Branch, and Department if not provided
-    let orgId = input.organizationId;
-    if (!orgId) {
-      const defaultOrg = await prisma.organization.findFirst();
-      if (!defaultOrg) {
-        const newOrg = await prisma.organization.create({
-          data: {
-            name: "Default Philippines Enterprise",
-            tin: "000-000-000-000",
-            rdoCode: "047",
-            registeredAddress: "Metro Manila, Philippines",
-          },
-        });
-        orgId = newOrg.id;
-      } else {
-        orgId = defaultOrg.id;
-      }
+    const organization = await prisma.organization.findUnique({
+      where: { id: input.organizationId },
+      select: { id: true },
+    });
+    if (!organization) {
+      throw new BadRequestException('Organization not found');
     }
 
-    let branchId = input.branchId;
-    if (!branchId) {
-      const defaultBranch = await prisma.branch.findFirst({ where: { organizationId: orgId } });
-      if (!defaultBranch) {
-        const newBranch = await prisma.branch.create({
-          data: {
-            organizationId: orgId,
-            name: "Headquarters",
-            code: "HQ",
-            address: "Makati City",
-          },
+    const branch = input.branchId
+      ? await prisma.branch.findFirst({
+          where: { id: input.branchId, organizationId: input.organizationId },
+        })
+      : await prisma.branch.findFirst({
+          where: { organizationId: input.organizationId },
+          orderBy: { createdAt: 'asc' },
         });
-        branchId = newBranch.id;
-      } else {
-        branchId = defaultBranch.id;
-      }
+    if (!branch) {
+      throw new BadRequestException(
+        'A branch belonging to the organization is required',
+      );
     }
 
-    let deptId = input.departmentId;
-    if (!deptId) {
-      const defaultDept = await prisma.department.findFirst({ where: { organizationId: orgId } });
-      if (!defaultDept) {
-        const newDept = await prisma.department.create({
-          data: {
-            organizationId: orgId,
-            name: "General Operations",
-            code: "GEN",
+    const department = input.departmentId
+      ? await prisma.department.findFirst({
+          where: {
+            id: input.departmentId,
+            organizationId: input.organizationId,
           },
+        })
+      : await prisma.department.findFirst({
+          where: { organizationId: input.organizationId },
+          orderBy: { createdAt: 'asc' },
         });
-        deptId = newDept.id;
-      } else {
-        deptId = defaultDept.id;
-      }
+    if (!department) {
+      throw new BadRequestException(
+        'A department belonging to the organization is required',
+      );
     }
 
-    // 2. Generate unique employee number
+    // Generate unique employee number
     const count = await prisma.employee.count();
-    const employeeNumber = `EMP-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+    const employeeNumber = `EMP-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
 
     // 3. Compute Centavos
-    const monthlyRateCents = BigInt(Math.round(input.monthlyBasicRatePesos * 100));
+    const monthlyRateCents = BigInt(
+      Math.round(input.monthlyBasicRatePesos * 100),
+    );
     const dailyRateCents = (monthlyRateCents * 12n) / 261n;
     const hourlyRateCents = dailyRateCents / 8n;
 
     return prisma.employee.create({
       data: {
-        organizationId: orgId,
-        branchId,
-        departmentId: deptId,
+        organizationId: input.organizationId,
+        branchId: branch.id,
+        departmentId: department.id,
         employeeNumber,
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
-        contactNumber: input.contactNumber || "N/A",
-        residentialAddress: input.residentialAddress || "Metro Manila, Philippines",
-        gender: input.gender || "Not Specified",
-        civilStatus: input.civilStatus || "Single",
-        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : new Date("1995-01-01"),
-        tin: input.tin || "000-000-000-000",
-        sssNo: input.sssNo || "00-0000000-0",
-        philhealthNo: input.philhealthNo || "00-000000000-0",
-        pagibigNo: input.pagibigNo || "0000-0000-0000",
+        contactNumber: input.contactNumber || 'N/A',
+        residentialAddress:
+          input.residentialAddress || 'Metro Manila, Philippines',
+        gender: input.gender || 'Not Specified',
+        civilStatus: input.civilStatus || 'Single',
+        dateOfBirth: input.dateOfBirth
+          ? new Date(input.dateOfBirth)
+          : new Date('1995-01-01'),
+        tin: input.tin || '000-000-000-000',
+        sssNo: input.sssNo || '00-0000000-0',
+        philhealthNo: input.philhealthNo || '00-000000000-0',
+        pagibigNo: input.pagibigNo || '0000-0000-0000',
         hireDate: input.hireDate ? new Date(input.hireDate) : new Date(),
-        employmentType: input.employmentType || "REGULAR",
-        bankName: input.bankName || "BDO",
-        bankAccountNumber: input.bankAccountNumber || "0000000000",
-        bankAccountName: input.bankAccountName || `${input.firstName} ${input.lastName}`,
+        employmentType: input.employmentType || 'REGULAR',
+        bankName: input.bankName || 'BDO',
+        bankAccountNumber: input.bankAccountNumber || '0000000000',
+        bankAccountName:
+          input.bankAccountName || `${input.firstName} ${input.lastName}`,
         compensation: {
           create: {
             basicRateMonthlyCents: monthlyRateCents,
@@ -162,55 +157,29 @@ export class EmployeesService {
     });
   }
 
-  async createEmployee(data: Prisma.EmployeeCreateInput) {
-    return prisma.employee.create({
-      data,
-      include: {
-        department: true,
-        compensation: true,
-      },
-    });
-  }
-
-  async updateCompensation(employeeId: string, data: {
-    monthlyBasicRateCents: bigint;
-    dailyRateCents: bigint;
-    hourlyRateCents: bigint;
-    isTaxExempt?: boolean;
-    customPagibigDeductionCents?: bigint;
-  }) {
-    return prisma.compensation.upsert({
-      where: { employeeId },
-      update: {
-        basicRateMonthlyCents: data.monthlyBasicRateCents,
-        basicRateDailyCents: data.dailyRateCents,
-        basicRateHourlyCents: data.hourlyRateCents,
-        isTaxExempt: data.isTaxExempt,
-        customPagibigDeductionCents: data.customPagibigDeductionCents,
-      },
-      create: {
-        employeeId,
-        basicRateMonthlyCents: data.monthlyBasicRateCents,
-        basicRateDailyCents: data.dailyRateCents,
-        basicRateHourlyCents: data.hourlyRateCents,
-        isTaxExempt: data.isTaxExempt ?? false,
-        customPagibigDeductionCents: data.customPagibigDeductionCents,
-      },
-    });
-  }
-
   async calculateFinalPaySettlement(input: {
     employeeId: string;
-    separationType: "RESIGNATION" | "REDUNDANCY" | "RETRENCHMENT" | "CLOSURE_NON_BANKRUPT" | "DISEASE" | "RETIREMENT";
+    organizationId: string;
+    separationType:
+      | 'RESIGNATION'
+      | 'REDUNDANCY'
+      | 'RETRENCHMENT'
+      | 'CLOSURE_NON_BANKRUPT'
+      | 'DISEASE'
+      | 'RETIREMENT';
     yearsOfService?: number;
     unpaidDaysWorked?: number;
     unusedLeaveDays?: number;
     exitDate?: Date;
   }) {
-    const { calculateFinalPay } = await import("@workspace/payroll-engine");
+    const { calculateFinalPay, SeparationType } =
+      await import('@workspace/payroll-engine');
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: input.employeeId },
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id: input.employeeId,
+        organizationId: input.organizationId,
+      },
       include: {
         compensation: true,
         loans: { where: { isActive: true } },
@@ -219,27 +188,40 @@ export class EmployeesService {
     });
 
     if (!employee || !employee.compensation) {
-      throw new Error(`Employee ${input.employeeId} or active compensation record not found`);
+      throw new Error(
+        `Employee ${input.employeeId} or active compensation record not found`,
+      );
     }
 
     const monthlyBasicRateCents = employee.compensation.basicRateMonthlyCents;
     const dailyRateCents = employee.compensation.basicRateDailyCents;
 
     const exitDate = input.exitDate || new Date();
-    const hireDate = employee.hireDate || new Date(Date.now() - 365 * 24 * 3600 * 1000);
-    const serviceYears = input.yearsOfService !== undefined
-      ? input.yearsOfService
-      : Math.max(0.5, (exitDate.getTime() - hireDate.getTime()) / (365.25 * 24 * 3600 * 1000));
+    const hireDate =
+      employee.hireDate || new Date(Date.now() - 365 * 24 * 3600 * 1000);
+    const serviceYears =
+      input.yearsOfService !== undefined
+        ? input.yearsOfService
+        : Math.max(
+            0.5,
+            (exitDate.getTime() - hireDate.getTime()) /
+              (365.25 * 24 * 3600 * 1000),
+          );
 
     const outstandingLoanBalanceCents = employee.loans.reduce(
-      (acc: bigint, loan: { balanceCents: bigint }) => acc + loan.balanceCents,
-      0n
+      (acc, loan) => acc + loan.balanceCents,
+      0n,
     );
 
-    const silBalanceRecord = employee.leaveBalances.find((b: { leaveType: string }) => b.leaveType === "SIL");
-    const unusedLeaveDays = input.unusedLeaveDays !== undefined
-      ? input.unusedLeaveDays
-      : silBalanceRecord ? Number((silBalanceRecord as any).balance) : 5.0;
+    const silBalanceRecord = employee.leaveBalances.find(
+      (balance) => balance.leaveType === 'SIL',
+    );
+    const unusedLeaveDays =
+      input.unusedLeaveDays !== undefined
+        ? input.unusedLeaveDays
+        : silBalanceRecord
+          ? Number(silBalanceRecord.balance)
+          : 5.0;
 
     const monthIndex = exitDate.getMonth() + 1;
     const totalYtdBasicEarnedCents = monthlyBasicRateCents * BigInt(monthIndex);
@@ -247,7 +229,7 @@ export class EmployeesService {
     const totalYtdTaxWithheldCents = (ytdTaxableCompensationCents * 10n) / 100n;
 
     const settlement = calculateFinalPay({
-      separationType: input.separationType as any,
+      separationType: SeparationType[input.separationType],
       monthlyBasicRateCents,
       dailyRateCents,
       yearsOfService: serviceYears,

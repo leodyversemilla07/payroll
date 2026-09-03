@@ -1,12 +1,15 @@
-import { Injectable } from "@nestjs/common";
-import { prisma } from "@workspace/db";
-import type { LoanType } from "@workspace/db";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { prisma } from '@workspace/db';
+import type { LoanType } from '@workspace/db';
 
 @Injectable()
 export class LoansService {
-  async listAllActiveLoans() {
+  async listAllActiveLoans(organizationId: string) {
     return prisma.employeeLoan.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        employee: { organizationId },
+      },
       include: {
         employee: {
           select: {
@@ -17,19 +20,20 @@ export class LoansService {
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
-  async getEmployeeActiveLoans(employeeId: string) {
+  async getEmployeeActiveLoans(employeeId: string, organizationId: string) {
     return prisma.employeeLoan.findMany({
       where: {
         employeeId,
+        employee: { organizationId },
         isActive: true,
       },
       include: {
         payments: {
-          orderBy: { paymentDate: "desc" },
+          orderBy: { paymentDate: 'desc' },
           take: 5,
         },
       },
@@ -38,6 +42,7 @@ export class LoansService {
 
   async createLoan(data: {
     employeeId: string;
+    organizationId: string;
     loanType: LoanType;
     referenceNumber?: string;
     principalCents: bigint;
@@ -46,42 +51,31 @@ export class LoansService {
     startDate: Date;
     endDate?: Date;
   }) {
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id: data.employeeId,
+        organizationId: data.organizationId,
+      },
+      select: { id: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
     return prisma.employeeLoan.create({
       data: {
-        ...data,
+        employeeId: data.employeeId,
+        loanType: data.loanType,
+        referenceNumber: data.referenceNumber,
+        principalCents: data.principalCents,
+        totalAmountCents: data.totalAmountCents,
+        amortizationCents: data.amortizationCents,
+        startDate: data.startDate,
+        endDate: data.endDate,
         balanceCents: data.totalAmountCents,
         isActive: true,
       },
     });
   }
 
-  async recordLoanPayment(loanId: string, amountPaidCents: bigint, payslipId?: string) {
-    const loan = await prisma.employeeLoan.findUniqueOrThrow({
-      where: { id: loanId },
-    });
-
-    const newBalance = loan.balanceCents > amountPaidCents
-      ? loan.balanceCents - amountPaidCents
-      : 0n;
-
-    const [payment] = await prisma.$transaction([
-      prisma.loanPayment.create({
-        data: {
-          loanId,
-          payslipId,
-          amountPaidCents,
-          balanceAfterCents: newBalance,
-        },
-      }),
-      prisma.employeeLoan.update({
-        where: { id: loanId },
-        data: {
-          balanceCents: newBalance,
-          isActive: newBalance > 0n,
-        },
-      }),
-    ]);
-
-    return payment;
-  }
 }

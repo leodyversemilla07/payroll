@@ -1,17 +1,18 @@
-import { Injectable } from "@nestjs/common";
-import { prisma } from "@workspace/db";
+import { Injectable } from '@nestjs/common';
+import { prisma } from '@workspace/db';
 import {
   calculatePhilippinePayroll,
   CutoffType,
+  DeMinimisCategory,
   PayBasis,
   WorkDayDivisor,
-} from "@workspace/payroll-engine";
+} from '@workspace/payroll-engine';
 import type {
   AllowanceInput,
   LoanDeductionInput,
   PayrollCalculationInput,
-} from "@workspace/payroll-engine";
-import { TimekeepingService } from "../timekeeping/timekeeping.service.js";
+} from '@workspace/payroll-engine';
+import { TimekeepingService } from '../timekeeping/timekeeping.service';
 
 @Injectable()
 export class PayrollService {
@@ -25,13 +26,13 @@ export class PayrollService {
           select: { payslips: true },
         },
       },
-      orderBy: { paymentDate: "desc" },
+      orderBy: { paymentDate: 'desc' },
     });
   }
 
-  async getPayrollRunDetails(payrollRunId: string) {
-    return prisma.payrollRun.findUnique({
-      where: { id: payrollRunId },
+  async getPayrollRunDetails(payrollRunId: string, organizationId: string) {
+    return prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, organizationId },
       include: {
         payslips: {
           include: {
@@ -52,7 +53,7 @@ export class PayrollService {
     cutoffStartDate: Date;
     cutoffEndDate: Date;
     paymentDate: Date;
-    cutoffSequence: "FIRST_CUTOFF" | "SECOND_CUTOFF" | "SPECIAL_RUN";
+    cutoffSequence: 'FIRST_CUTOFF' | 'SECOND_CUTOFF' | 'SPECIAL_RUN';
   }) {
     // 1. Create or initialize Draft PayrollRun
     const payrollRun = await prisma.payrollRun.create({
@@ -62,7 +63,7 @@ export class PayrollService {
         cutoffStartDate: params.cutoffStartDate,
         cutoffEndDate: params.cutoffEndDate,
         paymentDate: params.paymentDate,
-        status: "PROCESSING",
+        status: 'PROCESSING',
       },
     });
 
@@ -70,7 +71,7 @@ export class PayrollService {
     const employees = await prisma.employee.findMany({
       where: {
         organizationId: params.organizationId,
-        employmentStatus: "ACTIVE",
+        employmentStatus: 'ACTIVE',
       },
       include: {
         compensation: true,
@@ -92,32 +93,42 @@ export class PayrollService {
     for (const emp of employees) {
       if (!emp.compensation) continue;
 
-      const attendanceSummary = await this.timekeepingService.getCutoffAttendanceSummary(
-        emp.id,
-        params.cutoffStartDate,
-        params.cutoffEndDate
-      );
+      const attendanceSummary =
+        await this.timekeepingService.getCutoffAttendanceSummary(
+          emp.id,
+          params.organizationId,
+          params.cutoffStartDate,
+          params.cutoffEndDate,
+        );
 
       const allowances: AllowanceInput[] = emp.allowances.map((a) => ({
         name: a.name,
         amountCents: a.amountCents,
-        isTaxable: a.type === "TAXABLE",
-        deMinimisCategory: a.deMinimisCategory as any,
+        isTaxable: a.type === 'TAXABLE',
+        deMinimisCategory: a.deMinimisCategory
+          ? DeMinimisCategory[a.deMinimisCategory]
+          : undefined,
       }));
 
       const loans: LoanDeductionInput[] = emp.loans.map((l) => ({
         loanId: l.id,
         name: l.loanType,
-        amountCents: l.amortizationCents > l.balanceCents ? l.balanceCents : l.amortizationCents,
+        amountCents:
+          l.amortizationCents > l.balanceCents
+            ? l.balanceCents
+            : l.amortizationCents,
       }));
 
       const calcInput: PayrollCalculationInput = {
-        cutoffType: params.cutoffSequence === "FIRST_CUTOFF" ? CutoffType.FIRST_CUTOFF : CutoffType.SECOND_CUTOFF,
+        cutoffType:
+          params.cutoffSequence === 'FIRST_CUTOFF'
+            ? CutoffType.FIRST_CUTOFF
+            : CutoffType.SECOND_CUTOFF,
         schedule: {
-          deductSssIn: "FIRST_CUTOFF",
-          deductPhilhealthIn: "FIRST_CUTOFF",
-          deductPagibigIn: "FIRST_CUTOFF",
-          deductTaxIn: "SECOND_CUTOFF",
+          deductSssIn: 'FIRST_CUTOFF',
+          deductPhilhealthIn: 'FIRST_CUTOFF',
+          deductPagibigIn: 'FIRST_CUTOFF',
+          deductTaxIn: 'SECOND_CUTOFF',
         },
         compensation: {
           payBasis: emp.payBasis as unknown as PayBasis,
@@ -126,7 +137,8 @@ export class PayrollService {
           hourlyRateCents: emp.compensation.basicRateHourlyCents,
           divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
           isMinimumWageEarner: emp.compensation.isTaxExempt,
-          customPagibigDeductionCents: emp.compensation.customPagibigDeductionCents ?? undefined,
+          customPagibigDeductionCents:
+            emp.compensation.customPagibigDeductionCents ?? undefined,
         },
         attendance: attendanceSummary,
         allowances,
@@ -153,13 +165,15 @@ export class PayrollService {
           absenceDeductionCents: result.absenceDeductionCents,
           sssEmployeeCents: result.sssContribution.employeeShareCents,
           sssWispEmployeeCents: result.sssContribution.wispEmployeeCents ?? 0n,
-          philhealthEmployeeCents: result.philhealthContribution.employeeShareCents,
+          philhealthEmployeeCents:
+            result.philhealthContribution.employeeShareCents,
           pagibigEmployeeCents: result.pagibigContribution.employeeShareCents,
           withholdingTaxCents: result.withholdingTaxCents,
           sssEmployerCents: result.sssContribution.employerShareCents,
           sssWispEmployerCents: result.sssContribution.wispEmployerCents ?? 0n,
           sssECCents: result.sssContribution.ecShareCents ?? 0n,
-          philhealthEmployerCents: result.philhealthContribution.employerShareCents,
+          philhealthEmployerCents:
+            result.philhealthContribution.employerShareCents,
           pagibigEmployerCents: result.pagibigContribution.employerShareCents,
           loanDeductionsCents: result.loanDeductionsCents,
           otherDeductionsCents: result.otherDeductionsCents,
@@ -174,7 +188,10 @@ export class PayrollService {
         if (l.amountCents > 0n) {
           const matchedLoan = emp.loans.find((orig) => orig.id === l.loanId);
           if (matchedLoan) {
-            const newBal = matchedLoan.balanceCents > l.amountCents ? matchedLoan.balanceCents - l.amountCents : 0n;
+            const newBal =
+              matchedLoan.balanceCents > l.amountCents
+                ? matchedLoan.balanceCents - l.amountCents
+                : 0n;
             await prisma.loanPayment.create({
               data: {
                 loanId: l.loanId,
@@ -208,7 +225,7 @@ export class PayrollService {
         totalDeductionsCents: runTotalDeductions,
         totalNetCents: runTotalNet,
         totalEmployerCostCents: runTotalEmployerCost,
-        status: "AUDITED",
+        status: 'AUDITED',
       },
       include: {
         payslips: true,

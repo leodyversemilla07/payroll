@@ -1,18 +1,29 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { prisma, Prisma } from "@workspace/db";
-import { calculateSilCashConversion } from "@workspace/payroll-engine";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { prisma, Prisma } from '@workspace/db';
+import { calculateSilCashConversion } from '@workspace/payroll-engine';
 
 @Injectable()
 export class LeavesService {
   /**
    * Retrieves all leave balances for an employee in the specified year.
    */
-  async getEmployeeLeaveBalances(employeeId: string, year = new Date().getFullYear()) {
+  async getEmployeeLeaveBalances(
+    employeeId: string,
+    organizationId: string,
+    year = new Date().getFullYear(),
+  ) {
+    await this.assertEmployeeInOrganization(employeeId, organizationId);
+
     const balances = await prisma.leaveBalance.findMany({
-      where: { employeeId, year },
+      where: { employeeId, employee: { organizationId }, year },
       include: {
         employee: {
-          select: { id: true, firstName: true, lastName: true, employeeNumber: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
         },
       },
     });
@@ -20,9 +31,9 @@ export class LeavesService {
     if (balances.length === 0) {
       // Seed default statutory balances: SIL (5 days), VL (10 days), SL (5 days)
       const defaultTypes = [
-        { type: "SIL", credits: 5 },
-        { type: "VACATION", credits: 10 },
-        { type: "SICK", credits: 5 },
+        { type: 'SIL', credits: 5 },
+        { type: 'VACATION', credits: 10 },
+        { type: 'SICK', credits: 5 },
       ];
 
       for (const item of defaultTypes) {
@@ -50,7 +61,12 @@ export class LeavesService {
         where: { employeeId, year },
         include: {
           employee: {
-            select: { id: true, firstName: true, lastName: true, employeeNumber: true },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+            },
           },
         },
       });
@@ -64,6 +80,7 @@ export class LeavesService {
    */
   async fileLeaveRequest(data: {
     employeeId: string;
+    organizationId: string;
     leaveType: string;
     startDate: Date;
     endDate: Date;
@@ -71,6 +88,11 @@ export class LeavesService {
     isPaid: boolean;
     reason: string;
   }) {
+    await this.assertEmployeeInOrganization(
+      data.employeeId,
+      data.organizationId,
+    );
+
     return prisma.leaveRequest.create({
       data: {
         employeeId: data.employeeId,
@@ -80,7 +102,7 @@ export class LeavesService {
         daysCount: new Prisma.Decimal(data.daysCount),
         isPaid: data.isPaid,
         reason: data.reason,
-        status: "PENDING",
+        status: 'PENDING',
       },
     });
   }
@@ -88,9 +110,13 @@ export class LeavesService {
   /**
    * Approves a leave request and deducts from employee's leave balance.
    */
-  async approveLeaveRequest(requestId: string, approvedById?: string) {
-    const request = await prisma.leaveRequest.findUnique({
-      where: { id: requestId },
+  async approveLeaveRequest(
+    requestId: string,
+    organizationId: string,
+    approvedById: string,
+  ) {
+    const request = await prisma.leaveRequest.findFirst({
+      where: { id: requestId, employee: { organizationId } },
     });
 
     if (!request) {
@@ -114,7 +140,10 @@ export class LeavesService {
       if (balanceRecord) {
         const days = Number(request.daysCount);
         const newUsed = Number(balanceRecord.usedCredits) + days;
-        const newBalance = Math.max(0, Number(balanceRecord.totalCredits) - newUsed);
+        const newBalance = Math.max(
+          0,
+          Number(balanceRecord.totalCredits) - newUsed,
+        );
 
         await prisma.leaveBalance.update({
           where: { id: balanceRecord.id },
@@ -129,7 +158,7 @@ export class LeavesService {
     return prisma.leaveRequest.update({
       where: { id: requestId },
       data: {
-        status: "APPROVED",
+        status: 'APPROVED',
         approvedById,
       },
     });
@@ -138,16 +167,22 @@ export class LeavesService {
   /**
    * Computes DOLE Service Incentive Leave (SIL) cash monetization for an employee.
    */
-  async calculateSilMonetization(employeeId: string, daysToMonetize?: number) {
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+  async calculateSilMonetization(
+    employeeId: string,
+    organizationId: string,
+    daysToMonetize?: number,
+  ) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, organizationId },
       include: {
         compensation: true,
       },
     });
 
     if (!employee || !employee.compensation) {
-      throw new NotFoundException(`Employee ${employeeId} or active compensation not found`);
+      throw new NotFoundException(
+        `Employee ${employeeId} or active compensation not found`,
+      );
     }
 
     const dailyRateCents = employee.compensation.basicRateDailyCents;
@@ -158,14 +193,15 @@ export class LeavesService {
       where: {
         employeeId_leaveType_year: {
           employeeId,
-          leaveType: "SIL",
+          leaveType: 'SIL',
           year: currentYear,
         },
       },
     });
 
     const availableDays = silBalance ? Number(silBalance.balance) : 5.0;
-    const requestedDays = daysToMonetize !== undefined ? daysToMonetize : availableDays;
+    const requestedDays =
+      daysToMonetize !== undefined ? daysToMonetize : availableDays;
 
     const conversion = calculateSilCashConversion({
       dailyRateCents,
@@ -179,5 +215,19 @@ export class LeavesService {
       availableBalanceDays: availableDays,
       ...conversion,
     };
+  }
+
+  private async assertEmployeeInOrganization(
+    employeeId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, organizationId },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
   }
 }

@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
-import { prisma } from "@workspace/db";
+import { Injectable } from '@nestjs/common';
+import { prisma } from '@workspace/db';
 
-export type BankFormat = "BDO" | "BPI" | "UNIONBANK" | "METROBANK";
+export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
 
 export interface BankTransmittalItem {
   employeeNumber: string;
@@ -27,9 +27,16 @@ export class ComplianceService {
   /**
    * Generates a structured bank transmittal CSV string for the specified payroll run and bank.
    */
-  async generateBankTransmittalCsv(payrollRunId: string, bankFormat: BankFormat): Promise<string> {
+  async generateBankTransmittalCsv(
+    payrollRunId: string,
+    bankFormat: BankFormat,
+    organizationId: string,
+  ): Promise<string> {
     const payslips = await prisma.payslip.findMany({
-      where: { payrollRunId },
+      where: {
+        payrollRunId,
+        payrollRun: { organizationId },
+      },
       include: {
         employee: true,
       },
@@ -39,75 +46,61 @@ export class ComplianceService {
       const netPesos = Number(ps.netPayCents) / 100;
       return {
         employeeNumber: ps.employee.employeeNumber,
-        accountName: ps.employee.bankAccountName || `${ps.employee.firstName} ${ps.employee.lastName}`,
-        accountNumber: ps.employee.bankAccountNumber || "N/A",
+        accountName:
+          ps.employee.bankAccountName ||
+          `${ps.employee.firstName} ${ps.employee.lastName}`,
+        accountNumber: ps.employee.bankAccountNumber || 'N/A',
         bankName: ps.employee.bankName || bankFormat,
         amountPesos: netPesos,
         remarks: `PAYROLL-${ps.id.slice(0, 8)}`,
       };
     });
 
-    if (items.length === 0) {
-      // Return header with demo entries if run has no payslips in DB yet
-      return this.formatTransmittal(
-        bankFormat,
-        [
-          {
-            employeeNumber: "EMP-2026-001",
-            accountName: "Juan Dela Cruz",
-            accountNumber: "001234567890",
-            bankName: bankFormat,
-            amountPesos: 41250.50,
-            remarks: "PAYROLL-AUG2026-1",
-          },
-          {
-            employeeNumber: "EMP-2026-002",
-            accountName: "Maria Santos",
-            accountNumber: "1234567890",
-            bankName: bankFormat,
-            amountPesos: 29800.00,
-            remarks: "PAYROLL-AUG2026-1",
-          },
-        ]
-      );
-    }
-
     return this.formatTransmittal(bankFormat, items);
   }
 
-  private formatTransmittal(format: BankFormat, items: BankTransmittalItem[]): string {
+  private formatTransmittal(
+    format: BankFormat,
+    items: BankTransmittalItem[],
+  ): string {
     switch (format) {
-      case "BDO": {
+      case 'BDO': {
         // BDO Auto-Credit Format: Account No, Amount, Beneficiary Name, Reference
-        const headers = "Account_Number,Amount,Beneficiary_Name,Employee_ID,Reference";
+        const headers =
+          'Account_Number,Amount,Beneficiary_Name,Employee_ID,Reference';
         const rows = items.map(
-          (i) => `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.employeeNumber}","${i.remarks}"`
+          (i) =>
+            `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.employeeNumber}","${i.remarks}"`,
         );
-        return [headers, ...rows].join("\r\n");
+        return [headers, ...rows].join('\r\n');
       }
-      case "BPI": {
+      case 'BPI': {
         // BPI ExpressLink / BizLink Format: BPI Account No, Amount, Payee Name, Ref
-        const headers = "BPI_Account_Number,Payee_Name,Amount,Remarks";
+        const headers = 'BPI_Account_Number,Payee_Name,Amount,Remarks';
         const rows = items.map(
-          (i) => `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"${i.remarks}"`
+          (i) =>
+            `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"${i.remarks}"`,
         );
-        return [headers, ...rows].join("\r\n");
+        return [headers, ...rows].join('\r\n');
       }
-      case "UNIONBANK": {
+      case 'UNIONBANK': {
         // UnionBank The Portal Corporate Format: Account Number, Account Name, Amount, Currency, Remarks
-        const headers = "Recipient_Account,Recipient_Name,Amount,Currency,Remarks,Employee_ID";
+        const headers =
+          'Recipient_Account,Recipient_Name,Amount,Currency,Remarks,Employee_ID';
         const rows = items.map(
-          (i) => `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"PHP","${i.remarks}","${i.employeeNumber}"`
+          (i) =>
+            `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"PHP","${i.remarks}","${i.employeeNumber}"`,
         );
-        return [headers, ...rows].join("\r\n");
+        return [headers, ...rows].join('\r\n');
       }
-      case "METROBANK": {
+      case 'METROBANK': {
         // Metrobank Direct Corporate Banking format
-        const headers = "Metrobank_Account,Amount,Customer_Name,Description";
+        const headers = 'Metrobank_Account,Amount,Customer_Name,Description';
         const rows = items.map(
-          (i) => `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.remarks}"`
+          (i) =>
+            `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.remarks}"`,
         );
-        return [headers, ...rows].join("\r\n");
+        return [headers, ...rows].join('\r\n');
       }
     }
   }
@@ -115,9 +108,14 @@ export class ComplianceService {
   /**
    * Computes BIR 1601-C (Monthly Remittance Return of Income Taxes Withheld on Compensation) summary.
    */
-  async getBir1601CSummary(month: number, year: number): Promise<Bir1601CSummary> {
+  async getBir1601CSummary(
+    month: number,
+    year: number,
+    organizationId: string,
+  ): Promise<Bir1601CSummary> {
     const payslips = await prisma.payslip.findMany({
       where: {
+        payrollRun: { organizationId },
         createdAt: {
           gte: new Date(year, month - 1, 1),
           lt: new Date(year, month, 1),
@@ -128,19 +126,6 @@ export class ComplianceService {
       },
     });
 
-    if (payslips.length === 0) {
-      // Return sample/mock statutory figures matching the 5 seeded employees
-      return {
-        taxablePeriod: `${year}-${String(month).padStart(2, "0")}`,
-        totalEmployees: 5,
-        minimumWageEarnersCount: 1,
-        grossCompensationPesos: 255400.00,
-        nonTaxableCompensationPesos: 32500.00, // SSS, PhilHealth, Pag-IBIG, De Minimis
-        taxableCompensationPesos: 222900.00,
-        totalTaxWithheldPesos: 34120.50,
-      };
-    }
-
     let grossCents = 0n;
     let nonTaxableCents = 0n;
     let taxableCents = 0n;
@@ -149,11 +134,24 @@ export class ComplianceService {
 
     for (const ps of payslips) {
       grossCents += ps.grossPayCents;
-      nonTaxableCents += ps.nonTaxableAllowancesCents + ps.sssEmployeeCents + ps.philhealthEmployeeCents + ps.pagibigEmployeeCents;
+      nonTaxableCents +=
+        ps.nonTaxableAllowancesCents +
+        ps.sssEmployeeCents +
+        ps.philhealthEmployeeCents +
+        ps.pagibigEmployeeCents;
       // Taxable income is gross pay minus non-taxable allowances and statutory contributions
-      const taxable = ps.grossPayCents > (ps.nonTaxableAllowancesCents + ps.sssEmployeeCents + ps.philhealthEmployeeCents + ps.pagibigEmployeeCents)
-        ? ps.grossPayCents - (ps.nonTaxableAllowancesCents + ps.sssEmployeeCents + ps.philhealthEmployeeCents + ps.pagibigEmployeeCents)
-        : 0n;
+      const taxable =
+        ps.grossPayCents >
+        ps.nonTaxableAllowancesCents +
+          ps.sssEmployeeCents +
+          ps.philhealthEmployeeCents +
+          ps.pagibigEmployeeCents
+          ? ps.grossPayCents -
+            (ps.nonTaxableAllowancesCents +
+              ps.sssEmployeeCents +
+              ps.philhealthEmployeeCents +
+              ps.pagibigEmployeeCents)
+          : 0n;
       taxableCents += taxable;
       taxWithheldCents += ps.withholdingTaxCents;
       if (taxable === 0n && ps.withholdingTaxCents === 0n) {
@@ -162,7 +160,7 @@ export class ComplianceService {
     }
 
     return {
-      taxablePeriod: `${year}-${String(month).padStart(2, "0")}`,
+      taxablePeriod: `${year}-${String(month).padStart(2, '0')}`,
       totalEmployees: payslips.length,
       minimumWageEarnersCount: mweCount,
       grossCompensationPesos: Number(grossCents) / 100,
@@ -175,11 +173,16 @@ export class ComplianceService {
   /**
    * Generates official BIR Form 2316 Certificate of Compensation Payment / Tax Withheld.
    */
-  async generateBir2316(employeeId: string, taxYear = new Date().getFullYear()) {
-    const { generateBir2316Certificate, formatBir2316TextDocument } = await import("@workspace/payroll-engine");
+  async generateBir2316(
+    employeeId: string,
+    organizationId: string,
+    taxYear = new Date().getFullYear(),
+  ) {
+    const { generateBir2316Certificate, formatBir2316TextDocument } =
+      await import('@workspace/payroll-engine');
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, organizationId },
       include: {
         organization: true,
         compensation: true,
@@ -192,16 +195,17 @@ export class ComplianceService {
     });
 
     if (!employee || !employee.compensation) {
-      throw new Error(`Employee ${employeeId} or compensation profile not found`);
+      throw new Error(
+        `Employee ${employeeId} or compensation profile not found`,
+      );
     }
 
     const org = employee.organization;
 
     // Filter payslips for the tax year
-    const yearPayslips = employee.payslips.filter((p: any) => {
-      const runYear = p.payrollRun.periodEnd.getFullYear();
-      return runYear === taxYear;
-    });
+    const yearPayslips = employee.payslips.filter(
+      (p) => p.payrollRun.cutoffEndDate.getFullYear() === taxYear,
+    );
 
     let totalBasicSalaryCents = 0n;
     let totalOvertimePayCents = 0n;
@@ -235,7 +239,9 @@ export class ComplianceService {
       totalSssEmployeeShareCents = 2100000n;
       totalPhilhealthEmployeeShareCents = 1500000n;
       totalPagibigEmployeeShareCents = 240000n;
-      totalTaxWithheldCents = employee.compensation.isTaxExempt ? 0n : (totalBasicSalaryCents * 8n) / 100n;
+      totalTaxWithheldCents = employee.compensation.isTaxExempt
+        ? 0n
+        : (totalBasicSalaryCents * 8n) / 100n;
     }
 
     const certData = generateBir2316Certificate(
@@ -251,8 +257,8 @@ export class ComplianceService {
       },
       {
         registeredName: org.name,
-        tin: org.tin || "123-456-789-000",
-        rdoCode: org.rdoCode || "047",
+        tin: org.tin || '123-456-789-000',
+        rdoCode: org.rdoCode || '047',
         registeredAddress: org.registeredAddress,
       },
       {
@@ -267,7 +273,7 @@ export class ComplianceService {
         totalPhilhealthEmployeeShareCents,
         totalPagibigEmployeeShareCents,
         totalTaxWithheldCents,
-      }
+      },
     );
 
     const formattedDocument = formatBir2316TextDocument(certData);
@@ -281,23 +287,29 @@ export class ComplianceService {
   /**
    * Generates official DOLE 13th Month Pay Annual Compliance Report under PD 851.
    */
-  async generateDole13thMonthReport(taxYear = new Date().getFullYear()) {
-    const { calculate13thMonthBatch, formatDole13thMonthComplianceReport } = await import("@workspace/payroll-engine");
+  async generateDole13thMonthReport(
+    organizationId: string,
+    taxYear = new Date().getFullYear(),
+  ) {
+    const { calculate13thMonthBatch, formatDole13thMonthComplianceReport } =
+      await import('@workspace/payroll-engine');
 
     const employees = await prisma.employee.findMany({
-      where: { employmentStatus: "ACTIVE" },
+      where: { organizationId, employmentStatus: 'ACTIVE' },
       include: {
         organization: true,
         compensation: true,
       },
     });
 
-    const defaultOrg = await prisma.organization.findFirst();
-    const orgName = defaultOrg?.name || "Acme Philippines Technologies Inc.";
-    const orgAddress = defaultOrg?.registeredAddress || "Ayala Avenue, Makati City";
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+    });
+    const orgName = organization?.name || 'Unknown organization';
+    const orgAddress = organization?.registeredAddress || 'Not provided';
 
-    const employeeInputs = employees.map((e: any) => {
-      const hireDate = e.hireDate || new Date("2025-01-01");
+    const employeeInputs = employees.map((employee) => {
+      const hireDate = employee.hireDate;
       const hireYear = hireDate.getFullYear();
       let monthsWorked = 12;
       if (hireYear === taxYear) {
@@ -305,10 +317,11 @@ export class ComplianceService {
       }
 
       return {
-        employeeId: e.id,
-        employeeNumber: e.employeeNumber,
-        fullName: `${e.firstName} ${e.lastName}`,
-        monthlyBasicRateCents: e.compensation?.basicRateMonthlyCents || 2500000n,
+        employeeId: employee.id,
+        employeeNumber: employee.employeeNumber,
+        fullName: `${employee.firstName} ${employee.lastName}`,
+        monthlyBasicRateCents:
+          employee.compensation?.basicRateMonthlyCents ?? 2500000n,
         hireDate: hireDate.toISOString().slice(0, 10),
         monthsWorkedInYear: monthsWorked,
         unpaidAbsenceDays: 0,
@@ -321,9 +334,9 @@ export class ComplianceService {
       taxYear,
       establishmentName: orgName,
       registeredAddress: orgAddress,
-      natureOfBusiness: "Information Technology & Services",
-      contactPerson: "HR & Payroll Director",
-      contactNumber: "+63 2 8123 4567",
+      natureOfBusiness: 'Information Technology & Services',
+      contactPerson: 'HR & Payroll Director',
+      contactNumber: '+63 2 8123 4567',
       batchResult,
     });
 

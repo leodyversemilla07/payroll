@@ -54,6 +54,8 @@ model Organization {
   branches          Branch[]
   departments       Department[]
   employees         Employee[]
+  users             User[]
+  auditLogs          AuditLog[]
   payrollRuns       PayrollRun[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
@@ -137,8 +139,44 @@ model Employee {
   overtimeRequests  OvertimeRequest[]
   loans             EmployeeLoan[]
   payslips          Payslip[]
+  user              User?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+}
+
+model User {
+  id                String       @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId        String?      @unique
+  employee          Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  name              String
+  email             String       @unique
+  passwordHash      String
+  role              Role         @default(EMPLOYEE)
+  isActive          Boolean      @default(true)
+  failedLoginAttempts Int        @default(0)
+  lockedUntil       DateTime?
+  sessions          AuthSession[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model AuthSession {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String   @unique
+  expiresAt         DateTime
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Compensation {
@@ -456,6 +494,8 @@ model BankTransmittalBatch {
 
 model AuditLog {
   id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId          String
   userEmail       String
   action          String       // e.g. "RECALCULATE_PAYROLL", "APPROVE_LOAN"
@@ -466,4 +506,6 @@ model AuditLog {
   ipAddress       String?
   userAgent       String?
   createdAt       DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
 }

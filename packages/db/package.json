@@ -1,16 +1,18 @@
 {
   "name": "@workspace/db",
   "version": "0.0.1",
-  "type": "module",
-  "main": "./src/index.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit"

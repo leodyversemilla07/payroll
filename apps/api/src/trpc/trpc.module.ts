@@ -1,5 +1,5 @@
-import { Module, Global } from "@nestjs/common";
-import { TrpcService } from "./trpc.service.js";
+import { Module, Global } from '@nestjs/common';
+import { TrpcService } from './trpc.service';
 
 @Global()
 @Module({

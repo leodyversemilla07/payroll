@@ -1,21 +1,83 @@
-# shadcn/ui monorepo template
+# SweldoPH Payroll
 
-This is a Next.js monorepo template with shadcn/ui.
+A pnpm/Turborepo monorepo for a Philippine payroll platform. It contains a Next.js web app, a NestJS/tRPC API, a Prisma/PostgreSQL data layer, and a standalone payroll calculation engine.
 
-## Adding components
+> This project is under active development. Authentication, tenant-scoped authorization, and audit logging are implemented in the API, but the web sign-in flow and final regulatory validation are not complete. Do not use it for live payroll yet.
 
-To add components to your app, run the following command at the root of your `web` app:
+## Requirements
+
+- Node.js 20.19 or newer
+- pnpm 10
+- Docker Desktop or a PostgreSQL 16 instance
+
+## Local setup
 
 ```bash
-pnpm dlx shadcn@latest add button -c apps/web
+pnpm install
+cp .env.example .env
+pnpm docker:up
+pnpm --filter @workspace/db db:generate
+pnpm --filter @workspace/db db:migrate
+pnpm --filter @workspace/db db:seed
+# Copy the organization UUID printed by the seed into BOOTSTRAP_ORGANIZATION_ID.
+pnpm auth:bootstrap
+pnpm dev
 ```
 
-This will place the ui components in the `packages/ui/src/components` directory.
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
-## Using components
+Services are available at:
 
-To use the components in your app, import them from the `ui` package.
+- Web: http://localhost:3000
+- API: http://localhost:4000
+- tRPC: http://localhost:4000/trpc
+- MinIO console: http://localhost:9001
 
-```tsx
-import { Button } from "@workspace/ui/components/button";
+## Quality checks
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm test:e2e
+pnpm build
+pnpm test:smoke
 ```
+
+The smoke test launches the compiled API and verifies its HTTP health endpoint.
+
+## Database commands
+
+```bash
+pnpm --filter @workspace/db db:generate
+pnpm --filter @workspace/db db:push
+pnpm --filter @workspace/db db:migrate
+pnpm db:migrate:deploy
+pnpm --filter @workspace/db db:seed
+pnpm --filter @workspace/db db:studio
+```
+
+## Production API
+
+Build from the repository root so workspace dependencies are compiled first:
+
+```bash
+pnpm build
+pnpm --filter @workspace/api start:prod
+```
+
+Production deployments must provide at least `DATABASE_URL`; see `.env.example` for the complete configuration. Run `pnpm db:migrate:deploy` before starting the API.
+
+## Authentication and authorization
+
+The API uses opaque, random session tokens stored only in an `HttpOnly`, `SameSite=Lax` cookie. Passwords are hashed with Node's scrypt implementation, sessions are stored as hashes, and browser origins are checked against `CORS_ORIGIN`.
+
+Create the first tenant administrator only after an organization exists:
+
+```bash
+# Set BOOTSTRAP_ORGANIZATION_ID, BOOTSTRAP_ADMIN_EMAIL,
+# BOOTSTRAP_ADMIN_NAME, and BOOTSTRAP_ADMIN_PASSWORD in .env.
+pnpm auth:bootstrap
+```
+
+The bootstrap command refuses to overwrite an existing account. API roles are `SUPER_ADMIN`, `HR_ADMIN`, `PAYROLL_SPECIALIST`, `DEPARTMENT_MANAGER`, and `EMPLOYEE`. Tenant identifiers are derived from the authenticated session rather than accepted from API clients. Sensitive mutations and compliance exports write to `AuditLog`.
