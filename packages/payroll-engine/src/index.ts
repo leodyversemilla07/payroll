@@ -25,6 +25,7 @@ export * from "./biometrics";
 export * from "./sil-conversion";
 export * from "./final-pay";
 export * from "./bir-2316";
+export * from "./thirteenth-month-batch";
 
 /**
  * Master Philippine Payroll Calculation Engine

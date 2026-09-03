@@ -304,6 +304,16 @@ export function createApiRouter(
         .query(async ({ input }) => {
           return complianceService.generateBir2316(input.employeeId, input.taxYear);
         }),
+
+      exportDole13thMonth: p
+        .input(
+          z.object({
+            taxYear: z.number().optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          return complianceService.generateDole13thMonthReport(input.taxYear);
+        }),
     }),
 
     leaves: trpc.router({

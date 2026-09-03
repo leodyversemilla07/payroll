@@ -37,6 +37,8 @@ import {
   SeparationType,
   generateBir2316Certificate,
   formatBir2316TextDocument,
+  calculate13thMonthBatch,
+  formatDole13thMonthComplianceReport,
   deriveRates,
   CutoffType,
   PayBasis,
@@ -274,6 +276,8 @@ export default function PayrollDashboard() {
   const [finalPayUnusedLeaves, setFinalPayUnusedLeaves] = useState<number>(5);
   const [isBir2316ModalOpen, setIsBir2316ModalOpen] = useState(false);
   const [selectedBir2316EmpId, setSelectedBir2316EmpId] = useState<string>(INITIAL_EMPLOYEES[0]!.id);
+  const [is13thMonthModalOpen, setIs13thMonthModalOpen] = useState(false);
+  const [selected13thMonthYear, setSelected13thMonthYear] = useState<number>(2026);
 
   // Biometrics Import state
   const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
@@ -638,6 +642,23 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       totalPagibigEmployeeShareCents: annualPagibigEeCents,
       totalTaxWithheldCents: annualTaxWithheldCents,
     }
+  );
+
+  // DOLE 13th Month Pay Batch Calculation
+  const thirteenthMonthBatchResult = calculate13thMonthBatch(
+    selected13thMonthYear,
+    employees.map((e) => {
+      const monthsWorked = e.employeeNo.includes("004") ? 8 : 12;
+      return {
+        employeeId: e.id,
+        employeeNumber: e.employeeNo,
+        fullName: e.name,
+        monthlyBasicRateCents: e.monthlyBasicRateCents,
+        hireDate: "2025-01-01",
+        monthsWorkedInYear: monthsWorked,
+        unpaidAbsenceDays: 0,
+      };
+    })
   );
 
   // Parse Biometrics Logs Preview
@@ -1418,6 +1439,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                       downloadFile("SSS_R3_Monthly_Collection.csv", text);
                       showToast("📥 Exported SSS R-3 Collection Schedule!");
                     },
+                  },
+                  {
+                    name: "DOLE 13th Month Pay Report (PD 851)",
+                    desc: "Mandatory Annual Compliance Report for DOLE BWC / ERS",
+                    action: () => setIs13thMonthModalOpen(true),
                   },
                 ].map((g) => (
                   <div key={g.name} className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs">
@@ -2651,6 +2677,163 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   size="sm"
                   onClick={() => setIsBir2316ModalOpen(false)}
                   className="bg-purple-600 hover:bg-purple-500 text-white"
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 9: DOLE 13TH MONTH PAY BATCH & ANNUAL COMPLIANCE REPORT */}
+      {/* ========================================================================= */}
+      {is13thMonthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-4xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Banknote className="size-4 text-emerald-400" /> DOLE 13th Month Pay Batch & Compliance
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Presidential Decree No. 851 • Statutory December 24 release mandate • DOLE BWC / ERS Filing
+                </p>
+              </div>
+              <button onClick={() => setIs13thMonthModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Benefited Employees</span>
+                  <div className="text-lg font-bold text-white mt-0.5">
+                    {thirteenthMonthBatchResult.totalBenefitedEmployees} Employees
+                  </div>
+                  <span className="text-[10px] text-slate-500">100% Rank-and-File</span>
+                </div>
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Payout Granted</span>
+                  <div className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
+                    {formatPHP(thirteenthMonthBatchResult.totalThirteenthMonthPayCents)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Total Company Outlay</span>
+                </div>
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Tax-Exempt (≤₱90k)</span>
+                  <div className="text-lg font-bold text-blue-400 font-mono mt-0.5">
+                    {formatPHP(thirteenthMonthBatchResult.totalTaxExemptCents)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">TRAIN Law Exemption</span>
+                </div>
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Taxable Excess (&gt;₱90k)</span>
+                  <div className="text-lg font-bold text-amber-400 font-mono mt-0.5">
+                    {formatPHP(thirteenthMonthBatchResult.totalTaxableExcessCents)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Subject to Withholding</span>
+                </div>
+              </div>
+
+              {/* Employee Breakdown Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="py-3 px-3">Employee</th>
+                      <th className="py-3 px-3">Tenure / Service</th>
+                      <th className="py-3 px-3">Annual Basic Earned</th>
+                      <th className="py-3 px-3">13th Month Pay</th>
+                      <th className="py-3 px-3">Tax-Exempt Share</th>
+                      <th className="py-3 px-3">Taxable Excess</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {thirteenthMonthBatchResult.employeeResults.map((r) => (
+                      <tr key={r.employeeId} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-3 font-medium text-white">
+                          {r.fullName}
+                          <div className="text-[10px] text-slate-500 font-mono">{r.employeeNumber}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={r.isProrated ? "text-amber-400" : "text-slate-300"}>
+                            {r.monthsWorked} mos {r.isProrated ? "(Pro-rated)" : "(Full 12m)"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono">{formatPHP(r.totalBasicEarnedCents)}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
+                          {formatPHP(r.thirteenthMonthPayCents)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-blue-400">
+                          {formatPHP(r.taxExemptPortionCents)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono">
+                          {r.taxableExcessCents > 0n ? (
+                            <span className="text-amber-400">+{formatPHP(r.taxableExcessCents)}</span>
+                          ) : (
+                            <span className="text-slate-500">₱0.00</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-slate-800">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const report = formatDole13thMonthComplianceReport({
+                        taxYear: selected13thMonthYear,
+                        establishmentName: "Acme Philippines Technologies Inc.",
+                        registeredAddress: "Ayala Avenue, Makati City",
+                        natureOfBusiness: "Information Technology & Services",
+                        contactPerson: "HR & Payroll Director",
+                        contactNumber: "+63 2 8123 4567",
+                        batchResult: thirteenthMonthBatchResult,
+                      });
+                      downloadFile(`DOLE_13th_Month_Report_${selected13thMonthYear}.txt`, report, "text/plain;charset=utf-8;");
+                      showToast("📥 Exported Official DOLE 13th Month Pay Annual Report!");
+                    }}
+                    className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                  >
+                    <Download className="size-3.5 mr-1.5" /> Export DOLE Report (PD 851)
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const rows = [
+                        "Account_Number,Beneficiary_Name,Amount_PHP,Employee_ID,Reference",
+                        ...thirteenthMonthBatchResult.employeeResults.map((r) => {
+                          const emp = employees.find((e) => e.id === r.employeeId);
+                          return `"${emp?.bankAccount || "1122334455"}","${r.fullName}",${(Number(r.thirteenthMonthPayCents) / 100).toFixed(2)},"${r.employeeNumber}","13TH-MONTH-${selected13thMonthYear}"`;
+                        }),
+                      ];
+                      downloadFile(`13th_Month_Bank_Batch_${selected13thMonthYear}.csv`, rows.join("\r\n"));
+                      showToast("📥 Exported 13th Month Bank Transmittal Batch CSV!");
+                    }}
+                    className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                  >
+                    <Download className="size-3.5 mr-1.5" /> Export Bank Transmittal (.csv)
+                  </Button>
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIs13thMonthModalOpen(false)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white"
                 >
                   Done
                 </Button>

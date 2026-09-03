@@ -277,4 +277,61 @@ export class ComplianceService {
       formattedDocument,
     };
   }
+
+  /**
+   * Generates official DOLE 13th Month Pay Annual Compliance Report under PD 851.
+   */
+  async generateDole13thMonthReport(taxYear = new Date().getFullYear()) {
+    const { calculate13thMonthBatch, formatDole13thMonthComplianceReport } = await import("@workspace/payroll-engine");
+
+    const employees = await prisma.employee.findMany({
+      where: { employmentStatus: "ACTIVE" },
+      include: {
+        organization: true,
+        compensation: true,
+      },
+    });
+
+    const defaultOrg = await prisma.organization.findFirst();
+    const orgName = defaultOrg?.name || "Acme Philippines Technologies Inc.";
+    const orgAddress = defaultOrg?.registeredAddress || "Ayala Avenue, Makati City";
+
+    const employeeInputs = employees.map((e: any) => {
+      const hireDate = e.hireDate || new Date("2025-01-01");
+      const hireYear = hireDate.getFullYear();
+      let monthsWorked = 12;
+      if (hireYear === taxYear) {
+        monthsWorked = Math.max(1, 12 - hireDate.getMonth());
+      }
+
+      return {
+        employeeId: e.id,
+        employeeNumber: e.employeeNumber,
+        fullName: `${e.firstName} ${e.lastName}`,
+        monthlyBasicRateCents: e.compensation?.basicRateMonthlyCents || 2500000n,
+        hireDate: hireDate.toISOString().slice(0, 10),
+        monthsWorkedInYear: monthsWorked,
+        unpaidAbsenceDays: 0,
+      };
+    });
+
+    const batchResult = calculate13thMonthBatch(taxYear, employeeInputs);
+
+    const reportText = formatDole13thMonthComplianceReport({
+      taxYear,
+      establishmentName: orgName,
+      registeredAddress: orgAddress,
+      natureOfBusiness: "Information Technology & Services",
+      contactPerson: "HR & Payroll Director",
+      contactNumber: "+63 2 8123 4567",
+      batchResult,
+    });
+
+    return {
+      taxYear,
+      batchResult,
+      reportText,
+      filename: `DOLE_13th_Month_Compliance_Report_${taxYear}.txt`,
+    };
+  }
 }
