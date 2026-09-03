@@ -35,6 +35,8 @@ import {
   calculateSilCashConversion,
   calculateFinalPay,
   SeparationType,
+  generateBir2316Certificate,
+  formatBir2316TextDocument,
   deriveRates,
   CutoffType,
   PayBasis,
@@ -270,6 +272,8 @@ export default function PayrollDashboard() {
   const [finalPayYearsOfService, setFinalPayYearsOfService] = useState<number>(2.5);
   const [finalPayUnpaidDays, setFinalPayUnpaidDays] = useState<number>(5);
   const [finalPayUnusedLeaves, setFinalPayUnusedLeaves] = useState<number>(5);
+  const [isBir2316ModalOpen, setIsBir2316ModalOpen] = useState(false);
+  const [selectedBir2316EmpId, setSelectedBir2316EmpId] = useState<string>(INITIAL_EMPLOYEES[0]!.id);
 
   // Biometrics Import state
   const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
@@ -594,6 +598,47 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
     setIsFinalPayModalOpen(false);
     showToast(`🕊️ Completed Separation Clearance & Final Pay for ${selectedFinalPayEmp.name}!`);
   }
+
+  // Selected Employee for BIR Form 2316 Certificate
+  const selectedBir2316Emp = employees.find((e) => e.id === selectedBir2316EmpId) || employees[0]!;
+  const annualBasicSalaryCents = selectedBir2316Emp.monthlyBasicRateCents * 12n;
+  const annual13thMonthCents = selectedBir2316Emp.monthlyBasicRateCents;
+  const annualOvertimeCents = BigInt(selectedBir2316Emp.attendance.regularOvertimeHours * 24) * 20000n;
+  const annualSssEeCents = 2100000n;
+  const annualPhicEeCents = (annualBasicSalaryCents * 25n) / 1000n;
+  const annualPagibigEeCents = 240000n;
+  const annualTaxWithheldCents = selectedBir2316Emp.isMinimumWageEarner ? 0n : (annualBasicSalaryCents * 8n) / 100n;
+
+  const bir2316Cert = generateBir2316Certificate(
+    2026,
+    {
+      employeeNumber: selectedBir2316Emp.employeeNo,
+      firstName: selectedBir2316Emp.name.split(" ")[0] || "Juan",
+      lastName: selectedBir2316Emp.name.split(" ").slice(1).join(" ") || "Dela Cruz",
+      tin: selectedBir2316Emp.tin,
+      residentialAddress: "Metro Manila, Philippines",
+      isMinimumWageEarner: selectedBir2316Emp.isMinimumWageEarner,
+    },
+    {
+      registeredName: "Acme Philippines Technologies Inc.",
+      tin: "123-456-789-000",
+      rdoCode: "047",
+      registeredAddress: "Ayala Avenue, Makati City, Metro Manila",
+    },
+    {
+      totalBasicSalaryCents: annualBasicSalaryCents,
+      totalOvertimePayCents: annualOvertimeCents,
+      totalHolidayPayCents: 0n,
+      totalNightDiffPayCents: 0n,
+      totalDeMinimisBenefitsCents: 2400000n,
+      totalThirteenthMonthAndBonusesCents: annual13thMonthCents,
+      totalOtherTaxableAllowancesCents: 0n,
+      totalSssEmployeeShareCents: annualSssEeCents,
+      totalPhilhealthEmployeeShareCents: annualPhicEeCents,
+      totalPagibigEmployeeShareCents: annualPagibigEeCents,
+      totalTaxWithheldCents: annualTaxWithheldCents,
+    }
+  );
 
   // Parse Biometrics Logs Preview
   const parsedBiometricDays: ProcessedDtrDay[] = (() => {
@@ -1336,8 +1381,13 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     action: () => exportBir1601C(),
                   },
                   {
+                    name: "BIR Form 2316 Certificate (Individual)",
+                    desc: "Annual Certificate of Compensation & Withholding Tax (TRAIN Law)",
+                    action: () => setIsBir2316ModalOpen(true),
+                  },
+                  {
                     name: "BIR Form 2316 Batch (Summary)",
-                    desc: "Annual Certificate of Compensation & Withholding Tax",
+                    desc: "Annual Certificate of Compensation & Withholding Tax Batch",
                     action: () => {
                       const text = [
                         "BIR FORM 2316 - CERTIFICATE OF COMPENSATION PAYMENT / TAX WITHHELD",
@@ -1480,43 +1530,56 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 <span className="text-[10px] text-blue-400 uppercase font-bold">Net Take-Home Pay</span>
                 <div className="text-2xl font-black text-white font-mono">₱30,884.24</div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  const content = [
-                    "===========================================================",
-                    "            ACME PHILIPPINES TECHNOLOGIES INC.            ",
-                    "                OFFICIAL DIGITAL PAYSLIP                  ",
-                    "===========================================================",
-                    "Employee: Juan Dela Cruz (EMP-2026-001)",
-                    "Department: Software Engineering",
-                    "Pay Period: Aug 16 - 31, 2026",
-                    "PIN Security: Password Encrypted",
-                    "-----------------------------------------------------------",
-                    "EARNINGS:",
-                    "  Basic Pay: PHP 32,500.00",
-                    "  Overtime (4 hrs): PHP 1,556.52",
-                    "  De Minimis (Rice): PHP 1,000.00",
-                    "  GROSS PAY: PHP 35,056.52",
-                    "-----------------------------------------------------------",
-                    "DEDUCTIONS:",
-                    "  Tardiness (15m): PHP 97.28",
-                    "  SSS & WISP: PHP 1,750.00",
-                    "  PhilHealth: PHP 1,625.00",
-                    "  Pag-IBIG: PHP 200.00",
-                    "  SSS Salary Loan: PHP 500.00",
-                    "  TOTAL DEDUCTIONS: PHP 4,172.28",
-                    "-----------------------------------------------------------",
-                    "NET TAKE-HOME PAY: PHP 30,884.24",
-                    "===========================================================",
-                  ].join("\r\n");
-                  downloadFile("Payslip_Juan_Dela_Cruz_Aug2026.txt", content, "text/plain;charset=utf-8;");
-                  showToast("📥 Exported Official Payslip (Protected)!");
-                }}
-                className="bg-blue-600 hover:bg-blue-500 text-white"
-              >
-                <Download className="size-3.5 mr-1.5" /> Download Payslip
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedBir2316EmpId(employees[0]!.id);
+                    setIsBir2316ModalOpen(true);
+                  }}
+                  className="border-purple-500/30 text-purple-300 hover:bg-purple-950/40 text-xs"
+                >
+                  <FileText className="size-3.5 mr-1.5 text-purple-400" /> View BIR Form 2316
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const content = [
+                      "===========================================================",
+                      "            ACME PHILIPPINES TECHNOLOGIES INC.            ",
+                      "                OFFICIAL DIGITAL PAYSLIP                  ",
+                      "===========================================================",
+                      "Employee: Juan Dela Cruz (EMP-2026-001)",
+                      "Department: Software Engineering",
+                      "Pay Period: Aug 16 - 31, 2026",
+                      "PIN Security: Password Encrypted",
+                      "-----------------------------------------------------------",
+                      "EARNINGS:",
+                      "  Basic Pay: PHP 32,500.00",
+                      "  Overtime (4 hrs): PHP 1,556.52",
+                      "  De Minimis (Rice): PHP 1,000.00",
+                      "  GROSS PAY: PHP 35,056.52",
+                      "-----------------------------------------------------------",
+                      "DEDUCTIONS:",
+                      "  Tardiness (15m): PHP 97.28",
+                      "  SSS & WISP: PHP 1,750.00",
+                      "  PhilHealth: PHP 1,625.00",
+                      "  Pag-IBIG: PHP 200.00",
+                      "  SSS Salary Loan: PHP 500.00",
+                      "  TOTAL DEDUCTIONS: PHP 4,172.28",
+                      "-----------------------------------------------------------",
+                      "NET TAKE-HOME PAY: PHP 30,884.24",
+                      "===========================================================",
+                    ].join("\r\n");
+                    downloadFile("Payslip_Juan_Dela_Cruz_Aug2026.txt", content, "text/plain;charset=utf-8;");
+                    showToast("📥 Exported Official Payslip (Protected)!");
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  <Download className="size-3.5 mr-1.5" /> Download Payslip
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -2410,6 +2473,187 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                     Release & Finalize Separation
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 8: BIR FORM 2316 CERTIFICATE OF COMPENSATION PAYMENT & TAX WITHHELD */}
+      {/* ========================================================================= */}
+      {isBir2316ModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-3xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <FileCheck2 className="size-4 text-purple-400" /> BIR Form 2316 Certificate
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Certificate of Compensation Payment / Tax Withheld • Tax Year 2026 (TRAIN Law Compliant)
+                </p>
+              </div>
+              <button onClick={() => setIsBir2316ModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <select
+                  value={selectedBir2316EmpId}
+                  onChange={(e) => setSelectedBir2316EmpId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.employeeNo}) — TIN: {emp.tin}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Header Details */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Employee Details (Part I)</div>
+                  <div className="font-bold text-white mt-0.5">{bir2316Cert.employee.lastName}, {bir2316Cert.employee.firstName}</div>
+                  <div className="text-slate-400 font-mono text-[11px]">TIN: {bir2316Cert.employee.tin}</div>
+                  <div className="text-slate-400 text-[10px] mt-0.5">
+                    Status: {bir2316Cert.isMwe ? "Minimum Wage Earner (MWE - Tax Exempt)" : "Regular Employee (TRAIN Graduated)"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Employer Details (Part II)</div>
+                  <div className="font-bold text-white mt-0.5">{bir2316Cert.employer.registeredName}</div>
+                  <div className="text-slate-400 font-mono text-[11px]">TIN: {bir2316Cert.employer.tin} • RDO: {bir2316Cert.employer.rdoCode}</div>
+                  <div className="text-slate-400 text-[10px] mt-0.5">{bir2316Cert.employer.registeredAddress}</div>
+                </div>
+              </div>
+
+              {/* Part IV-A Summary */}
+              <div className="bg-purple-950/20 border border-purple-800/30 p-4 rounded-xl space-y-2">
+                <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider border-b border-purple-800/40 pb-1 flex justify-between">
+                  <span>Part IV-A: Summary of Compensation & Tax</span>
+                  <span className="font-mono text-[10px]">Tax Year {bir2316Cert.taxYear}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 25: Gross Compensation Income:</span>
+                    <span className="font-mono text-white font-semibold">
+                      {formatPHP(bir2316Cert.partIVA.grossCompensationIncomeCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 30: Annual Tax Due:</span>
+                    <span className="font-mono text-white font-semibold">
+                      {formatPHP(bir2316Cert.partIVA.taxDueAnnualCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 26: Total Non-Taxable Income:</span>
+                    <span className="font-mono text-emerald-400">
+                      {formatPHP(bir2316Cert.partIVA.totalNonTaxableCompensationCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 31: Total Taxes Withheld:</span>
+                    <span className="font-mono text-amber-400">
+                      {formatPHP(bir2316Cert.partIVA.totalTaxWithheldCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 27: Total Taxable Income:</span>
+                    <span className="font-mono text-blue-400 font-bold">
+                      {formatPHP(bir2316Cert.partIVA.totalTaxableCompensationCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-300">Line 32: Year-End Tax Adjustment:</span>
+                    <span className={`font-mono font-bold ${bir2316Cert.partIVA.refundDueEmployeeCents > 0n ? "text-emerald-400" : "text-slate-300"}`}>
+                      {bir2316Cert.partIVA.refundDueEmployeeCents > 0n
+                        ? `Refund +${formatPHP(bir2316Cert.partIVA.refundDueEmployeeCents)}`
+                        : "Equalized (₱0.00)"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown: Part IV-B & IV-C */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider border-b border-slate-800 pb-1">
+                    Part IV-B: Non-Taxable / Exempt Income
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">13th Month & Bonuses (≤₱90k):</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.thirteenthMonthExemptCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">De Minimis Benefits:</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.deMinimisBenefitsCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">Statutory SSS/PHIC/HDMF:</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.statutoryContributionsCents)}</span>
+                  </div>
+                  {bir2316Cert.isMwe && (
+                    <div className="flex justify-between text-[11px] text-amber-400">
+                      <span>Basic & OT (MWE Exempt):</span>
+                      <span className="font-mono">{formatPHP(bir2316Cert.partIVB.basicMweCents + bir2316Cert.partIVB.overtimePayMweCents)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider border-b border-slate-800 pb-1">
+                    Part IV-C: Taxable Income
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">Regular Basic Salary:</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.basicSalaryRegularCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">Taxable Overtime / Premiums:</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.overtimePayTaxableCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">Bonuses in Excess of ₱90k:</span>
+                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.thirteenthMonthExcessTaxableCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] font-bold pt-1 border-t border-slate-800">
+                    <span className="text-slate-300">Total Taxable Income:</span>
+                    <span className="font-mono text-blue-400">{formatPHP(bir2316Cert.partIVC.totalTaxableCompensationCents)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const text = formatBir2316TextDocument(bir2316Cert);
+                    downloadFile(`BIR_Form_2316_${selectedBir2316Emp.name.replace(/\s+/g, "_")}_2026.txt`, text, "text/plain;charset=utf-8;");
+                    showToast("📥 Exported Official BIR Form 2316 Certificate!");
+                  }}
+                  className="border-slate-800 hover:bg-slate-800 text-slate-300"
+                >
+                  <Download className="size-3.5 mr-1.5" /> Download Official Form 2316 (.txt)
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsBir2316ModalOpen(false)}
+                  className="bg-purple-600 hover:bg-purple-500 text-white"
+                >
+                  Done
+                </Button>
               </div>
             </div>
           </div>

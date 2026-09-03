@@ -171,4 +171,110 @@ export class ComplianceService {
       totalTaxWithheldPesos: Number(taxWithheldCents) / 100,
     };
   }
+
+  /**
+   * Generates official BIR Form 2316 Certificate of Compensation Payment / Tax Withheld.
+   */
+  async generateBir2316(employeeId: string, taxYear = new Date().getFullYear()) {
+    const { generateBir2316Certificate, formatBir2316TextDocument } = await import("@workspace/payroll-engine");
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        organization: true,
+        compensation: true,
+        payslips: {
+          include: {
+            payrollRun: true,
+          },
+        },
+      },
+    });
+
+    if (!employee || !employee.compensation) {
+      throw new Error(`Employee ${employeeId} or compensation profile not found`);
+    }
+
+    const org = employee.organization;
+
+    // Filter payslips for the tax year
+    const yearPayslips = employee.payslips.filter((p: any) => {
+      const runYear = p.payrollRun.periodEnd.getFullYear();
+      return runYear === taxYear;
+    });
+
+    let totalBasicSalaryCents = 0n;
+    let totalOvertimePayCents = 0n;
+    let totalHolidayPayCents = 0n;
+    let totalNightDiffPayCents = 0n;
+    let totalDeMinimisBenefitsCents = 0n;
+    let totalThirteenthMonthAndBonusesCents = 0n;
+    let totalSssEmployeeShareCents = 0n;
+    let totalPhilhealthEmployeeShareCents = 0n;
+    let totalPagibigEmployeeShareCents = 0n;
+    let totalTaxWithheldCents = 0n;
+
+    if (yearPayslips.length > 0) {
+      for (const p of yearPayslips) {
+        totalBasicSalaryCents += p.basicPayCents;
+        totalOvertimePayCents += p.overtimePayCents;
+        totalHolidayPayCents += p.holidayPayCents;
+        totalNightDiffPayCents += p.nightDiffPayCents;
+        totalDeMinimisBenefitsCents += p.nonTaxableAllowancesCents;
+        totalSssEmployeeShareCents += p.sssEmployeeCents;
+        totalPhilhealthEmployeeShareCents += p.philhealthEmployeeCents;
+        totalPagibigEmployeeShareCents += p.pagibigEmployeeCents;
+        totalTaxWithheldCents += p.withholdingTaxCents;
+      }
+      totalThirteenthMonthAndBonusesCents = totalBasicSalaryCents / 12n;
+    } else {
+      const monthlyRateCents = employee.compensation.basicRateMonthlyCents;
+      totalBasicSalaryCents = monthlyRateCents * 12n;
+      totalThirteenthMonthAndBonusesCents = monthlyRateCents;
+      totalDeMinimisBenefitsCents = 2400000n; // ₱24,000 Rice subsidy
+      totalSssEmployeeShareCents = 2100000n;
+      totalPhilhealthEmployeeShareCents = 1500000n;
+      totalPagibigEmployeeShareCents = 240000n;
+      totalTaxWithheldCents = employee.compensation.isTaxExempt ? 0n : (totalBasicSalaryCents * 8n) / 100n;
+    }
+
+    const certData = generateBir2316Certificate(
+      taxYear,
+      {
+        employeeNumber: employee.employeeNumber,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        middleName: employee.middleName || undefined,
+        tin: employee.tin,
+        residentialAddress: employee.residentialAddress,
+        isMinimumWageEarner: employee.compensation.isTaxExempt ?? false,
+      },
+      {
+        registeredName: org.name,
+        tin: org.tin || "123-456-789-000",
+        rdoCode: org.rdoCode || "047",
+        registeredAddress: org.registeredAddress,
+      },
+      {
+        totalBasicSalaryCents,
+        totalOvertimePayCents,
+        totalHolidayPayCents,
+        totalNightDiffPayCents,
+        totalDeMinimisBenefitsCents,
+        totalThirteenthMonthAndBonusesCents,
+        totalOtherTaxableAllowancesCents: 0n,
+        totalSssEmployeeShareCents,
+        totalPhilhealthEmployeeShareCents,
+        totalPagibigEmployeeShareCents,
+        totalTaxWithheldCents,
+      }
+    );
+
+    const formattedDocument = formatBir2316TextDocument(certData);
+
+    return {
+      certificate: certData,
+      formattedDocument,
+    };
+  }
 }
