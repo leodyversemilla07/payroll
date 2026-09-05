@@ -53,6 +53,7 @@ export interface AttendanceSummary {
   specialHolidayRestDayOvertimeHours: number;
   regularHolidayHours: number;
   regularHolidayOvertimeHours: number;
+  regularHolidayUnworkedDays?: number;
   regularHolidayRestDayHours: number;
   regularHolidayRestDayOvertimeHours: number;
 

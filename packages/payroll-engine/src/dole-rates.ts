@@ -64,6 +64,7 @@ export const DOLE_MULTIPLIERS = {
 export function calculateDolePremiums(
   hourlyRateCents: Centavos,
   attendance: AttendanceSummary,
+  payBasis: PayBasis = PayBasis.DAILY,
 ): {
   overtimePayCents: Centavos;
   nightDiffPayCents: Centavos;
@@ -72,21 +73,33 @@ export function calculateDolePremiums(
   totalPremiumPayCents: Centavos;
 } {
   const hourly = Number(hourlyRateCents);
+  const includedBaseMultiplier = payBasis === PayBasis.MONTHLY ? 1 : 0;
+
+  // Monthly salaries already include the first eight hours of base pay for
+  // rest days and holidays. Daily/hourly workers need the full statutory rate.
+  const restDayMultiplier = DOLE_MULTIPLIERS.REST_DAY - includedBaseMultiplier;
+  const specialHolidayMultiplier =
+    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY - includedBaseMultiplier;
+  const specialHolidayRestDayMultiplier =
+    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY_REST_DAY - includedBaseMultiplier;
+  const regularHolidayMultiplier =
+    DOLE_MULTIPLIERS.REGULAR_HOLIDAY - includedBaseMultiplier;
+  const regularHolidayRestDayMultiplier =
+    DOLE_MULTIPLIERS.REGULAR_HOLIDAY_REST_DAY - includedBaseMultiplier;
 
   // 1. Regular Overtime (125%)
   const regularOT =
     attendance.regularOvertimeHours * hourly * DOLE_MULTIPLIERS.REGULAR_OT;
 
   // 2. Rest Day Work (130% for first 8 hrs, 169% for OT)
-  const restDayBase =
-    attendance.restDayHours * hourly * DOLE_MULTIPLIERS.REST_DAY;
+  const restDayBase = attendance.restDayHours * hourly * restDayMultiplier;
   const restDayOT =
     attendance.restDayOvertimeHours * hourly * DOLE_MULTIPLIERS.REST_DAY_OT;
   const totalRestDay = restDayBase + restDayOT;
 
   // 3. Special Non-Working Holidays
   const specialHol =
-    attendance.specialHolidayHours * hourly * DOLE_MULTIPLIERS.SPECIAL_HOLIDAY;
+    attendance.specialHolidayHours * hourly * specialHolidayMultiplier;
   const specialHolOT =
     attendance.specialHolidayOvertimeHours *
     hourly *
@@ -94,7 +107,7 @@ export function calculateDolePremiums(
   const specialHolRestDay =
     attendance.specialHolidayRestDayHours *
     hourly *
-    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY_REST_DAY;
+    specialHolidayRestDayMultiplier;
   const specialHolRestDayOT =
     attendance.specialHolidayRestDayOvertimeHours *
     hourly *
@@ -102,7 +115,12 @@ export function calculateDolePremiums(
 
   // 4. Regular Holidays (200% base worked, 260% OT, 260% on Rest Day, 338% OT on Rest Day)
   const regularHol =
-    attendance.regularHolidayHours * hourly * DOLE_MULTIPLIERS.REGULAR_HOLIDAY;
+    attendance.regularHolidayHours * hourly * regularHolidayMultiplier;
+  const regularHolidayUnworked =
+    (attendance.regularHolidayUnworkedDays ?? 0) *
+    8 *
+    hourly *
+    (payBasis === PayBasis.MONTHLY ? 0 : 1);
   const regularHolOT =
     attendance.regularHolidayOvertimeHours *
     hourly *
@@ -110,7 +128,7 @@ export function calculateDolePremiums(
   const regularHolRestDay =
     attendance.regularHolidayRestDayHours *
     hourly *
-    DOLE_MULTIPLIERS.REGULAR_HOLIDAY_REST_DAY;
+    regularHolidayRestDayMultiplier;
   const regularHolRestDayOT =
     attendance.regularHolidayRestDayOvertimeHours *
     hourly *
@@ -122,6 +140,7 @@ export function calculateDolePremiums(
     specialHolRestDay +
     specialHolRestDayOT +
     regularHol +
+    regularHolidayUnworked +
     regularHolOT +
     regularHolRestDay +
     regularHolRestDayOT;

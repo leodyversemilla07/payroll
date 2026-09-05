@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { PayrollCalculationInput } from "../src/index.js";
+import type {
+  AttendanceSummary,
+  PayrollCalculationInput,
+} from "../src/index.js";
 import {
   CutoffType,
   calculateDolePremiums,
@@ -15,6 +18,28 @@ import {
   PayBasis,
   WorkDayDivisor,
 } from "../src/index.js";
+
+const EMPTY_ATTENDANCE: AttendanceSummary = {
+  regularHoursWorked: 0,
+  tardinessMinutes: 0,
+  undertimeMinutes: 0,
+  absentDays: 0,
+  regularOvertimeHours: 0,
+  restDayHours: 0,
+  restDayOvertimeHours: 0,
+  specialHolidayHours: 0,
+  specialHolidayOvertimeHours: 0,
+  specialHolidayRestDayHours: 0,
+  specialHolidayRestDayOvertimeHours: 0,
+  regularHolidayHours: 0,
+  regularHolidayOvertimeHours: 0,
+  regularHolidayRestDayHours: 0,
+  regularHolidayRestDayOvertimeHours: 0,
+  regularNightDiffHours: 0,
+  overtimeNightDiffHours: 0,
+  restDayNightDiffHours: 0,
+  holidayNightDiffHours: 0,
+};
 
 describe("Philippine Tax & Payroll Calculation Engine", () => {
   describe("1. DOLE Rate Derivations & Premiums", () => {
@@ -67,7 +92,97 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
-  describe("2. SSS & WISP Contributions", () => {
+  describe("2. Pay-basis correctness", () => {
+    it("pays daily employees for regular hours worked without double deductions", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.DAILY,
+          monthlyBasicRateCents: 2200000n,
+          dailyRateCents: 100000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: true,
+        },
+        attendance: {
+          ...EMPTY_ATTENDANCE,
+          regularHoursWorked: 72,
+          tardinessMinutes: 30,
+          undertimeMinutes: 60,
+          absentDays: 1,
+        },
+        allowances: [],
+        loans: [],
+      });
+
+      expect(result.basicPayForPeriodCents).toBe(900000n);
+      expect(result.tardinessDeductionCents).toBe(0n);
+      expect(result.undertimeDeductionCents).toBe(0n);
+      expect(result.absenceDeductionCents).toBe(0n);
+    });
+
+    it("pays hourly employees for fractional approved hours worked", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.HOURLY,
+          monthlyBasicRateCents: 3000000n,
+          hourlyRateCents: 20000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: {
+          ...EMPTY_ATTENDANCE,
+          regularHoursWorked: 75.5,
+        },
+        allowances: [],
+        loans: [],
+      });
+
+      expect(result.basicPayForPeriodCents).toBe(1510000n);
+    });
+
+    it("pays an approved unworked regular holiday to daily employees", () => {
+      const premiums = calculateDolePremiums(
+        12500n,
+        {
+          ...EMPTY_ATTENDANCE,
+          regularHolidayUnworkedDays: 1,
+        },
+        PayBasis.DAILY,
+      );
+
+      expect(premiums.holidayPayCents).toBe(100000n);
+    });
+
+    it("adds only incremental rest-day and holiday premiums for monthly employees", () => {
+      const monthlyPremiums = calculateDolePremiums(
+        20000n,
+        {
+          ...EMPTY_ATTENDANCE,
+          restDayHours: 8,
+          regularHolidayHours: 8,
+        },
+        PayBasis.MONTHLY,
+      );
+
+      expect(monthlyPremiums.restDayPayCents).toBe(48000n);
+      expect(monthlyPremiums.holidayPayCents).toBe(160000n);
+    });
+  });
+
+  describe("3. SSS & WISP Contributions", () => {
     it("should calculate SSS for salary below MSC ceiling (PHP 20,000)", () => {
       const sss = calculateSssContribution(2000000n); // PHP 20,000
       // Regular MSC = 20,000. EE 5% = 1,000, ER 10% = 2,000 + 30 EC = 2,030
@@ -88,7 +203,7 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
-  describe("3. PhilHealth & Pag-IBIG Contributions", () => {
+  describe("4. PhilHealth & Pag-IBIG Contributions", () => {
     it("should calculate PhilHealth 5% with floor and ceiling rules", () => {
       // Floor check (PHP 8,000 -> clamped to 10,000 floor -> 500 total, 250 EE / 250 ER)
       const phFloor = calculatePhilhealthContribution(800000n);
@@ -119,7 +234,7 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
-  describe("4. TRAIN Law Withholding Tax & Minimum Wage Exemption", () => {
+  describe("5. TRAIN Law Withholding Tax & Minimum Wage Exemption", () => {
     it("should return 0 tax for minimum wage earners or income below bracket threshold", () => {
       const taxLow = calculateWithholdingTax(1000000n, true, false); // PHP 10,000 semi-monthly (below 10,417)
       expect(taxLow).toBe(0n);
@@ -136,7 +251,7 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
-  describe("5. De Minimis & 13th Month Pay", () => {
+  describe("6. De Minimis & 13th Month Pay", () => {
     it("should separate exempt de minimis and spill excess into taxable compensation", () => {
       // Rice subsidy limit is 2,000/mo (1,000 per semi-monthly cutoff)
       const result = evaluateAllowances(
@@ -165,7 +280,7 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
-  describe("6. Master End-to-End Payroll Run", () => {
+  describe("7. Master End-to-End Payroll Run", () => {
     it("should execute complete semi-monthly payroll calculation with exact numbers", () => {
       const input: PayrollCalculationInput = {
         cutoffType: CutoffType.FIRST_CUTOFF,

@@ -363,6 +363,7 @@ export function createApiRouter(
                 'REGULAR_WORKDAY',
                 'REST_DAY',
                 'SPECIAL_NON_WORKING_HOLIDAY',
+                'SPECIAL_WORKING_HOLIDAY',
                 'REGULAR_HOLIDAY',
                 'DOUBLE_HOLIDAY',
               ])
@@ -449,6 +450,7 @@ export function createApiRouter(
         .mutation(async ({ input, ctx }) => {
           const payrollRun = await payrollService.executePayrollRun({
             organizationId: ctx.user.organizationId,
+            processedById: ctx.user.id,
             cutoffStartDate: new Date(input.cutoffStartDate),
             cutoffEndDate: new Date(input.cutoffEndDate),
             paymentDate: new Date(input.paymentDate),

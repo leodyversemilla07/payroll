@@ -1,5 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { prisma } from '@workspace/db';
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { type DailyTimeRecord, type Prisma, prisma } from '@workspace/db';
 import type { AttendanceSummary } from '@workspace/payroll-engine';
 
 @Injectable()
@@ -46,8 +50,9 @@ export class TimekeepingService {
     organizationId: string,
     startDate: Date,
     endDate: Date,
+    database: Pick<Prisma.TransactionClient, 'dailyTimeRecord'> = prisma,
   ): Promise<AttendanceSummary> {
-    const records = await prisma.dailyTimeRecord.findMany({
+    const records = await database.dailyTimeRecord.findMany({
       where: {
         employeeId,
         employee: { organizationId },
@@ -58,56 +63,7 @@ export class TimekeepingService {
       },
     });
 
-    let regularMinutes = 0;
-    let tardinessMinutes = 0;
-    let undertimeMinutes = 0;
-    let absentDays = 0;
-    let regularOvertimeMinutes = 0;
-    const restDayMinutes = 0;
-    let restDayOTMinutes = 0;
-    let specialHolidayMinutes = 0;
-    const specialHolidayOTMinutes = 0;
-    let regularHolidayMinutes = 0;
-    const regularHolidayOTMinutes = 0;
-    let regularNightDiffMinutes = 0;
-
-    for (const r of records) {
-      if (r.isAbsent) {
-        absentDays += 1;
-        continue;
-      }
-
-      regularMinutes += r.actualWorkedMinutes;
-      tardinessMinutes += r.tardinessMinutes;
-      undertimeMinutes += r.undertimeMinutes;
-      regularOvertimeMinutes += r.overtimeMinutes;
-      regularNightDiffMinutes += r.nightDiffMinutes;
-      restDayOTMinutes += r.restDayOTMinutes;
-      specialHolidayMinutes += r.specialHolidayMinutes;
-      regularHolidayMinutes += r.regularHolidayMinutes;
-    }
-
-    return {
-      regularHoursWorked: regularMinutes / 60,
-      tardinessMinutes,
-      undertimeMinutes,
-      absentDays,
-      regularOvertimeHours: regularOvertimeMinutes / 60,
-      restDayHours: restDayMinutes / 60,
-      restDayOvertimeHours: restDayOTMinutes / 60,
-      specialHolidayHours: specialHolidayMinutes / 60,
-      specialHolidayOvertimeHours: specialHolidayOTMinutes / 60,
-      specialHolidayRestDayHours: 0,
-      specialHolidayRestDayOvertimeHours: 0,
-      regularHolidayHours: regularHolidayMinutes / 60,
-      regularHolidayOvertimeHours: regularHolidayOTMinutes / 60,
-      regularHolidayRestDayHours: 0,
-      regularHolidayRestDayOvertimeHours: 0,
-      regularNightDiffHours: regularNightDiffMinutes / 60,
-      overtimeNightDiffHours: 0,
-      restDayNightDiffHours: 0,
-      holidayNightDiffHours: 0,
-    };
+    return summarizeAttendanceRecords(records);
   }
 
   async recordPunch(
@@ -141,6 +97,7 @@ export class TimekeepingService {
       | 'REGULAR_WORKDAY'
       | 'REST_DAY'
       | 'SPECIAL_NON_WORKING_HOLIDAY'
+      | 'SPECIAL_WORKING_HOLIDAY'
       | 'REGULAR_HOLIDAY'
       | 'DOUBLE_HOLIDAY';
     timeIn?: Date;
@@ -255,4 +212,125 @@ export class TimekeepingService {
       throw new NotFoundException('Employee not found');
     }
   }
+}
+
+export function summarizeAttendanceRecords(
+  records: Pick<
+    DailyTimeRecord,
+    | 'dayType'
+    | 'actualWorkedMinutes'
+    | 'tardinessMinutes'
+    | 'undertimeMinutes'
+    | 'overtimeMinutes'
+    | 'nightDiffMinutes'
+    | 'isApproved'
+    | 'isAbsent'
+  >[],
+): AttendanceSummary {
+  if (records.length === 0) {
+    throw new UnprocessableEntityException(
+      'Payroll cannot proceed without attendance records for the cutoff',
+    );
+  }
+
+  const unapprovedCount = records.filter((record) => !record.isApproved).length;
+  if (unapprovedCount > 0) {
+    throw new UnprocessableEntityException(
+      `Payroll cannot proceed with ${unapprovedCount} unapproved attendance record(s)`,
+    );
+  }
+
+  if (records.some((record) => record.dayType === 'DOUBLE_HOLIDAY')) {
+    throw new UnprocessableEntityException(
+      'Double-holiday payroll requires an explicit approved rate breakdown',
+    );
+  }
+
+  let regularMinutes = 0;
+  let tardinessMinutes = 0;
+  let undertimeMinutes = 0;
+  let absentDays = 0;
+  let regularOvertimeMinutes = 0;
+  let restDayMinutes = 0;
+  let restDayOvertimeMinutes = 0;
+  let specialHolidayMinutes = 0;
+  let specialHolidayOvertimeMinutes = 0;
+  let regularHolidayMinutes = 0;
+  let regularHolidayOvertimeMinutes = 0;
+  let regularHolidayUnworkedDays = 0;
+  let regularNightDiffMinutes = 0;
+  let restDayNightDiffMinutes = 0;
+  let holidayNightDiffMinutes = 0;
+
+  for (const record of records) {
+    const baseWorkedMinutes = Math.max(
+      0,
+      record.actualWorkedMinutes - record.overtimeMinutes,
+    );
+
+    if (record.isAbsent) {
+      if (
+        record.dayType === 'REGULAR_WORKDAY' ||
+        record.dayType === 'SPECIAL_WORKING_HOLIDAY'
+      ) {
+        absentDays += 1;
+      }
+      continue;
+    }
+
+    switch (record.dayType) {
+      case 'REGULAR_WORKDAY':
+      case 'SPECIAL_WORKING_HOLIDAY':
+        regularMinutes += baseWorkedMinutes;
+        regularOvertimeMinutes += record.overtimeMinutes;
+        regularNightDiffMinutes += record.nightDiffMinutes;
+        tardinessMinutes += record.tardinessMinutes;
+        undertimeMinutes += record.undertimeMinutes;
+        break;
+      case 'REST_DAY':
+        restDayMinutes += baseWorkedMinutes;
+        restDayOvertimeMinutes += record.overtimeMinutes;
+        restDayNightDiffMinutes += record.nightDiffMinutes;
+        break;
+      case 'SPECIAL_NON_WORKING_HOLIDAY':
+        specialHolidayMinutes += baseWorkedMinutes;
+        specialHolidayOvertimeMinutes += record.overtimeMinutes;
+        holidayNightDiffMinutes += record.nightDiffMinutes;
+        break;
+      case 'REGULAR_HOLIDAY':
+        if (baseWorkedMinutes === 0 && record.overtimeMinutes === 0) {
+          regularHolidayUnworkedDays += 1;
+        } else {
+          regularHolidayMinutes += baseWorkedMinutes;
+          regularHolidayOvertimeMinutes += record.overtimeMinutes;
+          holidayNightDiffMinutes += record.nightDiffMinutes;
+        }
+        break;
+      case 'DOUBLE_HOLIDAY':
+        break;
+    }
+  }
+
+  return {
+    regularHoursWorked: regularMinutes / 60,
+    tardinessMinutes,
+    undertimeMinutes,
+    absentDays,
+    regularOvertimeHours: regularOvertimeMinutes / 60,
+    restDayHours: restDayMinutes / 60,
+    restDayOvertimeHours: restDayOvertimeMinutes / 60,
+    specialHolidayHours: specialHolidayMinutes / 60,
+    specialHolidayOvertimeHours: specialHolidayOvertimeMinutes / 60,
+    specialHolidayRestDayHours: 0,
+    specialHolidayRestDayOvertimeHours: 0,
+    regularHolidayHours: regularHolidayMinutes / 60,
+    regularHolidayOvertimeHours: regularHolidayOvertimeMinutes / 60,
+    regularHolidayUnworkedDays,
+    regularHolidayRestDayHours: 0,
+    regularHolidayRestDayOvertimeHours: 0,
+    regularNightDiffHours: regularNightDiffMinutes / 60,
+    overtimeNightDiffHours: 0,
+    restDayNightDiffHours: restDayNightDiffMinutes / 60,
+    holidayNightDiffHours: holidayNightDiffMinutes / 60,
+  };
 }

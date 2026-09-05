@@ -9,7 +9,7 @@ import type {
   PayrollCalculationResult,
   StatutoryContributionResult,
 } from "./types";
-import { CutoffType } from "./types";
+import { CutoffType, PayBasis } from "./types";
 import { calculateWithholdingTax } from "./withholding-tax";
 
 export * from "./biometrics";
@@ -49,16 +49,27 @@ export function calculatePhilippinePayroll(
     deriveRates(compensation);
 
   // 2. Base Period Pay
-  const basicPayForPeriodCents = isSemiMonthly
-    ? compensation.monthlyBasicRateCents / 2n
-    : compensation.monthlyBasicRateCents;
+  // Monthly employees receive their fixed period salary and explicit
+  // timekeeping deductions. Daily/hourly employees are paid only for approved
+  // regular minutes worked, so applying those deductions again would double
+  // deduct tardiness, undertime, and absences.
+  const isMonthly = compensation.payBasis === PayBasis.MONTHLY;
+  const basicPayForPeriodCents = isMonthly
+    ? isSemiMonthly
+      ? compensation.monthlyBasicRateCents / 2n
+      : compensation.monthlyBasicRateCents
+    : calculateWorkedPay(hourlyRateCents, attendance.regularHoursWorked);
 
   // 3. Timekeeping Deductions
-  const tardinessDeductionCents =
-    minuteRateCents * BigInt(attendance.tardinessMinutes);
-  const undertimeDeductionCents =
-    minuteRateCents * BigInt(attendance.undertimeMinutes);
-  const absenceDeductionCents = dailyRateCents * BigInt(attendance.absentDays);
+  const tardinessDeductionCents = isMonthly
+    ? minuteRateCents * BigInt(attendance.tardinessMinutes)
+    : 0n;
+  const undertimeDeductionCents = isMonthly
+    ? minuteRateCents * BigInt(attendance.undertimeMinutes)
+    : 0n;
+  const absenceDeductionCents = isMonthly
+    ? dailyRateCents * BigInt(attendance.absentDays)
+    : 0n;
 
   const totalTimekeepingDeductions =
     tardinessDeductionCents + undertimeDeductionCents + absenceDeductionCents;
@@ -68,7 +79,11 @@ export function calculatePhilippinePayroll(
       : 0n;
 
   // 4. DOLE Premium Calculations (OT, NSD, Holidays, Rest Days)
-  const dolePremiums = calculateDolePremiums(hourlyRateCents, attendance);
+  const dolePremiums = calculateDolePremiums(
+    hourlyRateCents,
+    attendance,
+    compensation.payBasis,
+  );
 
   // 5. Allowances & De Minimis Evaluation
   const evaluatedAllowances = evaluateAllowances(allowances, isSemiMonthly);
@@ -199,6 +214,16 @@ export function calculatePhilippinePayroll(
     netPayCents,
     thirteenthMonthAccrualCents,
   };
+}
+
+function calculateWorkedPay(
+  hourlyRateCents: bigint,
+  hoursWorked: number,
+): bigint {
+  if (!Number.isFinite(hoursWorked) || hoursWorked <= 0) return 0n;
+
+  const minutesWorked = BigInt(Math.round(hoursWorked * 60));
+  return (hourlyRateCents * minutesWorked) / 60n;
 }
 
 // Helpers for scheduling deductions across cutoffs

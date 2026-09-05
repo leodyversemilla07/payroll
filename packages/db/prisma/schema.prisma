@@ -402,6 +402,10 @@ model PayrollRun {
   approvedById      String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+
+  @@unique([organizationId, cutoffStartDate, cutoffEndDate, cutoffSequence], map: "PayrollRun_organization_cutoff_key")
+  @@index([organizationId, status])
+  @@index([organizationId, paymentDate])
 }
 
 model Payslip {
