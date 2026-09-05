@@ -20,12 +20,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^6.4.1"
+    "@prisma/client": "6.19.3"
   },
   "devDependencies": {
     "@types/node": "^20.17.19",
     "@workspace/typescript-config": "workspace:*",
-    "prisma": "^6.4.1",
+    "prisma": "6.19.3",
     "tsx": "^4.19.3",
     "typescript": "^5"
   }
