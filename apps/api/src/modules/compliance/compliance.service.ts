@@ -194,7 +194,7 @@ export class ComplianceService {
       },
     });
 
-    if (!employee || !employee.compensation) {
+    if (!employee?.compensation) {
       throw new Error(
         `Employee ${employeeId} or compensation profile not found`,
       );

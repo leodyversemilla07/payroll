@@ -172,8 +172,9 @@ export class EmployeesService {
     unusedLeaveDays?: number;
     exitDate?: Date;
   }) {
-    const { calculateFinalPay, SeparationType } =
-      await import('@workspace/payroll-engine');
+    const { calculateFinalPay, SeparationType } = await import(
+      '@workspace/payroll-engine'
+    );
 
     const employee = await prisma.employee.findFirst({
       where: {
@@ -187,7 +188,7 @@ export class EmployeesService {
       },
     });
 
-    if (!employee || !employee.compensation) {
+    if (!employee?.compensation) {
       throw new Error(
         `Employee ${input.employeeId} or active compensation record not found`,
       );

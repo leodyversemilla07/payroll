@@ -34,7 +34,8 @@ async function main() {
       philhealthNumber: "12-345678901-2",
       pagibigNumber: "1234-5678-9012",
       rdoCode: "047",
-      registeredAddress: "Level 25, Ayala Tower One, Ayala Triangle, Makati City, Philippines",
+      registeredAddress:
+        "Level 25, Ayala Tower One, Ayala Triangle, Makati City, Philippines",
     },
   });
 
@@ -266,19 +267,21 @@ async function main() {
             },
           ],
         },
-        ...(loan ? {
-          loans: {
-            create: {
-              loanType: loan.loanType,
-              principalCents: loan.principalCents,
-              totalAmountCents: loan.totalAmountCents,
-              amortizationCents: loan.amortizationCents,
-              balanceCents: loan.balanceCents,
-              startDate: new Date("2026-01-01"),
-              isActive: true,
-            },
-          },
-        } : {}),
+        ...(loan
+          ? {
+              loans: {
+                create: {
+                  loanType: loan.loanType,
+                  principalCents: loan.principalCents,
+                  totalAmountCents: loan.totalAmountCents,
+                  amortizationCents: loan.amortizationCents,
+                  balanceCents: loan.balanceCents,
+                  startDate: new Date("2026-01-01"),
+                  isActive: true,
+                },
+              },
+            }
+          : {}),
       },
     });
 
@@ -296,11 +299,11 @@ async function main() {
       "2026-08-28",
     ];
 
-    for (let i = 0; i < workDates.length; i++) {
-      const dateStr = workDates[i]!;
+    for (const [i, dateStr] of workDates.entries()) {
       const date = new Date(dateStr);
       const isOvertimeDay = i === 3 || i === 7;
-      const isTardyDay = i === 1 && createdEmp.employeeNumber === "EMP-2026-001";
+      const isTardyDay =
+        i === 1 && createdEmp.employeeNumber === "EMP-2026-001";
 
       await prisma.dailyTimeRecord.create({
         data: {
@@ -308,7 +311,9 @@ async function main() {
           date,
           dayType: "REGULAR_WORKDAY",
           timeIn: new Date(`${dateStr}T09:${isTardyDay ? "15" : "00"}:00Z`),
-          timeOut: new Date(`${dateStr}T${isOvertimeDay ? "20:00" : "18:00"}:00Z`),
+          timeOut: new Date(
+            `${dateStr}T${isOvertimeDay ? "20:00" : "18:00"}:00Z`,
+          ),
           actualWorkedMinutes: 480,
           tardinessMinutes: isTardyDay ? 15 : 0,
           overtimeMinutes: isOvertimeDay ? 120 : 0, // 2 hours OT on OT days
@@ -318,7 +323,9 @@ async function main() {
       });
     }
 
-    console.log(`✅ Seeded Employee: ${createdEmp.firstName} ${createdEmp.lastName} (${createdEmp.employeeNumber})`);
+    console.log(
+      `✅ Seeded Employee: ${createdEmp.firstName} ${createdEmp.lastName} (${createdEmp.employeeNumber})`,
+    );
   }
 
   console.log("🎉 Seeding completed successfully!");

@@ -41,7 +41,9 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
 
     // 6. Gross & Net settlement verified
     expect(result.grossFinalPayCents).toBe(
-      result.unpaidSalaryCents + result.proratedThirteenthMonthCents + result.monetizedLeaveCents
+      result.unpaidSalaryCents +
+        result.proratedThirteenthMonthCents +
+        result.monetizedLeaveCents,
     );
     expect(result.netFinalPayCents).toBeGreaterThan(0n);
   });
@@ -52,7 +54,7 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
       SeparationType.REDUNDANCY,
       6000000n,
       275862n,
-      3.0
+      3.0,
     );
 
     // 3 years * 60,000 = PHP 180,000.00 (18,000,000 cents)
@@ -67,7 +69,7 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
       SeparationType.RETRENCHMENT,
       4000000n,
       183908n,
-      4.0
+      4.0,
     );
 
     // 4 years * 0.5 month = 2 months * 40,000 = PHP 80,000.00

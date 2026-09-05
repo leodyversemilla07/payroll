@@ -4,9 +4,8 @@
  */
 
 import { calculateSilCashConversion } from "./sil-conversion";
-import { annualizeTax } from "./withholding-tax";
 import { calculateThirteenthMonthPayout } from "./thirteenth-month";
-import type { Centavos } from "./types";
+import { annualizeTax } from "./withholding-tax";
 
 export enum SeparationType {
   RESIGNATION = "RESIGNATION",
@@ -58,7 +57,7 @@ export function calculateStatutorySeparationPay(
   type: SeparationType,
   monthlyBasicRateCents: bigint,
   dailyRateCents: bigint,
-  yearsOfService: number
+  yearsOfService: number,
 ): { separationPayCents: bigint; isTaxExempt: boolean } {
   // A fraction of at least 6 months is considered as one whole year per DOLE rules
   const roundedYears = BigInt(Math.max(1, Math.round(yearsOfService)));
@@ -74,7 +73,10 @@ export function calculateStatutorySeparationPay(
     case SeparationType.DISEASE: {
       // Art. 298/299: 1 month pay or 0.5 month pay per year of service, whichever is higher
       const halfMonthPay = (monthlyBasicRateCents * roundedYears) / 2n;
-      const pay = halfMonthPay > monthlyBasicRateCents ? halfMonthPay : monthlyBasicRateCents;
+      const pay =
+        halfMonthPay > monthlyBasicRateCents
+          ? halfMonthPay
+          : monthlyBasicRateCents;
       return { separationPayCents: pay, isTaxExempt: true };
     }
     case SeparationType.RETIREMENT: {
@@ -85,7 +87,6 @@ export function calculateStatutorySeparationPay(
       const pay = payPerYear * roundedYears;
       return { separationPayCents: pay, isTaxExempt: true };
     }
-    case SeparationType.RESIGNATION:
     default:
       // Voluntary resignation carries NO statutory separation pay unless in CBA/company policy
       return { separationPayCents: 0n, isTaxExempt: false };
@@ -95,13 +96,20 @@ export function calculateStatutorySeparationPay(
 /**
  * Master Final Pay & Clearance Settlement Calculator
  */
-export function calculateFinalPay(input: FinalPayCalculationInput): FinalPayCalculationResult {
+export function calculateFinalPay(
+  input: FinalPayCalculationInput,
+): FinalPayCalculationResult {
   // 1. Unpaid salary for last period days worked
-  const daysWorkedScaled = BigInt(Math.round(input.unpaidDaysWorkedInLastPeriod * 100));
+  const daysWorkedScaled = BigInt(
+    Math.round(input.unpaidDaysWorkedInLastPeriod * 100),
+  );
   const unpaidSalaryCents = (input.dailyRateCents * daysWorkedScaled) / 100n;
 
   // 2. Pro-rated 13th Month Pay (Total YTD Basic / 12)
-  const thirteenthMonth = calculateThirteenthMonthPayout(input.totalYtdBasicEarnedCents, 0n);
+  const thirteenthMonth = calculateThirteenthMonthPayout(
+    input.totalYtdBasicEarnedCents,
+    0n,
+  );
   const proratedThirteenthMonthCents = thirteenthMonth.thirteenthMonthPayCents;
 
   // 3. Unused Leave Monetization (SIL / VL)
@@ -115,22 +123,27 @@ export function calculateFinalPay(input: FinalPayCalculationInput): FinalPayCalc
     input.separationType,
     input.monthlyBasicRateCents,
     input.dailyRateCents,
-    input.yearsOfService
+    input.yearsOfService,
   );
 
   // 5. Tax Annualization
   // Note: Separation pay from redundancy/retrenchment is 100% tax-exempt.
   // Taxable monetized leaves excess spills into taxable compensation.
-  const adjustedYtdTaxableCents = input.ytdTaxableCompensationCents +
+  const adjustedYtdTaxableCents =
+    input.ytdTaxableCompensationCents +
     unpaidSalaryCents +
     leaveCalc.taxablePortionCents +
     thirteenthMonth.taxablePortionCents;
 
-  const annualization = annualizeTax(adjustedYtdTaxableCents, input.totalYtdTaxWithheldCents);
+  const annualization = annualizeTax(
+    adjustedYtdTaxableCents,
+    input.totalYtdTaxWithheldCents,
+  );
   const taxAdjustmentCents = annualization.taxAdjustmentCents; // Negative = Refund due to employee
 
   // 6. Gross Settlement
-  const grossFinalPayCents = unpaidSalaryCents +
+  const grossFinalPayCents =
+    unpaidSalaryCents +
     proratedThirteenthMonthCents +
     leaveCalc.totalMonetizedCashCents +
     separationPayCents;
@@ -143,7 +156,8 @@ export function calculateFinalPay(input: FinalPayCalculationInput): FinalPayCalc
   }
 
   const outstandingLoanDeductionsCents = input.outstandingLoanBalanceCents;
-  const totalFinalDeductionsCents = finalWithholdingTaxDueCents + outstandingLoanDeductionsCents;
+  const totalFinalDeductionsCents =
+    finalWithholdingTaxDueCents + outstandingLoanDeductionsCents;
 
   // 8. Net Settlement (Add tax refund if taxAdjustmentCents < 0n)
   let netFinalPayCents = grossFinalPayCents - totalFinalDeductionsCents;
@@ -157,7 +171,8 @@ export function calculateFinalPay(input: FinalPayCalculationInput): FinalPayCalc
     netFinalPayCents = 0n;
   }
 
-  const remarks = `Final Pay generated for ${input.separationType}. ` +
+  const remarks =
+    `Final Pay generated for ${input.separationType}. ` +
     (taxAdjustmentCents < 0n
       ? `Includes BIR Form 2316 tax refund of ${(Number(-taxAdjustmentCents) / 100).toFixed(2)} PHP.`
       : "");

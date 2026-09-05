@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 
 const apiDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const port = 42000 + Math.floor(Math.random() * 1000);

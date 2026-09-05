@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { TrpcModule } from './trpc/trpc.module';
-import { EmployeesService } from './modules/employees/employees.service';
-import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
-import { PayrollService } from './modules/payroll/payroll.service';
-import { LoansService } from './modules/loans/loans.service';
-import { ComplianceService } from './modules/compliance/compliance.service';
-import { LeavesService } from './modules/leaves/leaves.service';
-import { AuthService } from './auth/auth.service';
 import { AuditService } from './audit/audit.service';
+import { AuthService } from './auth/auth.service';
+import { ComplianceService } from './modules/compliance/compliance.service';
+import { EmployeesService } from './modules/employees/employees.service';
+import { LeavesService } from './modules/leaves/leaves.service';
+import { LoansService } from './modules/loans/loans.service';
+import { PayrollService } from './modules/payroll/payroll.service';
+import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
+import { TrpcModule } from './trpc/trpc.module';
 
 @Module({
   imports: [TrpcModule],

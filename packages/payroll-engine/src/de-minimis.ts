@@ -21,7 +21,7 @@ export const MONTHLY_DE_MINIMIS_LIMITS: Record<DeMinimisCategory, Centavos> = {
  */
 export function evaluateAllowances(
   allowances: AllowanceInput[],
-  isSemiMonthly = true
+  isSemiMonthly = true,
 ): {
   taxableAllowancesCents: Centavos;
   nonTaxableAllowancesCents: Centavos;
@@ -35,7 +35,8 @@ export function evaluateAllowances(
     if (allowance.isTaxable) {
       taxableAllowancesCents += allowance.amountCents;
     } else if (allowance.deMinimisCategory) {
-      const monthlyLimit = MONTHLY_DE_MINIMIS_LIMITS[allowance.deMinimisCategory] || 0n;
+      const monthlyLimit =
+        MONTHLY_DE_MINIMIS_LIMITS[allowance.deMinimisCategory] || 0n;
       const periodLimit = isSemiMonthly ? monthlyLimit / 2n : monthlyLimit;
 
       if (allowance.amountCents <= periodLimit) {

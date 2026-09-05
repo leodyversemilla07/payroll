@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

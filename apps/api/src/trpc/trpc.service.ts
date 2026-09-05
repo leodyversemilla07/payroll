@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { initTRPC, TRPCError } from '@trpc/server';
-import superjson from 'superjson';
 import type { CreateExpressContextOptions } from '@trpc/server/adapters/express';
 import type { Role } from '@workspace/db';
+import superjson from 'superjson';
 import type { AuthenticatedUser } from '../auth/auth.service';
 
 export interface Context {

@@ -4,7 +4,6 @@
  */
 
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
-import type { Centavos } from "./types";
 
 export interface ThirteenthMonthEmployeeInput {
   employeeId: string;
@@ -54,7 +53,7 @@ export interface DoleComplianceReportInput {
  */
 export function calculateEmployee13thMonth(
   emp: ThirteenthMonthEmployeeInput,
-  dailyRateCents?: bigint
+  dailyRateCents?: bigint,
 ): ThirteenthMonthEmployeeResult {
   // 1. Calculate base basic salary earned
   const months = Math.min(12, Math.max(1, emp.monthsWorkedInYear));
@@ -63,8 +62,10 @@ export function calculateEmployee13thMonth(
   // 2. Deduct unpaid absences / LWOP
   // If daily rate is not provided, estimate from monthly / 21.75
   const daily = dailyRateCents ?? (emp.monthlyBasicRateCents * 12n) / 261n;
-  const absenceDeduction = (daily * BigInt(Math.round(emp.unpaidAbsenceDays * 100))) / 100n;
-  const netBasicEarned = baseEarned > absenceDeduction ? baseEarned - absenceDeduction : 0n;
+  const absenceDeduction =
+    (daily * BigInt(Math.round(emp.unpaidAbsenceDays * 100))) / 100n;
+  const netBasicEarned =
+    baseEarned > absenceDeduction ? baseEarned - absenceDeduction : 0n;
 
   // 3. 13th Month Pay = Net Basic Earned / 12
   const thirteenthMonthPayCents = netBasicEarned / 12n;
@@ -105,24 +106,24 @@ export function calculateEmployee13thMonth(
  */
 export function calculate13thMonthBatch(
   taxYear: number,
-  employees: ThirteenthMonthEmployeeInput[]
+  employees: ThirteenthMonthEmployeeInput[],
 ): ThirteenthMonthBatchResult {
   const results: ThirteenthMonthEmployeeResult[] = employees.map((emp) =>
-    calculateEmployee13thMonth(emp)
+    calculateEmployee13thMonth(emp),
   );
 
   const totalBenefitedEmployees = results.length;
   const totalThirteenthMonthPayCents = results.reduce(
     (sum, r) => sum + r.thirteenthMonthPayCents,
-    0n
+    0n,
   );
   const totalTaxExemptCents = results.reduce(
     (sum, r) => sum + r.taxExemptPortionCents,
-    0n
+    0n,
   );
   const totalTaxableExcessCents = results.reduce(
     (sum, r) => sum + r.taxableExcessCents,
-    0n
+    0n,
   );
 
   return {
@@ -140,7 +141,7 @@ export function calculate13thMonthBatch(
  * Conforms to DOLE Bureau of Working Conditions (BWC) ERS requirements under PD 851.
  */
 export function formatDole13thMonthComplianceReport(
-  input: DoleComplianceReportInput
+  input: DoleComplianceReportInput,
 ): string {
   const f = (cents: bigint) =>
     (Number(cents) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 });
@@ -169,7 +170,7 @@ export function formatDole13thMonthComplianceReport(
     "------------------------------------------------------------------------------------------",
     ...input.batchResult.employeeResults.map(
       (r) =>
-        `${r.employeeNumber.padEnd(11)} | ${r.fullName.padEnd(25)} | ${f(r.totalBasicEarnedCents).padStart(18)} | ${f(r.thirteenthMonthPayCents).padStart(20)} | ${r.isProrated ? "Pro-rated" : "Full (12m)"}`
+        `${r.employeeNumber.padEnd(11)} | ${r.fullName.padEnd(25)} | ${f(r.totalBasicEarnedCents).padStart(18)} | ${f(r.thirteenthMonthPayCents).padStart(20)} | ${r.isProrated ? "Pro-rated" : "Full (12m)"}`,
     ),
     "==========================================================================================",
     "EMPLOYER CERTIFICATION:",

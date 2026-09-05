@@ -1,51 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import type {
+  PayrollCalculationInput,
+  ProcessedDtrDay,
+} from "@workspace/payroll-engine";
 import {
-  Users,
-  Clock,
-  Banknote,
-  FileSpreadsheet,
-  FileCheck2,
-  Calendar,
-  CalendarDays,
-  Building2,
-  Download,
-  Plus,
-  Play,
-  CheckCircle2,
-  ShieldCheck,
-  CreditCard,
-  UserCheck,
-  TrendingUp,
-  AlertCircle,
-  FileText,
-  Lock,
-  X,
-  UploadCloud,
-  Coins,
-  UserMinus,
-  Briefcase,
-} from "lucide-react";
-import { Button } from "@workspace/ui/components/button";
-import {
+  CutoffType,
+  calculate13thMonthBatch,
+  calculateFinalPay,
   calculatePhilippinePayroll,
+  calculateSilCashConversion,
+  DeMinimisCategory,
+  deriveRates,
+  formatBir2316TextDocument,
+  formatDole13thMonthComplianceReport,
+  generateBir2316Certificate,
+  PayBasis,
   parseBiometricCsv,
   processBiometricLogs,
-  calculateSilCashConversion,
-  calculateFinalPay,
   SeparationType,
-  generateBir2316Certificate,
-  formatBir2316TextDocument,
-  calculate13thMonthBatch,
-  formatDole13thMonthComplianceReport,
-  deriveRates,
-  CutoffType,
-  PayBasis,
   WorkDayDivisor,
-  DeMinimisCategory,
 } from "@workspace/payroll-engine";
-import type { PayrollCalculationInput, ProcessedDtrDay } from "@workspace/payroll-engine";
+import { Button } from "@workspace/ui/components/button";
+import {
+  Banknote,
+  Building2,
+  Calendar,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Coins,
+  CreditCard,
+  Download,
+  FileCheck2,
+  FileSpreadsheet,
+  FileText,
+  Lock,
+  Play,
+  Plus,
+  ShieldCheck,
+  TrendingUp,
+  UploadCloud,
+  UserMinus,
+  Users,
+  X,
+} from "lucide-react";
+import { useState } from "react";
 
 // Helper to format Centavos to Philippine Pesos string
 function formatPHP(cents: bigint | number): string {
@@ -58,7 +58,11 @@ function formatPHP(cents: bigint | number): string {
 }
 
 // Helper to download content as client-side file
-function downloadFile(filename: string, content: string, mimeType = "text/csv;charset=utf-8;") {
+function downloadFile(
+  filename: string,
+  content: string,
+  mimeType = "text/csv;charset=utf-8;",
+) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -98,6 +102,15 @@ interface DemoEmployee {
   };
 }
 
+type ActiveTab =
+  | "overview"
+  | "employees"
+  | "timekeeping"
+  | "leaves-sil"
+  | "payroll-wizard"
+  | "ess-portal"
+  | "compliance";
+
 interface DemoLeaveRequest {
   id: string;
   employeeId: string;
@@ -111,7 +124,7 @@ interface DemoLeaveRequest {
   status: "APPROVED" | "PENDING";
 }
 
-const INITIAL_EMPLOYEES: DemoEmployee[] = [
+const INITIAL_EMPLOYEES: [DemoEmployee, ...DemoEmployee[]] = [
   {
     id: "emp-001",
     employeeNo: "EMP-2026-001",
@@ -250,14 +263,18 @@ const INITIAL_LEAVE_REQUESTS: DemoLeaveRequest[] = [
 ];
 
 export default function PayrollDashboard() {
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "employees" | "timekeeping" | "leaves-sil" | "payroll-wizard" | "ess-portal" | "compliance"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
 
   const [employees, setEmployees] = useState<DemoEmployee[]>(INITIAL_EMPLOYEES);
-  const [leaveRequests, setLeaveRequests] = useState<DemoLeaveRequest[]>(INITIAL_LEAVE_REQUESTS);
-  const [selectedCutoff, setSelectedCutoff] = useState<"FIRST_CUTOFF" | "SECOND_CUTOFF">("FIRST_CUTOFF");
-  const [payrollStatus, setPayrollStatus] = useState<"READY" | "RUNNING" | "COMPLETED">("READY");
+  const [leaveRequests, setLeaveRequests] = useState<DemoLeaveRequest[]>(
+    INITIAL_LEAVE_REQUESTS,
+  );
+  const [selectedCutoff, setSelectedCutoff] = useState<
+    "FIRST_CUTOFF" | "SECOND_CUTOFF"
+  >("FIRST_CUTOFF");
+  const [payrollStatus, setPayrollStatus] = useState<
+    "READY" | "RUNNING" | "COMPLETED"
+  >("READY");
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -269,18 +286,27 @@ export default function PayrollDashboard() {
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [isSilModalOpen, setIsSilModalOpen] = useState(false);
   const [isFinalPayModalOpen, setIsFinalPayModalOpen] = useState(false);
-  const [selectedFinalPayEmpId, setSelectedFinalPayEmpId] = useState<string>(INITIAL_EMPLOYEES[0]!.id);
-  const [finalPayReason, setFinalPayReason] = useState<SeparationType>(SeparationType.RESIGNATION);
-  const [finalPayYearsOfService, setFinalPayYearsOfService] = useState<number>(2.5);
+  const [selectedFinalPayEmpId, setSelectedFinalPayEmpId] = useState<string>(
+    INITIAL_EMPLOYEES[0].id,
+  );
+  const [finalPayReason, setFinalPayReason] = useState<SeparationType>(
+    SeparationType.RESIGNATION,
+  );
+  const [finalPayYearsOfService, setFinalPayYearsOfService] =
+    useState<number>(2.5);
   const [finalPayUnpaidDays, setFinalPayUnpaidDays] = useState<number>(5);
   const [finalPayUnusedLeaves, setFinalPayUnusedLeaves] = useState<number>(5);
   const [isBir2316ModalOpen, setIsBir2316ModalOpen] = useState(false);
-  const [selectedBir2316EmpId, setSelectedBir2316EmpId] = useState<string>(INITIAL_EMPLOYEES[0]!.id);
+  const [selectedBir2316EmpId, setSelectedBir2316EmpId] = useState<string>(
+    INITIAL_EMPLOYEES[0].id,
+  );
   const [is13thMonthModalOpen, setIs13thMonthModalOpen] = useState(false);
-  const [selected13thMonthYear, setSelected13thMonthYear] = useState<number>(2026);
+  const [selected13thMonthYear, _setSelected13thMonthYear] =
+    useState<number>(2026);
 
   // Biometrics Import state
-  const [biometricsCsv, setBiometricsCsv] = useState(`Employee_ID,Timestamp,Punch_Type
+  const [biometricsCsv, setBiometricsCsv] =
+    useState(`Employee_ID,Timestamp,Punch_Type
 EMP-2026-001,2026-08-25 09:18:00,CHECK_IN
 EMP-2026-001,2026-08-25 20:30:00,CHECK_OUT
 EMP-2026-002,2026-08-25 08:50:00,CHECK_IN
@@ -302,7 +328,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
   // DTR Form State
   const [dtrForm, setDtrForm] = useState({
-    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    employeeId: INITIAL_EMPLOYEES[0].id,
     date: "2026-08-25",
     tardinessMinutes: 0,
     regularOvertimeHours: 2,
@@ -311,7 +337,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
   // Loan Form State
   const [loanForm, setLoanForm] = useState({
-    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    employeeId: INITIAL_EMPLOYEES[0].id,
     loanType: "SSS Salary Loan",
     principalPesos: 15000,
     amortizationPesos: 500,
@@ -319,7 +345,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
   // Leave Form State
   const [leaveForm, setLeaveForm] = useState({
-    employeeId: INITIAL_EMPLOYEES[0]!.id,
+    employeeId: INITIAL_EMPLOYEES[0].id,
     leaveType: "Service Incentive Leave (SIL)",
     startDate: "2026-08-28",
     endDate: "2026-08-29",
@@ -329,7 +355,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
   });
 
   // SIL Monetization State
-  const [silEmployeeId, setSilEmployeeId] = useState(INITIAL_EMPLOYEES[0]!.id);
+  const [silEmployeeId, setSilEmployeeId] = useState(INITIAL_EMPLOYEES[0].id);
   const [silDaysToMonetize, setSilDaysToMonetize] = useState(5.0);
 
   function showToast(msg: string) {
@@ -340,7 +366,10 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
   // Live Payroll Calculation across all employees for selected cutoff
   const computedPayrollResults = employees.map((emp) => {
     const input: PayrollCalculationInput = {
-      cutoffType: selectedCutoff === "FIRST_CUTOFF" ? CutoffType.FIRST_CUTOFF : CutoffType.SECOND_CUTOFF,
+      cutoffType:
+        selectedCutoff === "FIRST_CUTOFF"
+          ? CutoffType.FIRST_CUTOFF
+          : CutoffType.SECOND_CUTOFF,
       schedule: {
         deductSssIn: "FIRST_CUTOFF",
         deductPhilhealthIn: "FIRST_CUTOFF",
@@ -398,7 +427,8 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               {
                 loanId: `loan-${emp.id}`,
                 name: "Mandatory/Statutory Loan",
-                amountCents: emp.activeLoanCents > 50000n ? 50000n : emp.activeLoanCents,
+                amountCents:
+                  emp.activeLoanCents > 50000n ? 50000n : emp.activeLoanCents,
               },
             ]
           : [],
@@ -411,10 +441,22 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
   });
 
   // Aggregated Summary
-  const totalGrossCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.grossPayCents, 0n);
-  const totalNetCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.netPayCents, 0n);
-  const totalDeductionsCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.totalDeductionsCents, 0n);
-  const totalEmployerCostCents = computedPayrollResults.reduce((acc, curr) => acc + curr.calc.totalStatutoryEmployerCents, 0n);
+  const totalGrossCents = computedPayrollResults.reduce(
+    (acc, curr) => acc + curr.calc.grossPayCents,
+    0n,
+  );
+  const totalNetCents = computedPayrollResults.reduce(
+    (acc, curr) => acc + curr.calc.netPayCents,
+    0n,
+  );
+  const totalDeductionsCents = computedPayrollResults.reduce(
+    (acc, curr) => acc + curr.calc.totalDeductionsCents,
+    0n,
+  );
+  const totalEmployerCostCents = computedPayrollResults.reduce(
+    (acc, curr) => acc + curr.calc.totalStatutoryEmployerCents,
+    0n,
+  );
 
   // Form Handlers
   function handleAddEmployee(e: React.FormEvent) {
@@ -428,7 +470,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       department: empForm.department,
       role: empForm.role || "Associate",
       payBasis: PayBasis.MONTHLY,
-      monthlyBasicRateCents: BigInt(Math.round(empForm.monthlySalaryPesos * 100)),
+      monthlyBasicRateCents: BigInt(
+        Math.round(empForm.monthlySalaryPesos * 100),
+      ),
       isMinimumWageEarner: empForm.isMinimumWage,
       tin: "888-999-000-000",
       sssNo: "09-8877665-4",
@@ -461,7 +505,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       bankName: "BDO Unibank",
       bankAccount: "",
     });
-    showToast(`✅ Successfully registered employee: ${newEmp.name} (${newEmp.employeeNo})`);
+    showToast(
+      `✅ Successfully registered employee: ${newEmp.name} (${newEmp.employeeNo})`,
+    );
   }
 
   function handleSaveAttendance(e: React.FormEvent) {
@@ -480,10 +526,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           };
         }
         return emp;
-      })
+      }),
     );
     setIsDtrModalOpen(false);
-    showToast("✅ Attendance adjustments applied and recalculated across live payroll!");
+    showToast(
+      "✅ Attendance adjustments applied and recalculated across live payroll!",
+    );
   }
 
   function handleSaveLoan(e: React.FormEvent) {
@@ -497,7 +545,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           };
         }
         return emp;
-      })
+      }),
     );
     setIsLoanModalOpen(false);
     showToast("✅ Loan deduction registered and amortized for this pay cycle!");
@@ -531,17 +579,22 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             };
           }
           return e;
-        })
+        }),
       );
     }
 
     setLeaveRequests([newReq, ...leaveRequests]);
     setIsLeaveModalOpen(false);
-    showToast(`✅ Approved ${newReq.daysCount} days ${newReq.leaveType} for ${emp.name}!`);
+    showToast(
+      `✅ Approved ${newReq.daysCount} days ${newReq.leaveType} for ${emp.name}!`,
+    );
   }
 
   // Selected Employee for SIL Monetization Calculation
-  const selectedSilEmp = employees.find((e) => e.id === silEmployeeId) || employees[0]!;
+  const selectedSilEmp =
+    employees.find((e) => e.id === silEmployeeId) ??
+    employees[0] ??
+    INITIAL_EMPLOYEES[0];
   const silDailyRateResult = deriveRates({
     payBasis: selectedSilEmp.payBasis,
     monthlyBasicRateCents: selectedSilEmp.monthlyBasicRateCents,
@@ -566,16 +619,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           };
         }
         return emp;
-      })
+      }),
     );
     setIsSilModalOpen(false);
     showToast(
-      `💰 Monetized ${silDaysToMonetize} days SIL (${formatPHP(silMonetizationCalc.totalMonetizedCashCents)}) credited to ${selectedSilEmp.name}!`
+      `💰 Monetized ${silDaysToMonetize} days SIL (${formatPHP(silMonetizationCalc.totalMonetizedCashCents)}) credited to ${selectedSilEmp.name}!`,
     );
   }
 
   // Selected Employee for DOLE Final Pay & Separation Settlement
-  const selectedFinalPayEmp = employees.find((e) => e.id === selectedFinalPayEmpId) || employees[0]!;
+  const selectedFinalPayEmp =
+    employees.find((e) => e.id === selectedFinalPayEmpId) ??
+    employees[0] ??
+    INITIAL_EMPLOYEES[0];
   const finalPayDailyRateResult = deriveRates({
     payBasis: selectedFinalPayEmp.payBasis,
     monthlyBasicRateCents: selectedFinalPayEmp.monthlyBasicRateCents,
@@ -593,32 +649,42 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
     totalYtdBasicEarnedCents: selectedFinalPayEmp.monthlyBasicRateCents * 8n,
     unusedLeaveDays: finalPayUnusedLeaves,
     ytdTaxableCompensationCents: selectedFinalPayEmp.monthlyBasicRateCents * 8n,
-    totalYtdTaxWithheldCents: (selectedFinalPayEmp.monthlyBasicRateCents * 8n * 10n) / 100n,
+    totalYtdTaxWithheldCents:
+      (selectedFinalPayEmp.monthlyBasicRateCents * 8n * 10n) / 100n,
     outstandingLoanBalanceCents: selectedFinalPayEmp.activeLoanCents,
   });
 
   function handleFinalizeSeparation() {
     setEmployees(employees.filter((emp) => emp.id !== selectedFinalPayEmp.id));
     setIsFinalPayModalOpen(false);
-    showToast(`🕊️ Completed Separation Clearance & Final Pay for ${selectedFinalPayEmp.name}!`);
+    showToast(
+      `🕊️ Completed Separation Clearance & Final Pay for ${selectedFinalPayEmp.name}!`,
+    );
   }
 
   // Selected Employee for BIR Form 2316 Certificate
-  const selectedBir2316Emp = employees.find((e) => e.id === selectedBir2316EmpId) || employees[0]!;
+  const selectedBir2316Emp =
+    employees.find((e) => e.id === selectedBir2316EmpId) ??
+    employees[0] ??
+    INITIAL_EMPLOYEES[0];
   const annualBasicSalaryCents = selectedBir2316Emp.monthlyBasicRateCents * 12n;
   const annual13thMonthCents = selectedBir2316Emp.monthlyBasicRateCents;
-  const annualOvertimeCents = BigInt(selectedBir2316Emp.attendance.regularOvertimeHours * 24) * 20000n;
+  const annualOvertimeCents =
+    BigInt(selectedBir2316Emp.attendance.regularOvertimeHours * 24) * 20000n;
   const annualSssEeCents = 2100000n;
   const annualPhicEeCents = (annualBasicSalaryCents * 25n) / 1000n;
   const annualPagibigEeCents = 240000n;
-  const annualTaxWithheldCents = selectedBir2316Emp.isMinimumWageEarner ? 0n : (annualBasicSalaryCents * 8n) / 100n;
+  const annualTaxWithheldCents = selectedBir2316Emp.isMinimumWageEarner
+    ? 0n
+    : (annualBasicSalaryCents * 8n) / 100n;
 
   const bir2316Cert = generateBir2316Certificate(
     2026,
     {
       employeeNumber: selectedBir2316Emp.employeeNo,
       firstName: selectedBir2316Emp.name.split(" ")[0] || "Juan",
-      lastName: selectedBir2316Emp.name.split(" ").slice(1).join(" ") || "Dela Cruz",
+      lastName:
+        selectedBir2316Emp.name.split(" ").slice(1).join(" ") || "Dela Cruz",
       tin: selectedBir2316Emp.tin,
       residentialAddress: "Metro Manila, Philippines",
       isMinimumWageEarner: selectedBir2316Emp.isMinimumWageEarner,
@@ -641,7 +707,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       totalPhilhealthEmployeeShareCents: annualPhicEeCents,
       totalPagibigEmployeeShareCents: annualPagibigEeCents,
       totalTaxWithheldCents: annualTaxWithheldCents,
-    }
+    },
   );
 
   // DOLE 13th Month Pay Batch Calculation
@@ -658,7 +724,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         monthsWorkedInYear: monthsWorked,
         unpaidAbsenceDays: 0,
       };
-    })
+    }),
   );
 
   // Parse Biometrics Logs Preview
@@ -676,7 +742,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
     setEmployees(
       employees.map((emp) => {
-        const matchingDay = parsedBiometricDays.find((d) => d.employeeNumber === emp.employeeNo);
+        const matchingDay = parsedBiometricDays.find(
+          (d) => d.employeeNumber === emp.employeeNo,
+        );
         if (matchingDay && !matchingDay.hasMissingPunch) {
           return {
             ...emp,
@@ -689,17 +757,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           };
         }
         return emp;
-      })
+      }),
     );
 
     setIsBiometricsModalOpen(false);
-    showToast(`✅ Successfully ingested biometric punches for ${parsedBiometricDays.length} records!`);
+    showToast(
+      `✅ Successfully ingested biometric punches for ${parsedBiometricDays.length} records!`,
+    );
   }
 
   // Export File Generators
   function exportBankTransmittal(bank: string) {
     const matching = computedPayrollResults.filter((r) =>
-      r.employee.bankName.toLowerCase().includes(bank.toLowerCase())
+      r.employee.bankName.toLowerCase().includes(bank.toLowerCase()),
     );
     const records = matching.length > 0 ? matching : computedPayrollResults;
 
@@ -707,12 +777,17 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       "Account_Number,Beneficiary_Name,Amount_PHP,Employee_ID,Reference",
       ...records.map(
         (r) =>
-          `"${r.employee.bankAccount}","${r.employee.name}",${(Number(r.calc.netPayCents) / 100).toFixed(2)},"${r.employee.employeeNo}","PAYROLL-${selectedCutoff}"`
+          `"${r.employee.bankAccount}","${r.employee.name}",${(Number(r.calc.netPayCents) / 100).toFixed(2)},"${r.employee.employeeNo}","PAYROLL-${selectedCutoff}"`,
       ),
     ];
 
-    downloadFile(`${bank}_Transmittal_${selectedCutoff}.csv`, rows.join("\r\n"));
-    showToast(`📥 Exported ${bank} Direct Deposit batch file with ${records.length} records!`);
+    downloadFile(
+      `${bank}_Transmittal_${selectedCutoff}.csv`,
+      rows.join("\r\n"),
+    );
+    showToast(
+      `📥 Exported ${bank} Direct Deposit batch file with ${records.length} records!`,
+    );
   }
 
   function exportBir1601C() {
@@ -731,7 +806,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       `Total Tax Withheld Due for Remittance: PHP ${(Number(computedPayrollResults.reduce((acc, c) => acc + c.calc.withholdingTaxCents, 0n)) / 100).toFixed(2)}`,
     ].join("\r\n");
 
-    downloadFile("BIR_1601C_Monthly_Return_Aug2026.txt", content, "text/plain;charset=utf-8;");
+    downloadFile(
+      "BIR_1601C_Monthly_Return_Aug2026.txt",
+      content,
+      "text/plain;charset=utf-8;",
+    );
     showToast("📥 Exported official BIR 1601-C Monthly Remittance Summary!");
   }
 
@@ -742,7 +821,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
         <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs border border-emerald-400/30 animate-in fade-in slide-in-from-top-3">
           <CheckCircle2 className="size-4" />
           <span className="font-medium">{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="ml-2 hover:opacity-75">
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="ml-2 hover:opacity-75"
+          >
             <X className="size-3.5" />
           </button>
         </div>
@@ -762,14 +845,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   DOLE & BIR 2026
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Acme Philippines Technologies Inc. • RDO 047</p>
+              <p className="text-[11px] text-slate-400">
+                Acme Philippines Technologies Inc. • RDO 047
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 hidden sm:inline">Pay Cycle:</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              Pay Cycle:
+            </span>
             <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center gap-1 text-xs">
               <button
+                type="button"
                 onClick={() => setSelectedCutoff("FIRST_CUTOFF")}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
                   selectedCutoff === "FIRST_CUTOFF"
@@ -780,6 +868,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 1st Cutoff (1st–15th)
               </button>
               <button
+                type="button"
                 onClick={() => setSelectedCutoff("SECOND_CUTOFF")}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
                   selectedCutoff === "SECOND_CUTOFF"
@@ -798,21 +887,36 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3 overflow-x-auto text-xs">
-          {[
-            { id: "overview", label: "Overview & Metrics", icon: TrendingUp },
-            { id: "employees", label: `Employees (${employees.length})`, icon: Users },
-            { id: "timekeeping", label: "DTR & Attendance", icon: Clock },
-            { id: "leaves-sil", label: "Leaves & SIL", icon: CalendarDays },
-            { id: "payroll-wizard", label: "Payroll Run Wizard", icon: Banknote },
-            { id: "compliance", label: "Bank & Tax Exports", icon: FileSpreadsheet },
-            { id: "ess-portal", label: "ESS Digital Payslip", icon: Lock },
-          ].map((tab) => {
+          {(
+            [
+              { id: "overview", label: "Overview & Metrics", icon: TrendingUp },
+              {
+                id: "employees",
+                label: `Employees (${employees.length})`,
+                icon: Users,
+              },
+              { id: "timekeeping", label: "DTR & Attendance", icon: Clock },
+              { id: "leaves-sil", label: "Leaves & SIL", icon: CalendarDays },
+              {
+                id: "payroll-wizard",
+                label: "Payroll Run Wizard",
+                icon: Banknote,
+              },
+              {
+                id: "compliance",
+                label: "Bank & Tax Exports",
+                icon: FileSpreadsheet,
+              },
+              { id: "ess-portal", label: "ESS Digital Payslip", icon: Lock },
+            ] as const
+          ).map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
               <button
+                type="button"
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
                   active
                     ? "bg-blue-600/10 text-blue-400 font-semibold border border-blue-500/20"
@@ -834,11 +938,17 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Gross Payroll (Cutoff)</span>
+                  <span className="text-xs font-medium">
+                    Gross Payroll (Cutoff)
+                  </span>
                   <Banknote className="size-4 text-emerald-400" />
                 </div>
-                <div className="text-2xl font-bold text-white">{formatPHP(totalGrossCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">Basic + Overtime + De Minimis</p>
+                <div className="text-2xl font-bold text-white">
+                  {formatPHP(totalGrossCents)}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Basic + Overtime + De Minimis
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
@@ -846,34 +956,54 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span className="text-xs font-medium">Net Take-Home Pay</span>
                   <CreditCard className="size-4 text-blue-400" />
                 </div>
-                <div className="text-2xl font-bold text-white">{formatPHP(totalNetCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">Disbursement batch total</p>
+                <div className="text-2xl font-bold text-white">
+                  {formatPHP(totalNetCents)}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Disbursement batch total
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Statutory Deductions (EE)</span>
+                  <span className="text-xs font-medium">
+                    Statutory Deductions (EE)
+                  </span>
                   <ShieldCheck className="size-4 text-amber-400" />
                 </div>
-                <div className="text-2xl font-bold text-white">{formatPHP(totalDeductionsCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">SSS, PhilHealth, Pag-IBIG, Tax</p>
+                <div className="text-2xl font-bold text-white">
+                  {formatPHP(totalDeductionsCents)}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  SSS, PhilHealth, Pag-IBIG, Tax
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
                 <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Employer Contributions (ER)</span>
+                  <span className="text-xs font-medium">
+                    Employer Contributions (ER)
+                  </span>
                   <Building2 className="size-4 text-purple-400" />
                 </div>
-                <div className="text-2xl font-bold text-white">{formatPHP(totalEmployerCostCents)}</div>
-                <p className="text-[11px] text-slate-400 mt-1">Mandatory ER Share + EC + WISP</p>
+                <div className="text-2xl font-bold text-white">
+                  {formatPHP(totalEmployerCostCents)}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Mandatory ER Share + EC + WISP
+                </p>
               </div>
             </div>
 
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-base font-semibold text-white">Philippine Statutory Mandates Status</h2>
-                  <p className="text-xs text-slate-400">Current schedules and contribution ceilings applied</p>
+                  <h2 className="text-base font-semibold text-white">
+                    Philippine Statutory Mandates Status
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Current schedules and contribution ceilings applied
+                  </p>
                 </div>
                 <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full flex items-center gap-1.5">
                   <ShieldCheck className="size-3.5" /> All Rates Up-to-Date
@@ -882,24 +1012,48 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-blue-400">SSS & WISP</div>
-                  <div className="text-sm font-bold text-white mt-1">15.0% Contribution</div>
-                  <div className="text-xs text-slate-400 mt-1">10% ER / 5% EE | MSC Cap: ₱35,000</div>
+                  <div className="text-xs font-semibold text-blue-400">
+                    SSS & WISP
+                  </div>
+                  <div className="text-sm font-bold text-white mt-1">
+                    15.0% Contribution
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    10% ER / 5% EE | MSC Cap: ₱35,000
+                  </div>
                 </div>
                 <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-emerald-400">PhilHealth</div>
-                  <div className="text-sm font-bold text-white mt-1">5.0% Premium Rate</div>
-                  <div className="text-xs text-slate-400 mt-1">2.5% ER / 2.5% EE | Ceiling: ₱100,000</div>
+                  <div className="text-xs font-semibold text-emerald-400">
+                    PhilHealth
+                  </div>
+                  <div className="text-sm font-bold text-white mt-1">
+                    5.0% Premium Rate
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    2.5% ER / 2.5% EE | Ceiling: ₱100,000
+                  </div>
                 </div>
                 <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-amber-400">Pag-IBIG Fund</div>
-                  <div className="text-sm font-bold text-white mt-1">2.0% + 2.0% Rate</div>
-                  <div className="text-xs text-slate-400 mt-1">Base Cap: ₱10,000 | ₱200 EE / ₱200 ER</div>
+                  <div className="text-xs font-semibold text-amber-400">
+                    Pag-IBIG Fund
+                  </div>
+                  <div className="text-sm font-bold text-white mt-1">
+                    2.0% + 2.0% Rate
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    Base Cap: ₱10,000 | ₱200 EE / ₱200 ER
+                  </div>
                 </div>
                 <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-purple-400">BIR TRAIN Law Tax</div>
-                  <div className="text-sm font-bold text-white mt-1">Graduated Rates (0-35%)</div>
-                  <div className="text-xs text-slate-400 mt-1">₱0 tax under ₱10,417 / semi-monthly</div>
+                  <div className="text-xs font-semibold text-purple-400">
+                    BIR TRAIN Law Tax
+                  </div>
+                  <div className="text-sm font-bold text-white mt-1">
+                    Graduated Rates (0-35%)
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    ₱0 tax under ₱10,417 / semi-monthly
+                  </div>
                 </div>
               </div>
             </div>
@@ -913,8 +1067,13 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-white">Employee Master Directory</h2>
-                <p className="text-xs text-slate-400">Manage compensation structures, bank accounts, and statutory numbers</p>
+                <h2 className="text-base font-semibold text-white">
+                  Employee Master Directory
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Manage compensation structures, bank accounts, and statutory
+                  numbers
+                </p>
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <input
@@ -952,18 +1111,29 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   {employees
                     .filter(
                       (e) =>
-                        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        e.employeeNo.toLowerCase().includes(searchQuery.toLowerCase())
+                        e.name
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase()) ||
+                        e.employeeNo
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase()),
                     )
                     .map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-800/40 transition-colors">
+                      <tr
+                        key={emp.id}
+                        className="hover:bg-slate-800/40 transition-colors"
+                      >
                         <td className="py-3 px-4 font-medium text-white">
                           <div>{emp.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">{emp.employeeNo}</div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            {emp.employeeNo}
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <div>{emp.role}</div>
-                          <div className="text-[11px] text-slate-500">{emp.department}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {emp.department}
+                          </div>
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-emerald-400">
                           {formatPHP(emp.monthlyBasicRateCents)}
@@ -980,7 +1150,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                           )}
                         </td>
                         <td className="py-3 px-4 font-mono">
-                          <span className="text-purple-400 font-semibold">{emp.silBalanceDays.toFixed(1)} Days</span>
+                          <span className="text-purple-400 font-semibold">
+                            {emp.silBalanceDays.toFixed(1)} Days
+                          </span>
                         </td>
                         <td className="py-3 px-4 font-mono text-[11px]">
                           {emp.activeLoanCents > 0n ? (
@@ -992,8 +1164,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                           )}
                         </td>
                         <td className="py-3 px-4">
-                          <div className="font-medium text-slate-200">{emp.bankName}</div>
-                          <div className="font-mono text-[11px] text-slate-500">{emp.bankAccount}</div>
+                          <div className="font-medium text-slate-200">
+                            {emp.bankName}
+                          </div>
+                          <div className="font-mono text-[11px] text-slate-500">
+                            {emp.bankAccount}
+                          </div>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -1039,8 +1215,13 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-white">Daily Time Records & Attendance Logs</h2>
-                <p className="text-xs text-slate-400">Biometric clock punches, tardiness, overtime, and night shift differentials</p>
+                <h2 className="text-base font-semibold text-white">
+                  Daily Time Records & Attendance Logs
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Biometric clock punches, tardiness, overtime, and night shift
+                  differentials
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1049,7 +1230,8 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   onClick={() => setIsBiometricsModalOpen(true)}
                   className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
                 >
-                  <FileSpreadsheet className="size-3.5 mr-1.5" /> Import Biometrics CSV
+                  <FileSpreadsheet className="size-3.5 mr-1.5" /> Import
+                  Biometrics CSV
                 </Button>
                 <Button
                   size="sm"
@@ -1075,29 +1257,42 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                   {employees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr
+                      key={emp.id}
+                      className="hover:bg-slate-800/40 transition-colors"
+                    >
                       <td className="py-3 px-4 font-medium text-white">
                         <div>{emp.name}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">{emp.employeeNo}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          {emp.employeeNo}
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-mono">{emp.attendance.regularHoursWorked} hrs</td>
+                      <td className="py-3 px-4 font-mono">
+                        {emp.attendance.regularHoursWorked} hrs
+                      </td>
                       <td className="py-3 px-4 font-mono">
                         {emp.attendance.tardinessMinutes > 0 ? (
-                          <span className="text-rose-400 font-semibold">{emp.attendance.tardinessMinutes} mins</span>
+                          <span className="text-rose-400 font-semibold">
+                            {emp.attendance.tardinessMinutes} mins
+                          </span>
                         ) : (
                           <span className="text-slate-500">0 mins</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono">
                         {emp.attendance.regularOvertimeHours > 0 ? (
-                          <span className="text-emerald-400 font-semibold">+{emp.attendance.regularOvertimeHours} hrs (125%)</span>
+                          <span className="text-emerald-400 font-semibold">
+                            +{emp.attendance.regularOvertimeHours} hrs (125%)
+                          </span>
                         ) : (
                           <span className="text-slate-500">0 hrs</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono">
                         {emp.attendance.regularNightDiffHours > 0 ? (
-                          <span className="text-purple-400 font-semibold">+{emp.attendance.regularNightDiffHours} hrs (+10%)</span>
+                          <span className="text-purple-400 font-semibold">
+                            +{emp.attendance.regularNightDiffHours} hrs (+10%)
+                          </span>
                         ) : (
                           <span className="text-slate-500">0 hrs</span>
                         )}
@@ -1126,8 +1321,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span>Mandatory SIL (DOLE Art. 95)</span>
                   <CalendarDays className="size-4" />
                 </div>
-                <div className="text-xl font-bold text-white mt-1">5 Days / Year</div>
-                <p className="text-[11px] text-slate-400 mt-1">Legally convertible to cash at year-end</p>
+                <div className="text-xl font-bold text-white mt-1">
+                  5 Days / Year
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Legally convertible to cash at year-end
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
@@ -1135,8 +1334,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span>Vacation Leave (VL)</span>
                   <Calendar className="size-4" />
                 </div>
-                <div className="text-xl font-bold text-white mt-1">10 Days / Year</div>
-                <p className="text-[11px] text-slate-400 mt-1">Company-provided paid annual leave</p>
+                <div className="text-xl font-bold text-white mt-1">
+                  10 Days / Year
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Company-provided paid annual leave
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
@@ -1144,8 +1347,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span>Sick Leave (SL)</span>
                   <ShieldCheck className="size-4" />
                 </div>
-                <div className="text-xl font-bold text-white mt-1">5 Days / Year</div>
-                <p className="text-[11px] text-slate-400 mt-1">Medical recuperation & doctor certificate</p>
+                <div className="text-xl font-bold text-white mt-1">
+                  5 Days / Year
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Medical recuperation & doctor certificate
+                </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
@@ -1153,16 +1360,25 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span>BIR De Minimis Exemption</span>
                   <Coins className="size-4" />
                 </div>
-                <div className="text-xl font-bold text-white mt-1">Max 10 Days</div>
-                <p className="text-[11px] text-slate-400 mt-1">100% Tax-Exempt leave cash conversion</p>
+                <div className="text-xl font-bold text-white mt-1">
+                  Max 10 Days
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  100% Tax-Exempt leave cash conversion
+                </p>
               </div>
             </div>
 
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-base font-semibold text-white">Leave Requests & Statutory Absence Ledger</h2>
-                  <p className="text-xs text-slate-400">Track approved paid leaves, unpaid leave (LWOP), and SIL credits</p>
+                  <h2 className="text-base font-semibold text-white">
+                    Leave Requests & Statutory Absence Ledger
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Track approved paid leaves, unpaid leave (LWOP), and SIL
+                    credits
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1171,7 +1387,8 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     onClick={() => setIsSilModalOpen(true)}
                     className="border-slate-700 hover:bg-slate-800 text-xs text-amber-400"
                   >
-                    <Coins className="size-3.5 mr-1.5" /> Monetize Unused SIL to Cash
+                    <Coins className="size-3.5 mr-1.5" /> Monetize Unused SIL to
+                    Cash
                   </Button>
                   <Button
                     size="sm"
@@ -1193,18 +1410,29 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                       <th className="py-3.5 px-4">Duration</th>
                       <th className="py-3.5 px-4">Pay Status</th>
                       <th className="py-3.5 px-4">Reason</th>
-                      <th className="py-3.5 px-4 text-right">Approval Status</th>
+                      <th className="py-3.5 px-4 text-right">
+                        Approval Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                     {leaveRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-4 font-medium text-white">{req.employeeName}</td>
-                        <td className="py-3 px-4 font-semibold text-purple-400">{req.leaveType}</td>
+                      <tr
+                        key={req.id}
+                        className="hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-4 font-medium text-white">
+                          {req.employeeName}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-purple-400">
+                          {req.leaveType}
+                        </td>
                         <td className="py-3 px-4 font-mono text-slate-400">
                           {req.startDate} to {req.endDate}
                         </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-white">{req.daysCount} Day(s)</td>
+                        <td className="py-3 px-4 font-mono font-semibold text-white">
+                          {req.daysCount} Day(s)
+                        </td>
                         <td className="py-3 px-4">
                           {req.isPaid ? (
                             <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
@@ -1216,7 +1444,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-400">{req.reason}</td>
+                        <td className="py-3 px-4 text-slate-400">
+                          {req.reason}
+                        </td>
                         <td className="py-3 px-4 text-right">
                           <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
                             {req.status}
@@ -1242,10 +1472,13 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   Active Cutoff
                 </span>
                 <h2 className="text-lg font-bold text-white mt-1">
-                  {selectedCutoff === "FIRST_CUTOFF" ? "1st Cutoff (Aug 1 - 15, 2026)" : "2nd Cutoff (Aug 16 - 31, 2026)"}
+                  {selectedCutoff === "FIRST_CUTOFF"
+                    ? "1st Cutoff (Aug 1 - 15, 2026)"
+                    : "2nd Cutoff (Aug 16 - 31, 2026)"}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Statutory Deductions (SSS, PhilHealth, Pag-IBIG) & TRAIN Law Withholding Taxes will be applied.
+                  Statutory Deductions (SSS, PhilHealth, Pag-IBIG) & TRAIN Law
+                  Withholding Taxes will be applied.
                 </p>
               </div>
 
@@ -1255,14 +1488,18 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     setPayrollStatus("RUNNING");
                     setTimeout(() => {
                       setPayrollStatus("COMPLETED");
-                      showToast("🎉 Payroll Run Finalized and ready for Bank Disbursement!");
+                      showToast(
+                        "🎉 Payroll Run Finalized and ready for Bank Disbursement!",
+                      );
                     }, 800);
                   }}
                   disabled={payrollStatus === "RUNNING"}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
                 >
                   <Play className="size-3.5 mr-1.5" />
-                  {payrollStatus === "RUNNING" ? "Computing Engine..." : "Finalize & Disburse Run"}
+                  {payrollStatus === "RUNNING"
+                    ? "Computing Engine..."
+                    : "Finalize & Disburse Run"}
                 </Button>
               </div>
             </div>
@@ -1271,7 +1508,10 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-emerald-400 text-xs">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="size-4 shrink-0" />
-                  <span>Payroll run finalized successfully! Payslips generated and ready for disbursement.</span>
+                  <span>
+                    Payroll run finalized successfully! Payslips generated and
+                    ready for disbursement.
+                  </span>
                 </div>
                 <Button
                   size="xs"
@@ -1303,19 +1543,32 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                     {computedPayrollResults.map(({ employee, calc }) => (
-                      <tr key={employee.id} className="hover:bg-slate-800/40 transition-colors">
+                      <tr
+                        key={employee.id}
+                        className="hover:bg-slate-800/40 transition-colors"
+                      >
                         <td className="py-3 px-3 font-medium text-white">
                           {employee.name}
-                          <div className="text-[10px] text-slate-500 font-mono">{employee.employeeNo}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {employee.employeeNo}
+                          </div>
                         </td>
-                        <td className="py-3 px-3 font-mono">{formatPHP(calc.basicPayForPeriodCents)}</td>
+                        <td className="py-3 px-3 font-mono">
+                          {formatPHP(calc.basicPayForPeriodCents)}
+                        </td>
                         <td className="py-3 px-3 font-mono text-emerald-400">
-                          {calc.totalPremiumPayCents > 0n ? `+${formatPHP(calc.totalPremiumPayCents)}` : "₱0.00"}
+                          {calc.totalPremiumPayCents > 0n
+                            ? `+${formatPHP(calc.totalPremiumPayCents)}`
+                            : "₱0.00"}
                         </td>
                         <td className="py-3 px-3 font-mono text-purple-400">
-                          {calc.nonTaxableAllowancesCents > 0n ? `+${formatPHP(calc.nonTaxableAllowancesCents)}` : "₱0.00"}
+                          {calc.nonTaxableAllowancesCents > 0n
+                            ? `+${formatPHP(calc.nonTaxableAllowancesCents)}`
+                            : "₱0.00"}
                         </td>
-                        <td className="py-3 px-3 font-mono font-semibold text-white">{formatPHP(calc.grossPayCents)}</td>
+                        <td className="py-3 px-3 font-mono font-semibold text-white">
+                          {formatPHP(calc.grossPayCents)}
+                        </td>
                         <td className="py-3 px-3 font-mono text-amber-400">
                           {calc.sssContribution.employeeShareCents > 0n
                             ? `-${formatPHP(calc.sssContribution.employeeShareCents)}`
@@ -1332,7 +1585,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                             : "₱0.00"}
                         </td>
                         <td className="py-3 px-3 font-mono text-rose-400">
-                          {calc.withholdingTaxCents > 0n ? `-${formatPHP(calc.withholdingTaxCents)}` : "₱0.00"}
+                          {calc.withholdingTaxCents > 0n
+                            ? `-${formatPHP(calc.withholdingTaxCents)}`
+                            : "₱0.00"}
                         </td>
                         <td className="py-3 px-3 font-mono font-bold text-blue-400 bg-blue-500/5">
                           {formatPHP(calc.netPayCents)}
@@ -1355,22 +1610,47 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               <div className="flex items-center gap-3">
                 <CreditCard className="size-5 text-blue-400" />
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Bank Batch Transmittals</h3>
-                  <p className="text-xs text-slate-400">Export pre-formatted direct deposit transmittal files</p>
+                  <h3 className="text-sm font-semibold text-white">
+                    Bank Batch Transmittals
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Export pre-formatted direct deposit transmittal files
+                  </p>
                 </div>
               </div>
 
               <div className="space-y-2 pt-2">
                 {[
-                  { name: "BDO Electronic Payroll (.csv)", bank: "BDO", total: formatPHP(totalNetCents) },
-                  { name: "BPI ExpressLink / BizLink (.csv)", bank: "BPI", total: formatPHP(totalNetCents) },
-                  { name: "UnionBank The Portal (.csv)", bank: "UnionBank", total: formatPHP(totalNetCents) },
-                  { name: "Metrobank Direct Export (.csv)", bank: "Metrobank", total: formatPHP(totalNetCents) },
+                  {
+                    name: "BDO Electronic Payroll (.csv)",
+                    bank: "BDO",
+                    total: formatPHP(totalNetCents),
+                  },
+                  {
+                    name: "BPI ExpressLink / BizLink (.csv)",
+                    bank: "BPI",
+                    total: formatPHP(totalNetCents),
+                  },
+                  {
+                    name: "UnionBank The Portal (.csv)",
+                    bank: "UnionBank",
+                    total: formatPHP(totalNetCents),
+                  },
+                  {
+                    name: "Metrobank Direct Export (.csv)",
+                    bank: "Metrobank",
+                    total: formatPHP(totalNetCents),
+                  },
                 ].map((b) => (
-                  <div key={b.name} className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs">
+                  <div
+                    key={b.name}
+                    className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
+                  >
                     <div>
                       <div className="font-medium text-white">{b.name}</div>
-                      <div className="text-[11px] text-slate-500">{employees.length} Records • Total {b.total}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {employees.length} Records • Total {b.total}
+                      </div>
                     </div>
                     <Button
                       size="xs"
@@ -1389,8 +1669,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               <div className="flex items-center gap-3">
                 <FileCheck2 className="size-5 text-purple-400" />
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Philippine Regulatory Returns</h3>
-                  <p className="text-xs text-slate-400">Generate official BIR, SSS, PhilHealth & Pag-IBIG files</p>
+                  <h3 className="text-sm font-semibold text-white">
+                    Philippine Regulatory Returns
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Generate official BIR, SSS, PhilHealth & Pag-IBIG files
+                  </p>
                 </div>
               </div>
 
@@ -1416,11 +1700,17 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                         "----------------------------------------------------------------",
                         ...computedPayrollResults.map(
                           (r) =>
-                            `Employee: ${r.employee.name} | TIN: ${r.employee.tin} | Gross Annualized: ${formatPHP(r.employee.monthlyBasicRateCents * 12n)} | Tax Status: ${r.employee.isMinimumWageEarner ? "MWE (EXEMPT)" : "GRADUATED"}`
+                            `Employee: ${r.employee.name} | TIN: ${r.employee.tin} | Gross Annualized: ${formatPHP(r.employee.monthlyBasicRateCents * 12n)} | Tax Status: ${r.employee.isMinimumWageEarner ? "MWE (EXEMPT)" : "GRADUATED"}`,
                         ),
                       ].join("\r\n");
-                      downloadFile("BIR_2316_Batch_Summary.txt", text, "text/plain;charset=utf-8;");
-                      showToast("📥 Exported BIR Form 2316 Annual Certificate Summary!");
+                      downloadFile(
+                        "BIR_2316_Batch_Summary.txt",
+                        text,
+                        "text/plain;charset=utf-8;",
+                      );
+                      showToast(
+                        "📥 Exported BIR Form 2316 Annual Certificate Summary!",
+                      );
                     },
                   },
                   {
@@ -1433,7 +1723,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                         "SS_Number,Employee_Name,EE_Share,ER_Share,EC_Share,Total",
                         ...computedPayrollResults.map(
                           (r) =>
-                            `"${r.employee.sssNo}","${r.employee.name}",${(Number(r.calc.sssContribution.employeeShareCents) / 100).toFixed(2)},${(Number(r.calc.sssContribution.employerShareCents) / 100).toFixed(2)},30.00,${(Number(r.calc.sssContribution.totalCents) / 100).toFixed(2)}`
+                            `"${r.employee.sssNo}","${r.employee.name}",${(Number(r.calc.sssContribution.employeeShareCents) / 100).toFixed(2)},${(Number(r.calc.sssContribution.employerShareCents) / 100).toFixed(2)},30.00,${(Number(r.calc.sssContribution.totalCents) / 100).toFixed(2)}`,
                         ),
                       ].join("\r\n");
                       downloadFile("SSS_R3_Monthly_Collection.csv", text);
@@ -1446,7 +1736,10 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     action: () => setIs13thMonthModalOpen(true),
                   },
                 ].map((g) => (
-                  <div key={g.name} className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs">
+                  <div
+                    key={g.name}
+                    className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
+                  >
                     <div>
                       <div className="font-medium text-white">{g.name}</div>
                       <div className="text-[11px] text-slate-500">{g.desc}</div>
@@ -1476,24 +1769,39 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">
                   Employee Self-Service (ESS)
                 </span>
-                <h3 className="text-lg font-bold text-white mt-1">Digital Payslip Preview</h3>
-                <p className="text-xs text-slate-400">Pay Period: Aug 16 – 31, 2026</p>
+                <h3 className="text-lg font-bold text-white mt-1">
+                  Digital Payslip Preview
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Pay Period: Aug 16 – 31, 2026
+                </p>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl font-mono">
-                <Lock className="size-3 text-amber-400" /> Password: DOB (MMDDYYYY)
+                <Lock className="size-3 text-amber-400" /> Password: DOB
+                (MMDDYYYY)
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
               <div>
-                <div className="text-slate-500 text-[10px] uppercase">Employee Name</div>
+                <div className="text-slate-500 text-[10px] uppercase">
+                  Employee Name
+                </div>
                 <div className="font-semibold text-white">Juan Dela Cruz</div>
-                <div className="text-slate-500 font-mono text-[11px]">EMP-2026-001</div>
+                <div className="text-slate-500 font-mono text-[11px]">
+                  EMP-2026-001
+                </div>
               </div>
               <div>
-                <div className="text-slate-500 text-[10px] uppercase">Department / Position</div>
-                <div className="font-semibold text-white">Software Engineering</div>
-                <div className="text-slate-400 text-[11px]">Senior Full-Stack Engineer</div>
+                <div className="text-slate-500 text-[10px] uppercase">
+                  Department / Position
+                </div>
+                <div className="font-semibold text-white">
+                  Software Engineering
+                </div>
+                <div className="text-slate-400 text-[11px]">
+                  Senior Full-Stack Engineer
+                </div>
               </div>
             </div>
 
@@ -1503,16 +1811,28 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   Earnings
                 </h4>
                 <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">Basic Pay (Semi-Monthly)</span>
-                  <span className="font-mono text-white font-medium">₱32,500.00</span>
+                  <span className="text-slate-300">
+                    Basic Pay (Semi-Monthly)
+                  </span>
+                  <span className="font-mono text-white font-medium">
+                    ₱32,500.00
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">Regular Overtime (4 hrs)</span>
-                  <span className="font-mono text-emerald-400 font-medium">+₱1,556.52</span>
+                  <span className="text-slate-300">
+                    Regular Overtime (4 hrs)
+                  </span>
+                  <span className="font-mono text-emerald-400 font-medium">
+                    +₱1,556.52
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">Rice Subsidy (De Minimis)</span>
-                  <span className="font-mono text-emerald-400 font-medium">+₱1,000.00</span>
+                  <span className="text-slate-300">
+                    Rice Subsidy (De Minimis)
+                  </span>
+                  <span className="font-mono text-emerald-400 font-medium">
+                    +₱1,000.00
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs pt-2 border-t border-slate-800 font-bold">
                   <span className="text-white">Gross Pay</span>
@@ -1529,7 +1849,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <span className="font-mono text-rose-400">-₱97.28</span>
                 </div>
                 <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">SSS Contribution & WISP</span>
+                  <span className="text-slate-300">
+                    SSS Contribution & WISP
+                  </span>
                   <span className="font-mono text-amber-400">-₱1,750.00</span>
                 </div>
                 <div className="flex justify-between text-xs py-1">
@@ -1553,20 +1875,27 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
             <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-blue-400 uppercase font-bold">Net Take-Home Pay</span>
-                <div className="text-2xl font-black text-white font-mono">₱30,884.24</div>
+                <span className="text-[10px] text-blue-400 uppercase font-bold">
+                  Net Take-Home Pay
+                </span>
+                <div className="text-2xl font-black text-white font-mono">
+                  ₱30,884.24
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    setSelectedBir2316EmpId(employees[0]!.id);
+                    setSelectedBir2316EmpId(
+                      (employees[0] ?? INITIAL_EMPLOYEES[0]).id,
+                    );
                     setIsBir2316ModalOpen(true);
                   }}
                   className="border-purple-500/30 text-purple-300 hover:bg-purple-950/40 text-xs"
                 >
-                  <FileText className="size-3.5 mr-1.5 text-purple-400" /> View BIR Form 2316
+                  <FileText className="size-3.5 mr-1.5 text-purple-400" /> View
+                  BIR Form 2316
                 </Button>
                 <Button
                   size="sm"
@@ -1598,7 +1927,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                       "NET TAKE-HOME PAY: PHP 30,884.24",
                       "===========================================================",
                     ].join("\r\n");
-                    downloadFile("Payslip_Juan_Dela_Cruz_Aug2026.txt", content, "text/plain;charset=utf-8;");
+                    downloadFile(
+                      "Payslip_Juan_Dela_Cruz_Aug2026.txt",
+                      content,
+                      "text/plain;charset=utf-8;",
+                    );
                     showToast("📥 Exported Official Payslip (Protected)!");
                   }}
                   className="bg-blue-600 hover:bg-blue-500 text-white"
@@ -1622,6 +1955,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 <Users className="size-4 text-blue-400" /> Add New Employee
               </h3>
               <button
+                type="button"
                 onClick={() => setIsAddEmployeeOpen(false)}
                 className="text-slate-400 hover:text-white"
               >
@@ -1632,24 +1966,40 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             <form onSubmit={handleAddEmployee} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">First Name</label>
+                  <label
+                    htmlFor="employee-first-name"
+                    className="text-slate-400 block mb-1"
+                  >
+                    First Name
+                  </label>
                   <input
+                    id="employee-first-name"
                     type="text"
                     required
                     placeholder="e.g. Maria"
                     value={empForm.firstName}
-                    onChange={(e) => setEmpForm({ ...empForm, firstName: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, firstName: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Last Name</label>
+                  <label
+                    htmlFor="employee-last-name"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Last Name
+                  </label>
                   <input
+                    id="employee-last-name"
                     type="text"
                     required
                     placeholder="e.g. Clara"
                     value={empForm.lastName}
-                    onChange={(e) => setEmpForm({ ...empForm, lastName: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, lastName: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1657,25 +2007,47 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Department</label>
+                  <label
+                    htmlFor="employee-department"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Department
+                  </label>
                   <select
+                    id="employee-department"
                     value={empForm.department}
-                    onChange={(e) => setEmpForm({ ...empForm, department: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, department: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
-                    <option value="Software Engineering">Software Engineering</option>
+                    <option value="Software Engineering">
+                      Software Engineering
+                    </option>
                     <option value="Product & Design">Product & Design</option>
-                    <option value="Operations & Logistics">Operations & Logistics</option>
-                    <option value="Finance & Accounting">Finance & Accounting</option>
+                    <option value="Operations & Logistics">
+                      Operations & Logistics
+                    </option>
+                    <option value="Finance & Accounting">
+                      Finance & Accounting
+                    </option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Role / Title</label>
+                  <label
+                    htmlFor="employee-role"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Role / Title
+                  </label>
                   <input
+                    id="employee-role"
                     type="text"
                     placeholder="e.g. QA Engineer"
                     value={empForm.role}
-                    onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, role: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1683,14 +2055,25 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Monthly Basic Rate (PHP)</label>
+                  <label
+                    htmlFor="employee-monthly-rate"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Monthly Basic Rate (PHP)
+                  </label>
                   <input
+                    id="employee-monthly-rate"
                     type="number"
                     required
                     min={10000}
                     step={500}
                     value={empForm.monthlySalaryPesos}
-                    onChange={(e) => setEmpForm({ ...empForm, monthlySalaryPesos: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setEmpForm({
+                        ...empForm,
+                        monthlySalaryPesos: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1699,10 +2082,18 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     type="checkbox"
                     id="isMwe"
                     checked={empForm.isMinimumWage}
-                    onChange={(e) => setEmpForm({ ...empForm, isMinimumWage: e.target.checked })}
+                    onChange={(e) =>
+                      setEmpForm({
+                        ...empForm,
+                        isMinimumWage: e.target.checked,
+                      })
+                    }
                     className="size-4 rounded border-slate-800 bg-slate-950 text-blue-600 focus:ring-0"
                   />
-                  <label htmlFor="isMwe" className="text-slate-300 select-none cursor-pointer">
+                  <label
+                    htmlFor="isMwe"
+                    className="text-slate-300 select-none cursor-pointer"
+                  >
                     Minimum Wage Earner (Tax Exempt)
                   </label>
                 </div>
@@ -1710,10 +2101,18 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Disbursement Bank</label>
+                  <label
+                    htmlFor="employee-bank"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Disbursement Bank
+                  </label>
                   <select
+                    id="employee-bank"
                     value={empForm.bankName}
-                    onChange={(e) => setEmpForm({ ...empForm, bankName: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, bankName: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="BDO Unibank">BDO Unibank</option>
@@ -1724,12 +2123,20 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Bank Account Number</label>
+                  <label
+                    htmlFor="employee-bank-account"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Bank Account Number
+                  </label>
                   <input
+                    id="employee-bank-account"
                     type="text"
                     placeholder="e.g. 001234567890"
                     value={empForm.bankAccount}
-                    onChange={(e) => setEmpForm({ ...empForm, bankAccount: e.target.value })}
+                    onChange={(e) =>
+                      setEmpForm({ ...empForm, bankAccount: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1745,7 +2152,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-500 text-white"
+                >
                   Register Employee
                 </Button>
               </div>
@@ -1762,19 +2173,32 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Clock className="size-4 text-emerald-400" /> Attendance Adjustment
+                <Clock className="size-4 text-emerald-400" /> Attendance
+                Adjustment
               </h3>
-              <button onClick={() => setIsDtrModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsDtrModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveAttendance} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <label
+                  htmlFor="attendance-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Select Employee
+                </label>
                 <select
+                  id="attendance-employee"
                   value={dtrForm.employeeId}
-                  onChange={(e) => setDtrForm({ ...dtrForm, employeeId: e.target.value })}
+                  onChange={(e) =>
+                    setDtrForm({ ...dtrForm, employeeId: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   {employees.map((emp) => (
@@ -1787,34 +2211,67 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Tardiness (Mins)</label>
+                  <label
+                    htmlFor="attendance-tardiness"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Tardiness (Mins)
+                  </label>
                   <input
+                    id="attendance-tardiness"
                     type="number"
                     min={0}
                     value={dtrForm.tardinessMinutes}
-                    onChange={(e) => setDtrForm({ ...dtrForm, tardinessMinutes: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setDtrForm({
+                        ...dtrForm,
+                        tardinessMinutes: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Overtime (Hrs)</label>
+                  <label
+                    htmlFor="attendance-overtime"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Overtime (Hrs)
+                  </label>
                   <input
+                    id="attendance-overtime"
                     type="number"
                     min={0}
                     step={0.5}
                     value={dtrForm.regularOvertimeHours}
-                    onChange={(e) => setDtrForm({ ...dtrForm, regularOvertimeHours: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setDtrForm({
+                        ...dtrForm,
+                        regularOvertimeHours: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Night Diff (Hrs)</label>
+                  <label
+                    htmlFor="attendance-night-diff"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Night Diff (Hrs)
+                  </label>
                   <input
+                    id="attendance-night-diff"
                     type="number"
                     min={0}
                     step={0.5}
                     value={dtrForm.regularNightDiffHours}
-                    onChange={(e) => setDtrForm({ ...dtrForm, regularNightDiffHours: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setDtrForm({
+                        ...dtrForm,
+                        regularNightDiffHours: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1830,7 +2287,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
                   Save Adjustments
                 </Button>
               </div>
@@ -1847,19 +2308,32 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Banknote className="size-4 text-amber-400" /> Apply / File Loan Deduction
+                <Banknote className="size-4 text-amber-400" /> Apply / File Loan
+                Deduction
               </h3>
-              <button onClick={() => setIsLoanModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsLoanModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveLoan} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <label
+                  htmlFor="loan-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Select Employee
+                </label>
                 <select
+                  id="loan-employee"
                   value={loanForm.employeeId}
-                  onChange={(e) => setLoanForm({ ...loanForm, employeeId: e.target.value })}
+                  onChange={(e) =>
+                    setLoanForm({ ...loanForm, employeeId: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   {employees.map((emp) => (
@@ -1871,39 +2345,73 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Loan Facility</label>
+                <label
+                  htmlFor="loan-facility"
+                  className="text-slate-400 block mb-1"
+                >
+                  Loan Facility
+                </label>
                 <select
+                  id="loan-facility"
                   value={loanForm.loanType}
-                  onChange={(e) => setLoanForm({ ...loanForm, loanType: e.target.value })}
+                  onChange={(e) =>
+                    setLoanForm({ ...loanForm, loanType: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   <option value="SSS Salary Loan">SSS Salary Loan</option>
                   <option value="SSS Calamity Loan">SSS Calamity Loan</option>
-                  <option value="Pag-IBIG Multi-Purpose">Pag-IBIG Multi-Purpose Loan</option>
-                  <option value="Company Emergency Advance">Company Emergency Advance</option>
+                  <option value="Pag-IBIG Multi-Purpose">
+                    Pag-IBIG Multi-Purpose Loan
+                  </option>
+                  <option value="Company Emergency Advance">
+                    Company Emergency Advance
+                  </option>
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Total Principal (PHP)</label>
+                  <label
+                    htmlFor="loan-principal"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Total Principal (PHP)
+                  </label>
                   <input
+                    id="loan-principal"
                     type="number"
                     min={1000}
                     step={500}
                     value={loanForm.principalPesos}
-                    onChange={(e) => setLoanForm({ ...loanForm, principalPesos: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setLoanForm({
+                        ...loanForm,
+                        principalPesos: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Cutoff Deduction (PHP)</label>
+                  <label
+                    htmlFor="loan-cutoff-deduction"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Cutoff Deduction (PHP)
+                  </label>
                   <input
+                    id="loan-cutoff-deduction"
                     type="number"
                     min={100}
                     step={50}
                     value={loanForm.amortizationPesos}
-                    onChange={(e) => setLoanForm({ ...loanForm, amortizationPesos: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setLoanForm({
+                        ...loanForm,
+                        amortizationPesos: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1919,7 +2427,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-500 text-white"
+                >
                   Record Loan
                 </Button>
               </div>
@@ -1937,20 +2449,31 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <UploadCloud className="size-4 text-blue-400" /> Biometric Time Clock Ingestion
+                  <UploadCloud className="size-4 text-blue-400" /> Biometric
+                  Time Clock Ingestion
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Parse ZKTeco, Granding, or facial biometric logs with automatic DOLE overtime & late computation
+                  Parse ZKTeco, Granding, or facial biometric logs with
+                  automatic DOLE overtime & late computation
                 </p>
               </div>
-              <button onClick={() => setIsBiometricsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsBiometricsModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="flex items-center justify-between">
-                <label className="text-slate-300 font-medium">Paste Biometric Punch CSV Log:</label>
+                <label
+                  htmlFor="biometrics-csv"
+                  className="text-slate-300 font-medium"
+                >
+                  Paste Biometric Punch CSV Log:
+                </label>
                 <button
                   type="button"
                   onClick={() =>
@@ -1969,6 +2492,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               </div>
 
               <textarea
+                id="biometrics-csv"
                 rows={5}
                 value={biometricsCsv}
                 onChange={(e) => setBiometricsCsv(e.target.value)}
@@ -1977,17 +2501,40 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
               <div className="border border-slate-800 rounded-xl overflow-hidden">
                 <div className="bg-slate-950 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between">
-                  <span>Parsed Punch Preview ({parsedBiometricDays.length} Days Detected)</span>
+                  <span>
+                    Parsed Punch Preview ({parsedBiometricDays.length} Days
+                    Detected)
+                  </span>
                   <span>DOLE Compliance Evaluated</span>
                 </div>
                 <div className="max-h-40 overflow-y-auto divide-y divide-slate-800/60 text-[11px]">
-                  {parsedBiometricDays.map((day, idx) => (
-                    <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-800/30">
+                  {parsedBiometricDays.map((day) => (
+                    <div
+                      key={`${day.employeeNumber}-${day.dateStr}`}
+                      className="p-2.5 flex items-center justify-between hover:bg-slate-800/30"
+                    >
                       <div>
-                        <span className="font-semibold text-white font-mono">{day.employeeNumber}</span>
-                        <span className="text-slate-500 ml-2">{day.dateStr}</span>
+                        <span className="font-semibold text-white font-mono">
+                          {day.employeeNumber}
+                        </span>
+                        <span className="text-slate-500 ml-2">
+                          {day.dateStr}
+                        </span>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          In: {day.timeIn ? day.timeIn.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"} • Out: {day.timeOut ? day.timeOut.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
+                          In:{" "}
+                          {day.timeIn
+                            ? day.timeIn.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "N/A"}{" "}
+                          • Out:{" "}
+                          {day.timeOut
+                            ? day.timeOut.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "N/A"}
                         </div>
                       </div>
                       <div className="text-right">
@@ -2006,9 +2553,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                             +{(day.nightDiffMinutes / 60).toFixed(1)}h NSD
                           </span>
                         )}
-                        {day.tardinessMinutes === 0 && day.overtimeMinutes === 0 && (
-                          <span className="text-emerald-400 text-[10px]">Standard 8h Shift</span>
-                        )}
+                        {day.tardinessMinutes === 0 &&
+                          day.overtimeMinutes === 0 && (
+                            <span className="text-emerald-400 text-[10px]">
+                              Standard 8h Shift
+                            </span>
+                          )}
                       </div>
                     </div>
                   ))}
@@ -2048,19 +2598,35 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <CalendarDays className="size-4 text-purple-400" /> File Leave Request
+                <CalendarDays className="size-4 text-purple-400" /> File Leave
+                Request
               </h3>
-              <button onClick={() => setIsLeaveModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsLeaveModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveLeaveRequest} className="space-y-4 text-xs">
+            <form
+              onSubmit={handleSaveLeaveRequest}
+              className="space-y-4 text-xs"
+            >
               <div>
-                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <label
+                  htmlFor="leave-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Select Employee
+                </label>
                 <select
+                  id="leave-employee"
                   value={leaveForm.employeeId}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, employeeId: e.target.value })}
+                  onChange={(e) =>
+                    setLeaveForm({ ...leaveForm, employeeId: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   {employees.map((emp) => (
@@ -2072,38 +2638,72 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Leave Classification</label>
+                <label
+                  htmlFor="leave-classification"
+                  className="text-slate-400 block mb-1"
+                >
+                  Leave Classification
+                </label>
                 <select
+                  id="leave-classification"
                   value={leaveForm.leaveType}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, leaveType: e.target.value })}
+                  onChange={(e) =>
+                    setLeaveForm({ ...leaveForm, leaveType: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
-                  <option value="Service Incentive Leave (SIL)">Service Incentive Leave (SIL - Art. 95)</option>
+                  <option value="Service Incentive Leave (SIL)">
+                    Service Incentive Leave (SIL - Art. 95)
+                  </option>
                   <option value="Vacation Leave">Vacation Leave (VL)</option>
                   <option value="Sick Leave">Sick Leave (SL)</option>
-                  <option value="Maternity Leave">Maternity Leave (RA 11210 - 105 Days)</option>
-                  <option value="Paternity Leave">Paternity Leave (RA 8187 - 7 Days)</option>
-                  <option value="Solo Parent Leave">Solo Parent Leave (RA 8972 - 7 Days)</option>
-                  <option value="Emergency Leave">Emergency / Compassionate Leave</option>
+                  <option value="Maternity Leave">
+                    Maternity Leave (RA 11210 - 105 Days)
+                  </option>
+                  <option value="Paternity Leave">
+                    Paternity Leave (RA 8187 - 7 Days)
+                  </option>
+                  <option value="Solo Parent Leave">
+                    Solo Parent Leave (RA 8972 - 7 Days)
+                  </option>
+                  <option value="Emergency Leave">
+                    Emergency / Compassionate Leave
+                  </option>
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Start Date</label>
+                  <label
+                    htmlFor="leave-start-date"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Start Date
+                  </label>
                   <input
+                    id="leave-start-date"
                     type="date"
                     value={leaveForm.startDate}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, startDate: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">End Date</label>
+                  <label
+                    htmlFor="leave-end-date"
+                    className="text-slate-400 block mb-1"
+                  >
+                    End Date
+                  </label>
                   <input
+                    id="leave-end-date"
                     type="date"
                     value={leaveForm.endDate}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, endDate: e.target.value })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -2111,13 +2711,24 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Days Count</label>
+                  <label
+                    htmlFor="leave-days"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Days Count
+                  </label>
                   <input
+                    id="leave-days"
                     type="number"
                     min={0.5}
                     step={0.5}
                     value={leaveForm.daysCount}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, daysCount: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setLeaveForm({
+                        ...leaveForm,
+                        daysCount: Number(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -2126,22 +2737,35 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                     type="checkbox"
                     id="isPaidLeave"
                     checked={leaveForm.isPaid}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, isPaid: e.target.checked })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, isPaid: e.target.checked })
+                    }
                     className="size-4 rounded border-slate-800 bg-slate-950 text-purple-600 focus:ring-0"
                   />
-                  <label htmlFor="isPaidLeave" className="text-slate-300 select-none cursor-pointer">
+                  <label
+                    htmlFor="isPaidLeave"
+                    className="text-slate-300 select-none cursor-pointer"
+                  >
                     Paid Leave Credit
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Reason / Notes</label>
+                <label
+                  htmlFor="leave-reason"
+                  className="text-slate-400 block mb-1"
+                >
+                  Reason / Notes
+                </label>
                 <input
+                  id="leave-reason"
                   type="text"
                   placeholder="e.g. Annual leave with family"
                   value={leaveForm.reason}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                  onChange={(e) =>
+                    setLeaveForm({ ...leaveForm, reason: e.target.value })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -2156,7 +2780,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-purple-600 hover:bg-purple-500 text-white">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-500 text-white"
+                >
                   Approve & Record Leave
                 </Button>
               </div>
@@ -2174,25 +2802,39 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Coins className="size-4 text-amber-400" /> DOLE SIL Cash Monetization
+                  <Coins className="size-4 text-amber-400" /> DOLE SIL Cash
+                  Monetization
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Convert unused Service Incentive Leave credits into cash at daily rate (BIR De Minimis exempt)
+                  Convert unused Service Incentive Leave credits into cash at
+                  daily rate (BIR De Minimis exempt)
                 </p>
               </div>
-              <button onClick={() => setIsSilModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsSilModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <label
+                  htmlFor="sil-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Select Employee
+                </label>
                 <select
+                  id="sil-employee"
                   value={silEmployeeId}
                   onChange={(e) => {
                     setSilEmployeeId(e.target.value);
-                    const emp = employees.find((emp) => emp.id === e.target.value);
+                    const emp = employees.find(
+                      (emp) => emp.id === e.target.value,
+                    );
                     if (emp) setSilDaysToMonetize(emp.silBalanceDays);
                   }}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
@@ -2207,21 +2849,33 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Derived Daily Rate</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    Derived Daily Rate
+                  </span>
                   <div className="text-base font-bold text-emerald-400 font-mono mt-0.5">
                     {formatPHP(silDailyRateCents)}
                   </div>
-                  <span className="text-[10px] text-slate-500">Divisor: 261 days/yr</span>
+                  <span className="text-[10px] text-slate-500">
+                    Divisor: 261 days/yr
+                  </span>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Days to Monetize</label>
+                  <label
+                    htmlFor="sil-days"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Days to Monetize
+                  </label>
                   <input
+                    id="sil-days"
                     type="number"
                     min={0.5}
                     max={selectedSilEmp.silBalanceDays}
                     step={0.5}
                     value={silDaysToMonetize}
-                    onChange={(e) => setSilDaysToMonetize(Number(e.target.value))}
+                    onChange={(e) =>
+                      setSilDaysToMonetize(Number(e.target.value))
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-base focus:outline-none focus:border-blue-500"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
@@ -2290,28 +2944,41 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <UserMinus className="size-4 text-rose-400" /> DOLE Final Pay & Separation Clearance
+                  <UserMinus className="size-4 text-rose-400" /> DOLE Final Pay
+                  & Separation Clearance
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Labor Advisory No. 06-2020 • 30-day statutory release mandate • Art. 298-299
+                  Labor Advisory No. 06-2020 • 30-day statutory release mandate
+                  • Art. 298-299
                 </p>
               </div>
-              <button onClick={() => setIsFinalPayModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsFinalPayModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Employee for Separation</label>
+                <label
+                  htmlFor="final-pay-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Employee for Separation
+                </label>
                 <select
+                  id="final-pay-employee"
                   value={selectedFinalPayEmpId}
                   onChange={(e) => setSelectedFinalPayEmpId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.employeeNo}) — Basic: {formatPHP(emp.monthlyBasicRateCents)}
+                      {emp.name} ({emp.employeeNo}) — Basic:{" "}
+                      {formatPHP(emp.monthlyBasicRateCents)}
                     </option>
                   ))}
                 </select>
@@ -2319,58 +2986,108 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Separation Reason / Cause</label>
+                  <label
+                    htmlFor="final-pay-reason"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Separation Reason / Cause
+                  </label>
                   <select
+                    id="final-pay-reason"
                     value={finalPayReason}
-                    onChange={(e) => setFinalPayReason(e.target.value as SeparationType)}
+                    onChange={(e) =>
+                      setFinalPayReason(e.target.value as SeparationType)
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
-                    <option value={SeparationType.RESIGNATION}>Voluntary Resignation (No Sep Pay)</option>
-                    <option value={SeparationType.REDUNDANCY}>Redundancy (Art. 298: 1 mo/yr)</option>
-                    <option value={SeparationType.RETRENCHMENT}>Retrenchment / Losses (Art. 298: 0.5 mo/yr)</option>
-                    <option value={SeparationType.CLOSURE_NON_BANKRUPT}>Closure of Business (0.5 mo/yr)</option>
-                    <option value={SeparationType.DISEASE}>Disease / Health (Art. 299: 0.5 mo/yr)</option>
-                    <option value={SeparationType.RETIREMENT}>Retirement (RA 7641: 22.5 days/yr)</option>
+                    <option value={SeparationType.RESIGNATION}>
+                      Voluntary Resignation (No Sep Pay)
+                    </option>
+                    <option value={SeparationType.REDUNDANCY}>
+                      Redundancy (Art. 298: 1 mo/yr)
+                    </option>
+                    <option value={SeparationType.RETRENCHMENT}>
+                      Retrenchment / Losses (Art. 298: 0.5 mo/yr)
+                    </option>
+                    <option value={SeparationType.CLOSURE_NON_BANKRUPT}>
+                      Closure of Business (0.5 mo/yr)
+                    </option>
+                    <option value={SeparationType.DISEASE}>
+                      Disease / Health (Art. 299: 0.5 mo/yr)
+                    </option>
+                    <option value={SeparationType.RETIREMENT}>
+                      Retirement (RA 7641: 22.5 days/yr)
+                    </option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Tenure / Years of Service</label>
+                  <label
+                    htmlFor="final-pay-tenure"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Tenure / Years of Service
+                  </label>
                   <input
+                    id="final-pay-tenure"
                     type="number"
                     min={0.5}
                     step={0.5}
                     value={finalPayYearsOfService}
-                    onChange={(e) => setFinalPayYearsOfService(Number(e.target.value))}
+                    onChange={(e) =>
+                      setFinalPayYearsOfService(Number(e.target.value))
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-[10px] text-slate-500">$\ge 6$ mos counted as 1 yr per DOLE</span>
+                  <span className="text-[10px] text-slate-500">
+                    $\ge 6$ mos counted as 1 yr per DOLE
+                  </span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Unpaid Days Worked (Exit Cutoff)</label>
+                  <label
+                    htmlFor="final-pay-unpaid-days"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Unpaid Days Worked (Exit Cutoff)
+                  </label>
                   <input
+                    id="final-pay-unpaid-days"
                     type="number"
                     min={0}
                     step={0.5}
                     value={finalPayUnpaidDays}
-                    onChange={(e) => setFinalPayUnpaidDays(Number(e.target.value))}
+                    onChange={(e) =>
+                      setFinalPayUnpaidDays(Number(e.target.value))
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-[10px] text-slate-500">Rate: {formatPHP(finalPayDailyRateCents)}/day</span>
+                  <span className="text-[10px] text-slate-500">
+                    Rate: {formatPHP(finalPayDailyRateCents)}/day
+                  </span>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Unused Leave Credits (SIL / VL)</label>
+                  <label
+                    htmlFor="final-pay-unused-leave"
+                    className="text-slate-400 block mb-1"
+                  >
+                    Unused Leave Credits (SIL / VL)
+                  </label>
                   <input
+                    id="final-pay-unused-leave"
                     type="number"
                     min={0}
                     step={0.5}
                     value={finalPayUnusedLeaves}
-                    onChange={(e) => setFinalPayUnusedLeaves(Number(e.target.value))}
+                    onChange={(e) =>
+                      setFinalPayUnusedLeaves(Number(e.target.value))
+                    }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-[10px] text-slate-500">Up to 10d tax-exempt (BIR)</span>
+                  <span className="text-[10px] text-slate-500">
+                    Up to 10d tax-exempt (BIR)
+                  </span>
                 </div>
               </div>
 
@@ -2378,30 +3095,47 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-2.5">
                 <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex justify-between items-center">
                   <span>DOLE Itemized Final Settlement</span>
-                  <span className="text-blue-400 font-mono text-[10px]">30-Day Clearance</span>
+                  <span className="text-blue-400 font-mono text-[10px]">
+                    30-Day Clearance
+                  </span>
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-slate-400">1. Unpaid Salary ({finalPayUnpaidDays} days):</span>
-                  <span className="font-mono text-white">{formatPHP(finalPayResult.unpaidSalaryCents)}</span>
+                  <span className="text-slate-400">
+                    1. Unpaid Salary ({finalPayUnpaidDays} days):
+                  </span>
+                  <span className="font-mono text-white">
+                    {formatPHP(finalPayResult.unpaidSalaryCents)}
+                  </span>
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-slate-400">2. Pro-rated 13th Month Pay (Tax-Exempt):</span>
-                  <span className="font-mono text-emerald-400">+{formatPHP(finalPayResult.proratedThirteenthMonthCents)}</span>
+                  <span className="text-slate-400">
+                    2. Pro-rated 13th Month Pay (Tax-Exempt):
+                  </span>
+                  <span className="font-mono text-emerald-400">
+                    +{formatPHP(finalPayResult.proratedThirteenthMonthCents)}
+                  </span>
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-slate-400">3. Monetized Unused Leaves ({finalPayUnusedLeaves} days):</span>
-                  <span className="font-mono text-purple-400">+{formatPHP(finalPayResult.monetizedLeaveCents)}</span>
+                  <span className="text-slate-400">
+                    3. Monetized Unused Leaves ({finalPayUnusedLeaves} days):
+                  </span>
+                  <span className="font-mono text-purple-400">
+                    +{formatPHP(finalPayResult.monetizedLeaveCents)}
+                  </span>
                 </div>
 
                 {finalPayResult.separationPayCents > 0n && (
                   <div className="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-xl">
                     <div>
-                      <span className="text-emerald-300 font-medium">4. Statutory Separation Pay:</span>
+                      <span className="text-emerald-300 font-medium">
+                        4. Statutory Separation Pay:
+                      </span>
                       <div className="text-[10px] text-emerald-400/80">
-                        {finalPayReason} ({finalPayYearsOfService} yrs) • 100% Tax-Exempt
+                        {finalPayReason} ({finalPayYearsOfService} yrs) • 100%
+                        Tax-Exempt
                       </div>
                     </div>
                     <span className="font-mono font-bold text-emerald-300 text-sm">
@@ -2412,8 +3146,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
                 {finalPayResult.taxAdjustmentCents !== 0n && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">5. BIR 2316 Tax Annualization:</span>
-                    <span className={`font-mono ${finalPayResult.taxAdjustmentCents < 0n ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className="text-slate-400">
+                      5. BIR 2316 Tax Annualization:
+                    </span>
+                    <span
+                      className={`font-mono ${finalPayResult.taxAdjustmentCents < 0n ? "text-emerald-400" : "text-rose-400"}`}
+                    >
                       {finalPayResult.taxAdjustmentCents < 0n
                         ? `Refund +${formatPHP(-finalPayResult.taxAdjustmentCents)}`
                         : `Deficiency -${formatPHP(finalPayResult.taxAdjustmentCents)}`}
@@ -2423,9 +3161,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
                 {finalPayResult.outstandingLoanDeductionsCents > 0n && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">6. Company Loan Deductions:</span>
+                    <span className="text-slate-400">
+                      6. Company Loan Deductions:
+                    </span>
                     <span className="font-mono text-rose-400">
-                      -{formatPHP(finalPayResult.outstandingLoanDeductionsCents)}
+                      -
+                      {formatPHP(finalPayResult.outstandingLoanDeductionsCents)}
                     </span>
                   </div>
                 )}
@@ -2472,12 +3213,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                       "",
                       "Employee Signature: _______________________ Date: ____________",
                     ].join("\r\n");
-                    downloadFile(`Final_Pay_${selectedFinalPayEmp.name.replace(/\s+/g, "_")}.txt`, text, "text/plain;charset=utf-8;");
-                    showToast("📥 Exported Official DOLE Final Pay & Quitclaim Document!");
+                    downloadFile(
+                      `Final_Pay_${selectedFinalPayEmp.name.replace(/\s+/g, "_")}.txt`,
+                      text,
+                      "text/plain;charset=utf-8;",
+                    );
+                    showToast(
+                      "📥 Exported Official DOLE Final Pay & Quitclaim Document!",
+                    );
                   }}
                   className="border-slate-800 hover:bg-slate-800 text-slate-300"
                 >
-                  <Download className="size-3.5 mr-1.5" /> Download Settlement Slip
+                  <Download className="size-3.5 mr-1.5" /> Download Settlement
+                  Slip
                 </Button>
 
                 <div className="flex gap-2">
@@ -2514,21 +3262,33 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <FileCheck2 className="size-4 text-purple-400" /> BIR Form 2316 Certificate
+                  <FileCheck2 className="size-4 text-purple-400" /> BIR Form
+                  2316 Certificate
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Certificate of Compensation Payment / Tax Withheld • Tax Year 2026 (TRAIN Law Compliant)
+                  Certificate of Compensation Payment / Tax Withheld • Tax Year
+                  2026 (TRAIN Law Compliant)
                 </p>
               </div>
-              <button onClick={() => setIsBir2316ModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIsBir2316ModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Select Employee</label>
+                <label
+                  htmlFor="bir-2316-employee"
+                  className="text-slate-400 block mb-1"
+                >
+                  Select Employee
+                </label>
                 <select
+                  id="bir-2316-employee"
                   value={selectedBir2316EmpId}
                   onChange={(e) => setSelectedBir2316EmpId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
@@ -2544,18 +3304,37 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               {/* Header Details */}
               <div className="grid grid-cols-2 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Employee Details (Part I)</div>
-                  <div className="font-bold text-white mt-0.5">{bir2316Cert.employee.lastName}, {bir2316Cert.employee.firstName}</div>
-                  <div className="text-slate-400 font-mono text-[11px]">TIN: {bir2316Cert.employee.tin}</div>
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">
+                    Employee Details (Part I)
+                  </div>
+                  <div className="font-bold text-white mt-0.5">
+                    {bir2316Cert.employee.lastName},{" "}
+                    {bir2316Cert.employee.firstName}
+                  </div>
+                  <div className="text-slate-400 font-mono text-[11px]">
+                    TIN: {bir2316Cert.employee.tin}
+                  </div>
                   <div className="text-slate-400 text-[10px] mt-0.5">
-                    Status: {bir2316Cert.isMwe ? "Minimum Wage Earner (MWE - Tax Exempt)" : "Regular Employee (TRAIN Graduated)"}
+                    Status:{" "}
+                    {bir2316Cert.isMwe
+                      ? "Minimum Wage Earner (MWE - Tax Exempt)"
+                      : "Regular Employee (TRAIN Graduated)"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Employer Details (Part II)</div>
-                  <div className="font-bold text-white mt-0.5">{bir2316Cert.employer.registeredName}</div>
-                  <div className="text-slate-400 font-mono text-[11px]">TIN: {bir2316Cert.employer.tin} • RDO: {bir2316Cert.employer.rdoCode}</div>
-                  <div className="text-slate-400 text-[10px] mt-0.5">{bir2316Cert.employer.registeredAddress}</div>
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">
+                    Employer Details (Part II)
+                  </div>
+                  <div className="font-bold text-white mt-0.5">
+                    {bir2316Cert.employer.registeredName}
+                  </div>
+                  <div className="text-slate-400 font-mono text-[11px]">
+                    TIN: {bir2316Cert.employer.tin} • RDO:{" "}
+                    {bir2316Cert.employer.rdoCode}
+                  </div>
+                  <div className="text-slate-400 text-[10px] mt-0.5">
+                    {bir2316Cert.employer.registeredAddress}
+                  </div>
                 </div>
               </div>
 
@@ -2563,43 +3342,65 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               <div className="bg-purple-950/20 border border-purple-800/30 p-4 rounded-xl space-y-2">
                 <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider border-b border-purple-800/40 pb-1 flex justify-between">
                   <span>Part IV-A: Summary of Compensation & Tax</span>
-                  <span className="font-mono text-[10px]">Tax Year {bir2316Cert.taxYear}</span>
+                  <span className="font-mono text-[10px]">
+                    Tax Year {bir2316Cert.taxYear}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 25: Gross Compensation Income:</span>
+                    <span className="text-slate-300">
+                      Line 25: Gross Compensation Income:
+                    </span>
                     <span className="font-mono text-white font-semibold">
-                      {formatPHP(bir2316Cert.partIVA.grossCompensationIncomeCents)}
+                      {formatPHP(
+                        bir2316Cert.partIVA.grossCompensationIncomeCents,
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 30: Annual Tax Due:</span>
+                    <span className="text-slate-300">
+                      Line 30: Annual Tax Due:
+                    </span>
                     <span className="font-mono text-white font-semibold">
                       {formatPHP(bir2316Cert.partIVA.taxDueAnnualCents)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 26: Total Non-Taxable Income:</span>
+                    <span className="text-slate-300">
+                      Line 26: Total Non-Taxable Income:
+                    </span>
                     <span className="font-mono text-emerald-400">
-                      {formatPHP(bir2316Cert.partIVA.totalNonTaxableCompensationCents)}
+                      {formatPHP(
+                        bir2316Cert.partIVA.totalNonTaxableCompensationCents,
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 31: Total Taxes Withheld:</span>
+                    <span className="text-slate-300">
+                      Line 31: Total Taxes Withheld:
+                    </span>
                     <span className="font-mono text-amber-400">
                       {formatPHP(bir2316Cert.partIVA.totalTaxWithheldCents)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 27: Total Taxable Income:</span>
+                    <span className="text-slate-300">
+                      Line 27: Total Taxable Income:
+                    </span>
                     <span className="font-mono text-blue-400 font-bold">
-                      {formatPHP(bir2316Cert.partIVA.totalTaxableCompensationCents)}
+                      {formatPHP(
+                        bir2316Cert.partIVA.totalTaxableCompensationCents,
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">Line 32: Year-End Tax Adjustment:</span>
-                    <span className={`font-mono font-bold ${bir2316Cert.partIVA.refundDueEmployeeCents > 0n ? "text-emerald-400" : "text-slate-300"}`}>
+                    <span className="text-slate-300">
+                      Line 32: Year-End Tax Adjustment:
+                    </span>
+                    <span
+                      className={`font-mono font-bold ${bir2316Cert.partIVA.refundDueEmployeeCents > 0n ? "text-emerald-400" : "text-slate-300"}`}
+                    >
                       {bir2316Cert.partIVA.refundDueEmployeeCents > 0n
                         ? `Refund +${formatPHP(bir2316Cert.partIVA.refundDueEmployeeCents)}`
                         : "Equalized (₱0.00)"}
@@ -2615,21 +3416,40 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                     Part IV-B: Non-Taxable / Exempt Income
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">13th Month & Bonuses (≤₱90k):</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.thirteenthMonthExemptCents)}</span>
+                    <span className="text-slate-400">
+                      13th Month & Bonuses (≤₱90k):
+                    </span>
+                    <span className="font-mono text-white">
+                      {formatPHP(
+                        bir2316Cert.partIVB.thirteenthMonthExemptCents,
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-slate-400">De Minimis Benefits:</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.deMinimisBenefitsCents)}</span>
+                    <span className="font-mono text-white">
+                      {formatPHP(bir2316Cert.partIVB.deMinimisBenefitsCents)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">Statutory SSS/PHIC/HDMF:</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVB.statutoryContributionsCents)}</span>
+                    <span className="text-slate-400">
+                      Statutory SSS/PHIC/HDMF:
+                    </span>
+                    <span className="font-mono text-white">
+                      {formatPHP(
+                        bir2316Cert.partIVB.statutoryContributionsCents,
+                      )}
+                    </span>
                   </div>
                   {bir2316Cert.isMwe && (
                     <div className="flex justify-between text-[11px] text-amber-400">
                       <span>Basic & OT (MWE Exempt):</span>
-                      <span className="font-mono">{formatPHP(bir2316Cert.partIVB.basicMweCents + bir2316Cert.partIVB.overtimePayMweCents)}</span>
+                      <span className="font-mono">
+                        {formatPHP(
+                          bir2316Cert.partIVB.basicMweCents +
+                            bir2316Cert.partIVB.overtimePayMweCents,
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -2639,20 +3459,40 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                     Part IV-C: Taxable Income
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">Regular Basic Salary:</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.basicSalaryRegularCents)}</span>
+                    <span className="text-slate-400">
+                      Regular Basic Salary:
+                    </span>
+                    <span className="font-mono text-white">
+                      {formatPHP(bir2316Cert.partIVC.basicSalaryRegularCents)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">Taxable Overtime / Premiums:</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.overtimePayTaxableCents)}</span>
+                    <span className="text-slate-400">
+                      Taxable Overtime / Premiums:
+                    </span>
+                    <span className="font-mono text-white">
+                      {formatPHP(bir2316Cert.partIVC.overtimePayTaxableCents)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">Bonuses in Excess of ₱90k:</span>
-                    <span className="font-mono text-white">{formatPHP(bir2316Cert.partIVC.thirteenthMonthExcessTaxableCents)}</span>
+                    <span className="text-slate-400">
+                      Bonuses in Excess of ₱90k:
+                    </span>
+                    <span className="font-mono text-white">
+                      {formatPHP(
+                        bir2316Cert.partIVC.thirteenthMonthExcessTaxableCents,
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between text-[11px] font-bold pt-1 border-t border-slate-800">
-                    <span className="text-slate-300">Total Taxable Income:</span>
-                    <span className="font-mono text-blue-400">{formatPHP(bir2316Cert.partIVC.totalTaxableCompensationCents)}</span>
+                    <span className="text-slate-300">
+                      Total Taxable Income:
+                    </span>
+                    <span className="font-mono text-blue-400">
+                      {formatPHP(
+                        bir2316Cert.partIVC.totalTaxableCompensationCents,
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -2664,12 +3504,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   variant="outline"
                   onClick={() => {
                     const text = formatBir2316TextDocument(bir2316Cert);
-                    downloadFile(`BIR_Form_2316_${selectedBir2316Emp.name.replace(/\s+/g, "_")}_2026.txt`, text, "text/plain;charset=utf-8;");
-                    showToast("📥 Exported Official BIR Form 2316 Certificate!");
+                    downloadFile(
+                      `BIR_Form_2316_${selectedBir2316Emp.name.replace(/\s+/g, "_")}_2026.txt`,
+                      text,
+                      "text/plain;charset=utf-8;",
+                    );
+                    showToast(
+                      "📥 Exported Official BIR Form 2316 Certificate!",
+                    );
                   }}
                   className="border-slate-800 hover:bg-slate-800 text-slate-300"
                 >
-                  <Download className="size-3.5 mr-1.5" /> Download Official Form 2316 (.txt)
+                  <Download className="size-3.5 mr-1.5" /> Download Official
+                  Form 2316 (.txt)
                 </Button>
 
                 <Button
@@ -2695,13 +3542,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Banknote className="size-4 text-emerald-400" /> DOLE 13th Month Pay Batch & Compliance
+                  <Banknote className="size-4 text-emerald-400" /> DOLE 13th
+                  Month Pay Batch & Compliance
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Presidential Decree No. 851 • Statutory December 24 release mandate • DOLE BWC / ERS Filing
+                  Presidential Decree No. 851 • Statutory December 24 release
+                  mandate • DOLE BWC / ERS Filing
                 </p>
               </div>
-              <button onClick={() => setIs13thMonthModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setIs13thMonthModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="size-4" />
               </button>
             </div>
@@ -2710,32 +3563,53 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               {/* Summary Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Benefited Employees</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    Benefited Employees
+                  </span>
                   <div className="text-lg font-bold text-white mt-0.5">
-                    {thirteenthMonthBatchResult.totalBenefitedEmployees} Employees
+                    {thirteenthMonthBatchResult.totalBenefitedEmployees}{" "}
+                    Employees
                   </div>
-                  <span className="text-[10px] text-slate-500">100% Rank-and-File</span>
+                  <span className="text-[10px] text-slate-500">
+                    100% Rank-and-File
+                  </span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Payout Granted</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    Total Payout Granted
+                  </span>
                   <div className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
-                    {formatPHP(thirteenthMonthBatchResult.totalThirteenthMonthPayCents)}
+                    {formatPHP(
+                      thirteenthMonthBatchResult.totalThirteenthMonthPayCents,
+                    )}
                   </div>
-                  <span className="text-[10px] text-slate-500">Total Company Outlay</span>
+                  <span className="text-[10px] text-slate-500">
+                    Total Company Outlay
+                  </span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Tax-Exempt (≤₱90k)</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    Tax-Exempt (≤₱90k)
+                  </span>
                   <div className="text-lg font-bold text-blue-400 font-mono mt-0.5">
                     {formatPHP(thirteenthMonthBatchResult.totalTaxExemptCents)}
                   </div>
-                  <span className="text-[10px] text-slate-500">TRAIN Law Exemption</span>
+                  <span className="text-[10px] text-slate-500">
+                    TRAIN Law Exemption
+                  </span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Taxable Excess (&gt;₱90k)</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    Taxable Excess (&gt;₱90k)
+                  </span>
                   <div className="text-lg font-bold text-amber-400 font-mono mt-0.5">
-                    {formatPHP(thirteenthMonthBatchResult.totalTaxableExcessCents)}
+                    {formatPHP(
+                      thirteenthMonthBatchResult.totalTaxableExcessCents,
+                    )}
                   </div>
-                  <span className="text-[10px] text-slate-500">Subject to Withholding</span>
+                  <span className="text-[10px] text-slate-500">
+                    Subject to Withholding
+                  </span>
                 </div>
               </div>
 
@@ -2754,17 +3628,29 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                     {thirteenthMonthBatchResult.employeeResults.map((r) => (
-                      <tr key={r.employeeId} className="hover:bg-slate-800/40 transition-colors">
+                      <tr
+                        key={r.employeeId}
+                        className="hover:bg-slate-800/40 transition-colors"
+                      >
                         <td className="py-2.5 px-3 font-medium text-white">
                           {r.fullName}
-                          <div className="text-[10px] text-slate-500 font-mono">{r.employeeNumber}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {r.employeeNumber}
+                          </div>
                         </td>
                         <td className="py-2.5 px-3">
-                          <span className={r.isProrated ? "text-amber-400" : "text-slate-300"}>
-                            {r.monthsWorked} mos {r.isProrated ? "(Pro-rated)" : "(Full 12m)"}
+                          <span
+                            className={
+                              r.isProrated ? "text-amber-400" : "text-slate-300"
+                            }
+                          >
+                            {r.monthsWorked} mos{" "}
+                            {r.isProrated ? "(Pro-rated)" : "(Full 12m)"}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-mono">{formatPHP(r.totalBasicEarnedCents)}</td>
+                        <td className="py-2.5 px-3 font-mono">
+                          {formatPHP(r.totalBasicEarnedCents)}
+                        </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
                           {formatPHP(r.thirteenthMonthPayCents)}
                         </td>
@@ -2773,7 +3659,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                         </td>
                         <td className="py-2.5 px-3 font-mono">
                           {r.taxableExcessCents > 0n ? (
-                            <span className="text-amber-400">+{formatPHP(r.taxableExcessCents)}</span>
+                            <span className="text-amber-400">
+                              +{formatPHP(r.taxableExcessCents)}
+                            </span>
                           ) : (
                             <span className="text-slate-500">₱0.00</span>
                           )}
@@ -2800,12 +3688,19 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                         contactNumber: "+63 2 8123 4567",
                         batchResult: thirteenthMonthBatchResult,
                       });
-                      downloadFile(`DOLE_13th_Month_Report_${selected13thMonthYear}.txt`, report, "text/plain;charset=utf-8;");
-                      showToast("📥 Exported Official DOLE 13th Month Pay Annual Report!");
+                      downloadFile(
+                        `DOLE_13th_Month_Report_${selected13thMonthYear}.txt`,
+                        report,
+                        "text/plain;charset=utf-8;",
+                      );
+                      showToast(
+                        "📥 Exported Official DOLE 13th Month Pay Annual Report!",
+                      );
                     }}
                     className="border-slate-800 hover:bg-slate-800 text-slate-300"
                   >
-                    <Download className="size-3.5 mr-1.5" /> Export DOLE Report (PD 851)
+                    <Download className="size-3.5 mr-1.5" /> Export DOLE Report
+                    (PD 851)
                   </Button>
 
                   <Button
@@ -2815,17 +3710,27 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                     onClick={() => {
                       const rows = [
                         "Account_Number,Beneficiary_Name,Amount_PHP,Employee_ID,Reference",
-                        ...thirteenthMonthBatchResult.employeeResults.map((r) => {
-                          const emp = employees.find((e) => e.id === r.employeeId);
-                          return `"${emp?.bankAccount || "1122334455"}","${r.fullName}",${(Number(r.thirteenthMonthPayCents) / 100).toFixed(2)},"${r.employeeNumber}","13TH-MONTH-${selected13thMonthYear}"`;
-                        }),
+                        ...thirteenthMonthBatchResult.employeeResults.map(
+                          (r) => {
+                            const emp = employees.find(
+                              (e) => e.id === r.employeeId,
+                            );
+                            return `"${emp?.bankAccount || "1122334455"}","${r.fullName}",${(Number(r.thirteenthMonthPayCents) / 100).toFixed(2)},"${r.employeeNumber}","13TH-MONTH-${selected13thMonthYear}"`;
+                          },
+                        ),
                       ];
-                      downloadFile(`13th_Month_Bank_Batch_${selected13thMonthYear}.csv`, rows.join("\r\n"));
-                      showToast("📥 Exported 13th Month Bank Transmittal Batch CSV!");
+                      downloadFile(
+                        `13th_Month_Bank_Batch_${selected13thMonthYear}.csv`,
+                        rows.join("\r\n"),
+                      );
+                      showToast(
+                        "📥 Exported 13th Month Bank Transmittal Batch CSV!",
+                      );
                     }}
                     className="border-slate-800 hover:bg-slate-800 text-slate-300"
                   >
-                    <Download className="size-3.5 mr-1.5" /> Export Bank Transmittal (.csv)
+                    <Download className="size-3.5 mr-1.5" /> Export Bank
+                    Transmittal (.csv)
                   </Button>
                 </div>
 

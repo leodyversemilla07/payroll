@@ -10,7 +10,7 @@ import type { Centavos, StatutoryContributionResult } from "./types";
 
 export function calculatePagibigContribution(
   monthlySalaryCents: Centavos,
-  customEmployeeDeductionCents?: Centavos
+  customEmployeeDeductionCents?: Centavos,
 ): StatutoryContributionResult {
   if (customEmployeeDeductionCents && customEmployeeDeductionCents > 0n) {
     const employeeShareCents = customEmployeeDeductionCents;
@@ -32,8 +32,12 @@ export function calculatePagibigContribution(
   }
   const employerRate = 0.02;
 
-  const employeeShareCents = BigInt(Math.round(cappedBase * employeeRate * 100));
-  const employerShareCents = BigInt(Math.round(cappedBase * employerRate * 100));
+  const employeeShareCents = BigInt(
+    Math.round(cappedBase * employeeRate * 100),
+  );
+  const employerShareCents = BigInt(
+    Math.round(cappedBase * employerRate * 100),
+  );
 
   return {
     employeeShareCents,

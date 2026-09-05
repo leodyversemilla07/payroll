@@ -7,12 +7,14 @@ import type { Centavos, StatutoryContributionResult } from "./types";
  * - Split: 50% Employee / 50% Employer
  */
 
-export function calculatePhilhealthContribution(monthlySalaryCents: Centavos): StatutoryContributionResult {
+export function calculatePhilhealthContribution(
+  monthlySalaryCents: Centavos,
+): StatutoryContributionResult {
   const salaryPesos = Number(monthlySalaryCents) / 100;
 
   // Clamp between floor and ceiling
   const baseSalary = Math.max(10000, Math.min(salaryPesos, 100000));
-  
+
   const totalPremiumPesos = baseSalary * 0.05; // 5%
   const employeeSharePesos = totalPremiumPesos / 2; // 2.5%
   const employerSharePesos = totalPremiumPesos / 2; // 2.5%

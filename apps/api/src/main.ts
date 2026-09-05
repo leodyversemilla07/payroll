@@ -1,18 +1,18 @@
-import { validateEnvironment } from './config/environment';
 import { NestFactory } from '@nestjs/core';
 import { TRPCError } from '@trpc/server';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { AppModule } from './app.module';
-import { TrpcService } from './trpc/trpc.service';
-import { createApiRouter } from './trpc/routers/app.router';
-import { EmployeesService } from './modules/employees/employees.service';
-import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
-import { PayrollService } from './modules/payroll/payroll.service';
-import { LoansService } from './modules/loans/loans.service';
-import { ComplianceService } from './modules/compliance/compliance.service';
-import { LeavesService } from './modules/leaves/leaves.service';
-import { AuthService } from './auth/auth.service';
 import { AuditService } from './audit/audit.service';
+import { AuthService } from './auth/auth.service';
+import { validateEnvironment } from './config/environment';
+import { ComplianceService } from './modules/compliance/compliance.service';
+import { EmployeesService } from './modules/employees/employees.service';
+import { LeavesService } from './modules/leaves/leaves.service';
+import { LoansService } from './modules/loans/loans.service';
+import { PayrollService } from './modules/payroll/payroll.service';
+import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
+import { createApiRouter } from './trpc/routers/app.router';
+import { TrpcService } from './trpc/trpc.service';
 
 async function bootstrap() {
   const environment = validateEnvironment();

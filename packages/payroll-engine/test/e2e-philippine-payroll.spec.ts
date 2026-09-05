@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
+import type { PayrollCalculationInput } from "../src/index";
 import {
-  calculatePhilippinePayroll,
   annualizeTax,
-  calculateThirteenthMonthPayout,
   CutoffType,
+  calculatePhilippinePayroll,
+  calculateThirteenthMonthPayout,
+  DeMinimisCategory,
   PayBasis,
   WorkDayDivisor,
-  DeMinimisCategory,
 } from "../src/index";
-import type { PayrollCalculationInput } from "../src/index";
 
 describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
   it("Scenario A: Minimum Wage Earner (MWE) with Holiday, Overtime, and Tax Exemption", () => {
@@ -75,14 +75,18 @@ describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
 
     // 4. Statutory Deductions
     expect(result.sssContribution.employeeShareCents).toBeGreaterThan(0n);
-    expect(result.philhealthContribution.employeeShareCents).toBeGreaterThan(0n);
+    expect(result.philhealthContribution.employeeShareCents).toBeGreaterThan(
+      0n,
+    );
     expect(result.pagibigContribution.employeeShareCents).toBe(20000n); // ₱200 cap
 
     // 5. TAX EXEMPTION: Withholding tax MUST strictly be 0 for MWE
     expect(result.withholdingTaxCents).toBe(0n);
 
     // 6. Net Take-Home Pay
-    expect(result.netPayCents).toBe(result.grossPayCents - result.totalDeductionsCents);
+    expect(result.netPayCents).toBe(
+      result.grossPayCents - result.totalDeductionsCents,
+    );
   });
 
   it("Scenario B: High-Income Executive with Statutory MSC Ceilings & Loans", () => {
@@ -162,13 +166,18 @@ describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
     expect(result.withholdingTaxCents).toBeGreaterThan(500000n); // > ₱5,000
 
     // Net pay balanced
-    expect(result.netPayCents).toBe(result.grossPayCents - result.totalDeductionsCents);
+    expect(result.netPayCents).toBe(
+      result.grossPayCents - result.totalDeductionsCents,
+    );
   });
 
   it("Scenario C: Year-End Tax Annualization & 13th Month Bonus Release", () => {
     // Total annual basic pay: PHP 720,000 (60k/mo)
     const annualBasicCents = 72000000n;
-    const thirteenthMonth = calculateThirteenthMonthPayout(annualBasicCents, 0n);
+    const thirteenthMonth = calculateThirteenthMonthPayout(
+      annualBasicCents,
+      0n,
+    );
 
     // 13th month = 720,000 / 12 = PHP 60,000
     expect(thirteenthMonth.thirteenthMonthPayCents).toBe(6000000n);
@@ -180,7 +189,10 @@ describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
     const annualTaxableCents = 65000000n;
     const totalTaxWithheldCents = 8000000n;
 
-    const annualization = annualizeTax(annualTaxableCents, totalTaxWithheldCents);
+    const annualization = annualizeTax(
+      annualTaxableCents,
+      totalTaxWithheldCents,
+    );
 
     // 650,000 taxable:
     // Bracket: 400,000 to 800,000 -> 22,500 + 20% of excess over 400,000

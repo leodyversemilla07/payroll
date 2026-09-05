@@ -42,7 +42,7 @@ export interface AttendanceSummary {
   tardinessMinutes: number;
   undertimeMinutes: number;
   absentDays: number;
-  
+
   // Overtime Hours
   regularOvertimeHours: number;
   restDayHours: number;
@@ -55,7 +55,7 @@ export interface AttendanceSummary {
   regularHolidayOvertimeHours: number;
   regularHolidayRestDayHours: number;
   regularHolidayRestDayOvertimeHours: number;
-  
+
   // Night Shift Differential (10:00 PM to 6:00 AM)
   regularNightDiffHours: number;
   overtimeNightDiffHours: number;
@@ -70,7 +70,7 @@ export interface EmployeeCompensationProfile {
   hourlyRateCents?: Centavos;
   divisor: WorkDayDivisor;
   isMinimumWageEarner: boolean; // Exempt from BIR withholding tax under RA 9504 / TRAIN
-  
+
   // Custom Overrides (Optional)
   customSssDeductionCents?: Centavos;
   customPhilhealthDeductionCents?: Centavos;
@@ -97,10 +97,26 @@ export enum CutoffType {
 }
 
 export interface StatutoryDeductionSchedule {
-  deductSssIn: "FIRST_CUTOFF" | "SECOND_CUTOFF" | "SPLIT_EQUAL" | "MONTHLY_SINGLE";
-  deductPhilhealthIn: "FIRST_CUTOFF" | "SECOND_CUTOFF" | "SPLIT_EQUAL" | "MONTHLY_SINGLE";
-  deductPagibigIn: "FIRST_CUTOFF" | "SECOND_CUTOFF" | "SPLIT_EQUAL" | "MONTHLY_SINGLE";
-  deductTaxIn: "FIRST_CUTOFF" | "SECOND_CUTOFF" | "SPLIT_EQUAL" | "MONTHLY_SINGLE";
+  deductSssIn:
+    | "FIRST_CUTOFF"
+    | "SECOND_CUTOFF"
+    | "SPLIT_EQUAL"
+    | "MONTHLY_SINGLE";
+  deductPhilhealthIn:
+    | "FIRST_CUTOFF"
+    | "SECOND_CUTOFF"
+    | "SPLIT_EQUAL"
+    | "MONTHLY_SINGLE";
+  deductPagibigIn:
+    | "FIRST_CUTOFF"
+    | "SECOND_CUTOFF"
+    | "SPLIT_EQUAL"
+    | "MONTHLY_SINGLE";
+  deductTaxIn:
+    | "FIRST_CUTOFF"
+    | "SECOND_CUTOFF"
+    | "SPLIT_EQUAL"
+    | "MONTHLY_SINGLE";
 }
 
 export interface PayrollCalculationInput {
@@ -129,45 +145,45 @@ export interface PayrollCalculationResult {
   dailyRateCents: Centavos;
   hourlyRateCents: Centavos;
   minuteRateCents: Centavos;
-  
+
   // Basic Pay & Time Adjustments
   basicPayForPeriodCents: Centavos;
   tardinessDeductionCents: Centavos;
   undertimeDeductionCents: Centavos;
   absenceDeductionCents: Centavos;
   netBasicPayCents: Centavos;
-  
+
   // Premium Earnings
   overtimePayCents: Centavos;
   nightDiffPayCents: Centavos;
   holidayPayCents: Centavos;
   restDayPayCents: Centavos;
   totalPremiumPayCents: Centavos;
-  
+
   // Allowances & De Minimis
   taxableAllowancesCents: Centavos;
   nonTaxableAllowancesCents: Centavos;
   deMinimisExcessTaxableCents: Centavos;
-  
+
   // Gross Compensation
   grossPayCents: Centavos;
-  
+
   // Statutory Deductions (Employee Share deducted this cutoff)
   sssContribution: StatutoryContributionResult;
   philhealthContribution: StatutoryContributionResult;
   pagibigContribution: StatutoryContributionResult;
   totalStatutoryEmployeeCents: Centavos;
   totalStatutoryEmployerCents: Centavos;
-  
+
   // Tax Computations
   taxableIncomeCents: Centavos;
   withholdingTaxCents: Centavos;
-  
+
   // Other Deductions
   loanDeductionsCents: Centavos;
   otherDeductionsCents: Centavos;
   totalDeductionsCents: Centavos;
-  
+
   // Final Net Pay & Accrual
   netPayCents: Centavos;
   thirteenthMonthAccrualCents: Centavos;

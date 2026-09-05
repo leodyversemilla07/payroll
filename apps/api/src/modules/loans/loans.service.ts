@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { prisma } from '@workspace/db';
 import type { LoanType } from '@workspace/db';
+import { prisma } from '@workspace/db';
 
 @Injectable()
 export class LoansService {
@@ -77,5 +77,4 @@ export class LoansService {
       },
     });
   }
-
 }

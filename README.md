@@ -36,15 +36,20 @@ Services are available at:
 ## Quality checks
 
 ```bash
+pnpm check
 pnpm typecheck
-pnpm lint
 pnpm test
 pnpm test:e2e
 pnpm build
 pnpm test:smoke
 ```
 
-The smoke test launches the compiled API and verifies its HTTP health endpoint.
+Biome is the repository-wide formatter and linter. Use `pnpm check` to verify
+formatting, lint rules, and import organization; `pnpm check:write` applies safe
+fixes; and `pnpm format` only formats files. Biome's nursery Tailwind class
+sorter is intentionally disabled because its fix is unsafe and it cannot load
+the project's Tailwind configuration. The smoke test launches the compiled API
+and verifies its HTTP health endpoint.
 
 ## Database commands
 

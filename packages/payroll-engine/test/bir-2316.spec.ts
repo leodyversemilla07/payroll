@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  generateBir2316Certificate,
   formatBir2316TextDocument,
+  generateBir2316Certificate,
 } from "../src/index";
 
 describe("BIR Form 2316 Certificate Generation Engine", () => {
@@ -41,8 +41,12 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     expect(cert.partIVB.basicMweCents).toBe(0n);
     expect(cert.partIVB.thirteenthMonthExemptCents).toBe(5000000n);
     expect(cert.partIVB.deMinimisBenefitsCents).toBe(2400000n);
-    expect(cert.partIVB.statutoryContributionsCents).toBe(2100000n + 1500000n + 240000n); // PHP 38,400.00
-    expect(cert.partIVB.totalNonTaxableCompensationCents).toBe(5000000n + 2400000n + 3840000n);
+    expect(cert.partIVB.statutoryContributionsCents).toBe(
+      2100000n + 1500000n + 240000n,
+    ); // PHP 38,400.00
+    expect(cert.partIVB.totalNonTaxableCompensationCents).toBe(
+      5000000n + 2400000n + 3840000n,
+    );
 
     // Part IV-C checks
     expect(cert.partIVC.basicSalaryRegularCents).toBe(60000000n);
@@ -52,7 +56,8 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
 
     // Part IV-A summary checks
     expect(cert.partIVA.grossCompensationIncomeCents).toBe(
-      cert.partIVB.totalNonTaxableCompensationCents + cert.partIVC.totalTaxableCompensationCents
+      cert.partIVB.totalNonTaxableCompensationCents +
+        cert.partIVC.totalTaxableCompensationCents,
     );
     expect(cert.partIVA.taxDueAnnualCents).toBeGreaterThan(0n);
 
@@ -127,6 +132,8 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     // 90,000 in exempt, 60,000 in taxable
     expect(cert.partIVB.thirteenthMonthExemptCents).toBe(9000000n); // Exactly PHP 90,000
     expect(cert.partIVC.thirteenthMonthExcessTaxableCents).toBe(6000000n); // PHP 60,000 excess
-    expect(cert.partIVC.totalTaxableCompensationCents).toBe(120000000n + 6000000n);
+    expect(cert.partIVC.totalTaxableCompensationCents).toBe(
+      120000000n + 6000000n,
+    );
   });
 });

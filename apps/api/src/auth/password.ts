@@ -1,6 +1,6 @@
 import {
-  randomBytes,
   scrypt as nodeScrypt,
+  randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
 

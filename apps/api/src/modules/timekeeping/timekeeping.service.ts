@@ -192,8 +192,9 @@ export class TimekeepingService {
   }
 
   async importBiometricsCsv(csvContent: string, organizationId: string) {
-    const { parseBiometricCsv, processBiometricLogs } =
-      await import('@workspace/payroll-engine');
+    const { parseBiometricCsv, processBiometricLogs } = await import(
+      '@workspace/payroll-engine'
+    );
     const rawLogs = parseBiometricCsv(csvContent);
     const processedDays = processBiometricLogs(rawLogs);
 

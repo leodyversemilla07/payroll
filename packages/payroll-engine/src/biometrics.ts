@@ -53,19 +53,18 @@ export function parseBiometricCsv(csvContent: string): RawBiometricLog[] {
     }
 
     const cols = line.split(",").map((c) => c.replace(/["']/g, "").trim());
-    if (cols.length < 2) continue;
+    const [employeeNumber, timestamp, thirdColumn, fourthColumn] = cols;
+    if (!employeeNumber || !timestamp) continue;
 
-    const employeeNumber = cols[0]!;
+    let parsedDate = new Date(timestamp);
 
-    let parsedDate = new Date(cols[1]!);
-
-    if (isNaN(parsedDate.getTime()) && cols.length >= 3) {
-      parsedDate = new Date(`${cols[1]}T${cols[2]}`);
+    if (Number.isNaN(parsedDate.getTime()) && thirdColumn) {
+      parsedDate = new Date(`${timestamp}T${thirdColumn}`);
     }
 
-    if (!isNaN(parsedDate.getTime())) {
+    if (!Number.isNaN(parsedDate.getTime())) {
       let punchType: "CHECK_IN" | "CHECK_OUT" | "AUTO" = "AUTO";
-      const typeStr = (cols[2] || cols[3] || "").toUpperCase();
+      const typeStr = (fourthColumn || thirdColumn || "").toUpperCase();
       if (typeStr.includes("IN") || typeStr === "1") punchType = "CHECK_IN";
       if (typeStr.includes("OUT") || typeStr === "2") punchType = "CHECK_OUT";
 
@@ -85,7 +84,7 @@ export function parseBiometricCsv(csvContent: string): RawBiometricLog[] {
  */
 export function processBiometricLogs(
   logs: RawBiometricLog[],
-  shift: ShiftSchedule = DEFAULT_STANDARD_SHIFT
+  shift: ShiftSchedule = DEFAULT_STANDARD_SHIFT,
 ): ProcessedDtrDay[] {
   const grouped = new Map<string, RawBiometricLog[]>();
 
@@ -106,18 +105,21 @@ export function processBiometricLogs(
     let timeIn: Date | undefined;
     let timeOut: Date | undefined;
 
+    const firstLog = dayLogs[0];
+    const lastLog = dayLogs.at(-1);
+    if (!firstLog || !lastLog) continue;
+
     if (dayLogs.length === 1) {
-      const single = dayLogs[0]!;
-      if (single.punchType === "CHECK_OUT") {
-        timeOut = single.timestamp;
+      if (firstLog.punchType === "CHECK_OUT") {
+        timeOut = firstLog.timestamp;
         remarks.push("Missing Clock-In Punch");
       } else {
-        timeIn = single.timestamp;
+        timeIn = firstLog.timestamp;
         remarks.push("Missing Clock-Out Punch");
       }
     } else {
-      timeIn = dayLogs[0]!.timestamp;
-      timeOut = dayLogs[dayLogs.length - 1]!.timestamp;
+      timeIn = firstLog.timestamp;
+      timeOut = lastLog.timestamp;
     }
 
     if (!timeIn || !timeOut) {
@@ -137,8 +139,13 @@ export function processBiometricLogs(
       continue;
     }
 
-    const [inHours, inMins] = shift.expectedTimeIn.split(":").map(Number) as [number, number];
-    const [outHours, outMins] = shift.expectedTimeOut.split(":").map(Number) as [number, number];
+    const [inHours, inMins] = shift.expectedTimeIn.split(":").map(Number) as [
+      number,
+      number,
+    ];
+    const [outHours, outMins] = shift.expectedTimeOut
+      .split(":")
+      .map(Number) as [number, number];
 
     const expectedInDate = new Date(timeIn);
     expectedInDate.setHours(inHours, inMins, 0, 0);
@@ -163,10 +170,15 @@ export function processBiometricLogs(
     }
 
     // 3. Gross Duration & Actual Worked Minutes (minus lunch break if duration >= 5 hours)
-    const totalSpanMinutes = Math.floor((timeOut.getTime() - timeIn.getTime()) / (60 * 1000));
+    const totalSpanMinutes = Math.floor(
+      (timeOut.getTime() - timeIn.getTime()) / (60 * 1000),
+    );
     let actualWorkedMinutes = totalSpanMinutes;
     if (totalSpanMinutes >= 300) {
-      actualWorkedMinutes = Math.max(0, totalSpanMinutes - shift.breakDurationMinutes);
+      actualWorkedMinutes = Math.max(
+        0,
+        totalSpanMinutes - shift.breakDurationMinutes,
+      );
     }
 
     // 4. Overtime Computation (work beyond expected shift out, minimum 30 min OT threshold)

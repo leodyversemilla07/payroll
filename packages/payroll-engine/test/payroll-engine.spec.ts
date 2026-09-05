@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
+import type { PayrollCalculationInput } from "../src/index.js";
 import {
+  CutoffType,
+  calculateDolePremiums,
+  calculatePagibigContribution,
+  calculatePhilhealthContribution,
   calculatePhilippinePayroll,
   calculateSssContribution,
-  calculatePhilhealthContribution,
-  calculatePagibigContribution,
+  calculateThirteenthMonthPayout,
   calculateWithholdingTax,
-  calculateDolePremiums,
+  DeMinimisCategory,
   deriveRates,
   evaluateAllowances,
-  calculateThirteenthMonthPayout,
   PayBasis,
   WorkDayDivisor,
-  CutoffType,
-  DeMinimisCategory,
 } from "../src/index.js";
-import type { PayrollCalculationInput } from "../src/index.js";
 
 describe("Philippine Tax & Payroll Calculation Engine", () => {
   describe("1. DOLE Rate Derivations & Premiums", () => {
@@ -139,14 +139,17 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
   describe("5. De Minimis & 13th Month Pay", () => {
     it("should separate exempt de minimis and spill excess into taxable compensation", () => {
       // Rice subsidy limit is 2,000/mo (1,000 per semi-monthly cutoff)
-      const result = evaluateAllowances([
-        {
-          name: "Rice Allowance",
-          amountCents: 150000n, // PHP 1,500 given in semi-monthly (exceeds 1,000 limit)
-          isTaxable: false,
-          deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
-        },
-      ], true);
+      const result = evaluateAllowances(
+        [
+          {
+            name: "Rice Allowance",
+            amountCents: 150000n, // PHP 1,500 given in semi-monthly (exceeds 1,000 limit)
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
+          },
+        ],
+        true,
+      );
 
       expect(result.nonTaxableAllowancesCents).toBe(100000n); // 1,000 exempt
       expect(result.deMinimisExcessTaxableCents).toBe(50000n); // 500 excess
@@ -226,13 +229,17 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
 
       // Verify Statutory Deductions
       expect(result.sssContribution.employeeShareCents).toBeGreaterThan(0n);
-      expect(result.philhealthContribution.employeeShareCents).toBeGreaterThan(0n);
+      expect(result.philhealthContribution.employeeShareCents).toBeGreaterThan(
+        0n,
+      );
       expect(result.pagibigContribution.employeeShareCents).toBe(20000n);
 
       // Verify Total Deductions and Net Pay
       expect(result.netPayCents).toBeGreaterThan(0n);
       expect(result.thirteenthMonthAccrualCents).toBeGreaterThan(0n);
-      expect(result.grossPayCents - result.totalDeductionsCents).toBe(result.netPayCents);
+      expect(result.grossPayCents - result.totalDeductionsCents).toBe(
+        result.netPayCents,
+      );
     });
   });
 });

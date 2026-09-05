@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { prisma, Prisma } from '@workspace/db';
+import { Prisma, prisma } from '@workspace/db';
 import { calculateSilCashConversion } from '@workspace/payroll-engine';
 
 @Injectable()
@@ -179,7 +179,7 @@ export class LeavesService {
       },
     });
 
-    if (!employee || !employee.compensation) {
+    if (!employee?.compensation) {
       throw new NotFoundException(
         `Employee ${employeeId} or active compensation not found`,
       );

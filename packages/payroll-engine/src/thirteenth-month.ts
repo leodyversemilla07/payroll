@@ -10,7 +10,9 @@ export const TAX_EXEMPT_BONUS_CEILING_CENTS: Centavos = 9000000n;
  * Calculates 13th-month pay accrual for a given pay period.
  * Accrual = Net basic pay earned for the period / 12
  */
-export function calculateThirteenthMonthAccrual(netBasicPayCents: Centavos): Centavos {
+export function calculateThirteenthMonthAccrual(
+  netBasicPayCents: Centavos,
+): Centavos {
   if (netBasicPayCents <= 0n) return 0n;
   return netBasicPayCents / 12n;
 }
@@ -20,16 +22,17 @@ export function calculateThirteenthMonthAccrual(netBasicPayCents: Centavos): Cen
  */
 export function calculateThirteenthMonthPayout(
   totalAnnualBasicEarnedCents: Centavos,
-  otherBonusesReceivedCents = 0n
+  otherBonusesReceivedCents = 0n,
 ): {
   thirteenthMonthPayCents: Centavos;
   taxExemptPortionCents: Centavos;
   taxablePortionCents: Centavos;
 } {
   const thirteenthMonthPayCents = totalAnnualBasicEarnedCents / 12n;
-  const remainingExemptCap = TAX_EXEMPT_BONUS_CEILING_CENTS > otherBonusesReceivedCents
-    ? TAX_EXEMPT_BONUS_CEILING_CENTS - otherBonusesReceivedCents
-    : 0n;
+  const remainingExemptCap =
+    TAX_EXEMPT_BONUS_CEILING_CENTS > otherBonusesReceivedCents
+      ? TAX_EXEMPT_BONUS_CEILING_CENTS - otherBonusesReceivedCents
+      : 0n;
 
   if (thirteenthMonthPayCents <= remainingExemptCap) {
     return {

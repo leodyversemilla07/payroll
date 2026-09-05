@@ -14,19 +14,34 @@ interface TaxBracket {
 const SEMI_MONTHLY_BRACKETS: TaxBracket[] = [
   { minPesos: 0, maxPesos: 10417, baseTaxPesos: 0, excessRate: 0 },
   { minPesos: 10417, maxPesos: 16667, baseTaxPesos: 0, excessRate: 0.15 },
-  { minPesos: 16667, maxPesos: 33333, baseTaxPesos: 937.50, excessRate: 0.20 },
-  { minPesos: 33333, maxPesos: 83333, baseTaxPesos: 4270.70, excessRate: 0.25 },
-  { minPesos: 83333, maxPesos: 333333, baseTaxPesos: 16770.70, excessRate: 0.30 },
-  { minPesos: 333333, maxPesos: Number.POSITIVE_INFINITY, baseTaxPesos: 91770.70, excessRate: 0.35 },
+  { minPesos: 16667, maxPesos: 33333, baseTaxPesos: 937.5, excessRate: 0.2 },
+  { minPesos: 33333, maxPesos: 83333, baseTaxPesos: 4270.7, excessRate: 0.25 },
+  { minPesos: 83333, maxPesos: 333333, baseTaxPesos: 16770.7, excessRate: 0.3 },
+  {
+    minPesos: 333333,
+    maxPesos: Number.POSITIVE_INFINITY,
+    baseTaxPesos: 91770.7,
+    excessRate: 0.35,
+  },
 ];
 
 const MONTHLY_BRACKETS: TaxBracket[] = [
   { minPesos: 0, maxPesos: 20833, baseTaxPesos: 0, excessRate: 0 },
   { minPesos: 20833, maxPesos: 33333, baseTaxPesos: 0, excessRate: 0.15 },
-  { minPesos: 33333, maxPesos: 66667, baseTaxPesos: 1875.00, excessRate: 0.20 },
-  { minPesos: 66667, maxPesos: 166667, baseTaxPesos: 8541.80, excessRate: 0.25 },
-  { minPesos: 166667, maxPesos: 666667, baseTaxPesos: 33541.80, excessRate: 0.30 },
-  { minPesos: 666667, maxPesos: Number.POSITIVE_INFINITY, baseTaxPesos: 183541.80, excessRate: 0.35 },
+  { minPesos: 33333, maxPesos: 66667, baseTaxPesos: 1875.0, excessRate: 0.2 },
+  { minPesos: 66667, maxPesos: 166667, baseTaxPesos: 8541.8, excessRate: 0.25 },
+  {
+    minPesos: 166667,
+    maxPesos: 666667,
+    baseTaxPesos: 33541.8,
+    excessRate: 0.3,
+  },
+  {
+    minPesos: 666667,
+    maxPesos: Number.POSITIVE_INFINITY,
+    baseTaxPesos: 183541.8,
+    excessRate: 0.35,
+  },
 ];
 
 /**
@@ -38,7 +53,7 @@ const MONTHLY_BRACKETS: TaxBracket[] = [
 export function calculateWithholdingTax(
   taxableCompensationCents: Centavos,
   isSemiMonthly = true,
-  isMinimumWageEarner = false
+  isMinimumWageEarner = false,
 ): Centavos {
   if (isMinimumWageEarner || taxableCompensationCents <= 0n) {
     return 0n;
@@ -55,8 +70,10 @@ export function calculateWithholdingTax(
     }
   }
 
-  // Fallback to top bracket
-  const topBracket = brackets[brackets.length - 1]!;
+  // Both statutory bracket tables are non-empty.
+  const topBracket = brackets.at(-1);
+  if (!topBracket) return 0n;
+
   const excess = taxablePesos - topBracket.minPesos;
   const taxPesos = topBracket.baseTaxPesos + excess * topBracket.excessRate;
   return BigInt(Math.round(taxPesos * 100));
@@ -69,7 +86,7 @@ export function calculateWithholdingTax(
 export function annualizeTax(
   totalAnnualTaxableCents: Centavos,
   totalTaxWithheldCents: Centavos,
-  isMinimumWageEarner = false
+  isMinimumWageEarner = false,
 ): {
   totalAnnualTaxDueCents: Centavos;
   taxAdjustmentCents: Centavos; // Positive = Deficiency (employee owes), Negative = Refund (employee gets back)
@@ -90,11 +107,11 @@ export function annualizeTax(
   } else if (taxablePesos <= 400000) {
     taxDuePesos = (taxablePesos - 250000) * 0.15;
   } else if (taxablePesos <= 800000) {
-    taxDuePesos = 22500 + (taxablePesos - 400000) * 0.20;
+    taxDuePesos = 22500 + (taxablePesos - 400000) * 0.2;
   } else if (taxablePesos <= 2000000) {
     taxDuePesos = 102500 + (taxablePesos - 800000) * 0.25;
   } else if (taxablePesos <= 8000000) {
-    taxDuePesos = 402500 + (taxablePesos - 2000000) * 0.30;
+    taxDuePesos = 402500 + (taxablePesos - 2000000) * 0.3;
   } else {
     taxDuePesos = 2202500 + (taxablePesos - 8000000) * 0.35;
   }

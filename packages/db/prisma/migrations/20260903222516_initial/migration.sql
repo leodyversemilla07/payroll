@@ -123,6 +123,8 @@ CREATE TABLE "User" (
     "passwordHash" TEXT NOT NULL,
     "role" "Role" NOT NULL DEFAULT 'EMPLOYEE',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "failedLoginAttempts" INTEGER NOT NULL DEFAULT 0,
+    "lockedUntil" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

@@ -5,8 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
 import { prisma, Role } from '@workspace/db';
+import type { Request, Response } from 'express';
 import { hashPassword, verifyPassword } from './password';
 
 const DEFAULT_COOKIE_NAME = 'sweldoph_session';
@@ -193,7 +193,7 @@ export class AuthService {
       user?.lockedUntil && user.lockedUntil.getTime() > Date.now(),
     );
 
-    if (!user || !user.isActive || isLocked || !passwordMatches) {
+    if (!user?.isActive || isLocked || !passwordMatches) {
       if (user?.isActive && !isLocked) {
         const failedAttempts = user.failedLoginAttempts + 1;
         await prisma.user.update({

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { prisma, type Prisma } from '@workspace/db';
+import { type Prisma, prisma } from '@workspace/db';
 import type { Request } from 'express';
 import type { AuthenticatedUser } from '../auth/auth.service';
 

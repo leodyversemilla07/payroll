@@ -5,7 +5,6 @@
 
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
 import { annualizeTax } from "./withholding-tax";
-import type { Centavos } from "./types";
 
 export interface Bir2316EmployeeProfile {
   employeeNumber: string;
@@ -98,7 +97,7 @@ export function generateBir2316Certificate(
   taxYear: number,
   employee: Bir2316EmployeeProfile,
   employer: Bir2316EmployerProfile,
-  income: Bir2316AnnualIncomeSummary
+  income: Bir2316AnnualIncomeSummary,
 ): Bir2316CertificateData {
   const isMwe = employee.isMinimumWageEarner;
 
@@ -116,7 +115,8 @@ export function generateBir2316Certificate(
 
   const thirteenthMonthExcessTaxableCents =
     income.totalThirteenthMonthAndBonusesCents > TAX_EXEMPT_BONUS_CEILING_CENTS
-      ? income.totalThirteenthMonthAndBonusesCents - TAX_EXEMPT_BONUS_CEILING_CENTS
+      ? income.totalThirteenthMonthAndBonusesCents -
+        TAX_EXEMPT_BONUS_CEILING_CENTS
       : 0n;
 
   // 3. Evaluate Part IV-B (Non-Taxable) and Part IV-C (Taxable)
@@ -172,14 +172,17 @@ export function generateBir2316Certificate(
     totalNonTaxableCompensationCents + totalTaxableCompensationCents;
 
   // 4. Annual Tax Due Computation & Annualization (Graduated Table under TRAIN Law)
-  const { totalAnnualTaxDueCents: taxDueAnnualCents, taxAdjustmentCents } = annualizeTax(
-    totalTaxableCompensationCents,
-    income.totalTaxWithheldCents,
-    isMwe
-  );
+  const { totalAnnualTaxDueCents: taxDueAnnualCents, taxAdjustmentCents } =
+    annualizeTax(
+      totalTaxableCompensationCents,
+      income.totalTaxWithheldCents,
+      isMwe,
+    );
 
-  const refundDueEmployeeCents = taxAdjustmentCents < 0n ? -taxAdjustmentCents : 0n;
-  const taxPayableByEmployeeCents = taxAdjustmentCents > 0n ? taxAdjustmentCents : 0n;
+  const refundDueEmployeeCents =
+    taxAdjustmentCents < 0n ? -taxAdjustmentCents : 0n;
+  const taxPayableByEmployeeCents =
+    taxAdjustmentCents > 0n ? taxAdjustmentCents : 0n;
 
   return {
     taxYear,
@@ -224,8 +227,11 @@ export function generateBir2316Certificate(
 /**
  * Formats a clean, text-based official BIR Form 2316 Certificate string.
  */
-export function formatBir2316TextDocument(cert: Bir2316CertificateData): string {
-  const f = (cents: bigint) => (Number(cents) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 });
+export function formatBir2316TextDocument(
+  cert: Bir2316CertificateData,
+): string {
+  const f = (cents: bigint) =>
+    (Number(cents) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 });
 
   return [
     "==========================================================================================",
@@ -254,8 +260,8 @@ export function formatBir2316TextDocument(cert: Bir2316CertificateData): string 
     cert.partIVA.refundDueEmployeeCents > 0n
       ? `           OVERWITHHELD TAX REFUNDED TO EMPLOYEE ..................... PHP ${f(cert.partIVA.refundDueEmployeeCents).padStart(14)}`
       : cert.partIVA.taxPayableByEmployeeCents > 0n
-      ? `           AMOUNT OF TAX STILL PAYABLE BY EMPLOYEE ................... PHP ${f(cert.partIVA.taxPayableByEmployeeCents).padStart(14)}`
-      : `           TAX BALANCE EQUALIZED (PHP 0.00 ADJUSTMENT)`,
+        ? `           AMOUNT OF TAX STILL PAYABLE BY EMPLOYEE ................... PHP ${f(cert.partIVA.taxPayableByEmployeeCents).padStart(14)}`
+        : `           TAX BALANCE EQUALIZED (PHP 0.00 ADJUSTMENT)`,
     "------------------------------------------------------------------------------------------",
     "PART IV-B: DETAILS OF NON-TAXABLE / EXEMPT COMPENSATION INCOME",
     `  Line 33: Basic Pay (Minimum Wage Earner) ........................... PHP ${f(cert.partIVB.basicMweCents).padStart(14)}`,

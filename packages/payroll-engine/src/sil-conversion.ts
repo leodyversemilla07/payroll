@@ -24,7 +24,9 @@ export const BIR_MAX_TAX_EXEMPT_LEAVE_DAYS = 10;
 /**
  * Calculates the cash monetization of unused Service Incentive Leave (SIL) or Vacation Leave.
  */
-export function calculateSilCashConversion(input: SilConversionInput): SilConversionResult {
+export function calculateSilCashConversion(
+  input: SilConversionInput,
+): SilConversionResult {
   if (input.unusedLeaveDays <= 0 || input.dailyRateCents <= 0n) {
     return {
       dailyRateCents: input.dailyRateCents,
@@ -41,7 +43,10 @@ export function calculateSilCashConversion(input: SilConversionInput): SilConver
   const totalMonetizedCashCents = (input.dailyRateCents * daysScaled) / 100n;
 
   const priorDays = input.priorMonetizedDaysInYear ?? 0;
-  const remainingExemptCapDays = Math.max(0, BIR_MAX_TAX_EXEMPT_LEAVE_DAYS - priorDays);
+  const remainingExemptCapDays = Math.max(
+    0,
+    BIR_MAX_TAX_EXEMPT_LEAVE_DAYS - priorDays,
+  );
 
   const exemptDays = Math.min(input.unusedLeaveDays, remainingExemptCapDays);
   const taxableDays = Math.max(0, input.unusedLeaveDays - exemptDays);
@@ -49,7 +54,8 @@ export function calculateSilCashConversion(input: SilConversionInput): SilConver
   const exemptDaysScaled = BigInt(Math.round(exemptDays * 100));
   const taxableDaysScaled = BigInt(Math.round(taxableDays * 100));
 
-  const taxExemptDeMinimisCents = (input.dailyRateCents * exemptDaysScaled) / 100n;
+  const taxExemptDeMinimisCents =
+    (input.dailyRateCents * exemptDaysScaled) / 100n;
   const taxablePortionCents = (input.dailyRateCents * taxableDaysScaled) / 100n;
 
   let remarks = `Monetized ${input.unusedLeaveDays} day(s) at daily rate.`;

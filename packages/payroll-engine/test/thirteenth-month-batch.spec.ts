@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateEmployee13thMonth,
   calculate13thMonthBatch,
+  calculateEmployee13thMonth,
   formatDole13thMonthComplianceReport,
 } from "../src/index";
 
@@ -55,7 +55,7 @@ describe("DOLE 13th Month Pay Batch & Compliance Engine", () => {
         monthsWorkedInYear: 12,
         unpaidAbsenceDays: 5,
       },
-      137931n
+      137931n,
     );
 
     // Total basic earned: 360,000 - (5 * 1,379.31 = 6,896.55) = 353,103.45
