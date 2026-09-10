@@ -59,6 +59,7 @@ export function createEmployeesRouter(ctx: RouterContext) {
           bankAccountName: z.string().max(200).optional(),
           monthlyBasicRatePesos: z.number().positive().finite(),
           isTaxExempt: z.boolean().optional(),
+          isManagerial: z.boolean().optional(),
         }),
       )
       .mutation(async ({ input, ctx }) => {

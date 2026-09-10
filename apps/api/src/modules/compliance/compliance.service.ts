@@ -302,11 +302,24 @@ export class ComplianceService {
     const { calculate13thMonthBatch, formatDole13thMonthComplianceReport } =
       await import('@workspace/payroll-engine');
 
+    // PD 851 covers rank-and-file employees only; Labor Code managerial
+    // employees are counted separately for report transparency.
     const employees = await prisma.employee.findMany({
-      where: { organizationId, employmentStatus: 'ACTIVE' },
+      where: {
+        organizationId,
+        employmentStatus: 'ACTIVE',
+        isManagerial: false,
+      },
       include: {
         organization: true,
         compensation: true,
+      },
+    });
+    const excludedManagerialCount = await prisma.employee.count({
+      where: {
+        organizationId,
+        employmentStatus: 'ACTIVE',
+        isManagerial: true,
       },
     });
 
@@ -346,11 +359,13 @@ export class ComplianceService {
       contactPerson: 'HR & Payroll Director',
       contactNumber: '+63 2 8123 4567',
       batchResult,
+      excludedManagerialCount,
     });
 
     return {
       taxYear,
       batchResult,
+      excludedManagerialCount,
       reportText,
       filename: `DOLE_13th_Month_Compliance_Report_${taxYear}.txt`,
     };

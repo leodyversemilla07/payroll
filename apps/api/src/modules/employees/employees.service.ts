@@ -29,6 +29,7 @@ export interface RegisterEmployeeInput {
   bankAccountName?: string;
   monthlyBasicRatePesos: number;
   isTaxExempt?: boolean;
+  isManagerial?: boolean;
 }
 
 @Injectable()
@@ -141,6 +142,7 @@ export class EmployeesService {
         bankAccountNumber: input.bankAccountNumber || '0000000000',
         bankAccountName:
           input.bankAccountName || `${input.firstName} ${input.lastName}`,
+        isManagerial: input.isManagerial ?? false,
         compensation: {
           create: {
             basicRateMonthlyCents: monthlyRateCents,

@@ -45,6 +45,9 @@ export interface DoleComplianceReportInput {
   contactPerson: string;
   contactNumber: string;
   batchResult: ThirteenthMonthBatchResult;
+  // Labor Code managerial employees are outside PD 851 coverage and are
+  // listed in the report for transparency instead of the benefit ledger.
+  excludedManagerialCount?: number;
 }
 
 /**
@@ -176,6 +179,7 @@ export function formatDole13thMonthComplianceReport(
     "------------------------------------------------------------------------------------------",
     "PART II: SUMMARY OF 13TH MONTH BENEFIT DISTRIBUTION",
     `  Total Employees Covered & Benefited: ${input.batchResult.totalBenefitedEmployees}`,
+    `  Managerial Employees Excluded (PD 851 covers rank-and-file only): ${input.excludedManagerialCount ?? 0}`,
     `  Total 13th Month Pay Payout Granted: PHP ${f(input.batchResult.totalThirteenthMonthPayCents)}`,
     `  Total Tax-Exempt Benefits (≤₱90,000): PHP ${f(input.batchResult.totalTaxExemptCents)}`,
     `  Total Taxable Benefits (>₱90,000):   PHP ${f(input.batchResult.totalTaxableExcessCents)}`,

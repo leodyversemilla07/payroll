@@ -128,6 +128,11 @@ model Employee {
   employmentStatus  EmploymentStatus  @default(ACTIVE)
   role              Role              @default(EMPLOYEE)
   payBasis          PayBasis          @default(MONTHLY)
+  // Labor Code managerial employees (vested with powers to lay down and
+  // execute management policies or to hire, transfer, suspend, lay off,
+  // recall, discharge, assign, or discipline employees) are excluded from
+  // PD 851 13th-month coverage. Defaults to rank-and-file.
+  isManagerial      Boolean           @default(false)
 
   // Bank Disbursement Details
   bankName          String            // BDO, BPI, UnionBank, etc.
