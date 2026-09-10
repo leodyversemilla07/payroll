@@ -129,8 +129,7 @@ export function calculateDolePremiums(
 
   // Attendance hours arrive as minutes / 60. Recovering whole minutes keeps
   // the production path (integer DTR minutes) bit-exact.
-  const toMinutes = (hours: number): bigint =>
-    BigInt(Math.round(hours * 60));
+  const toMinutes = (hours: number): bigint => BigInt(Math.round(hours * 60));
 
   // Exact numerator of rateCents * (minutes / 60) * (bps / 100).
   const singleTerm = (hours: number, multiplierBps: number): bigint =>
@@ -155,10 +154,7 @@ export function calculateDolePremiums(
   // base pay for them, hence the zero multiplier.
   const holidayPayCents = roundSingle(
     singleTerm(attendance.specialHolidayHours, bps.specialHoliday) +
-      singleTerm(
-        attendance.specialHolidayOvertimeHours,
-        bps.specialHolidayOT,
-      ) +
+      singleTerm(attendance.specialHolidayOvertimeHours, bps.specialHolidayOT) +
       singleTerm(
         attendance.specialHolidayRestDayHours,
         bps.specialHolidayRestDay,
@@ -172,10 +168,7 @@ export function calculateDolePremiums(
         (attendance.regularHolidayUnworkedDays ?? 0) * 8,
         bps.regularHolidayUnworked,
       ) +
-      singleTerm(
-        attendance.regularHolidayOvertimeHours,
-        bps.regularHolidayOT,
-      ) +
+      singleTerm(attendance.regularHolidayOvertimeHours, bps.regularHolidayOT) +
       singleTerm(
         attendance.regularHolidayRestDayHours,
         bps.regularHolidayRestDay,

@@ -32,17 +32,14 @@ export interface NinetiethBucketResult {
 export function allocateNinetiethBucket(
   input: NinetiethBucketInput,
 ): NinetiethBucketResult {
-  const ytdUsed =
-    input.ytdUsedCents > 0n ? input.ytdUsedCents : 0n;
+  const ytdUsed = input.ytdUsedCents > 0n ? input.ytdUsedCents : 0n;
   const additions =
-    (input.periodBonusesCents ?? 0n) +
-    (input.periodDeMinimisExcessCents ?? 0n);
+    (input.periodBonusesCents ?? 0n) + (input.periodDeMinimisExcessCents ?? 0n);
   const remaining =
     TAX_EXEMPT_BONUS_CEILING_CENTS > ytdUsed
       ? TAX_EXEMPT_BONUS_CEILING_CENTS - ytdUsed
       : 0n;
-  const exemptCents =
-    additions < remaining ? additions : remaining;
+  const exemptCents = additions < remaining ? additions : remaining;
   const taxableCents = additions - exemptCents;
 
   return {

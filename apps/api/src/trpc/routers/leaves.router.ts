@@ -1,18 +1,13 @@
 import { z } from 'zod';
+import type { RouterContext } from './router-context';
 import {
+  assertEmployeeAccess,
   LEAVE_APPROVAL_ROLES,
   TIMEKEEPING_READ_ROLES,
-  assertEmployeeAccess,
 } from './router-context';
-import type { RouterContext } from './router-context';
 
 export function createLeavesRouter(ctx: RouterContext) {
-  const {
-    trpc,
-    protectedProcedure,
-    leavesService,
-    auditService,
-  } = ctx;
+  const { trpc, protectedProcedure, leavesService, auditService } = ctx;
 
   return trpc.router({
     getBalances: protectedProcedure

@@ -1,15 +1,13 @@
 import { z } from 'zod';
+import type { RouterContext } from './router-context';
 import {
   PAYROLL_APPROVAL_ROLES,
   PAYROLL_TRIGGER_ROLES,
 } from './router-context';
-import type { RouterContext } from './router-context';
 
 export function createPayrollRouter(ctx: RouterContext) {
   const { trpc, payrollProcedure, payrollService, auditService } = ctx;
-  const payrollTriggerProcedure = trpc.procedureForRoles(
-    PAYROLL_TRIGGER_ROLES,
-  );
+  const payrollTriggerProcedure = trpc.procedureForRoles(PAYROLL_TRIGGER_ROLES);
 
   return trpc.router({
     listRuns: payrollProcedure.query(({ ctx }) =>
@@ -25,7 +23,8 @@ export function createPayrollRouter(ctx: RouterContext) {
         ),
       ),
 
-    triggerRun: payrollTriggerProcedure.input(
+    triggerRun: payrollTriggerProcedure
+      .input(
         z.object({
           cutoffStartDate: z.string().date(),
           cutoffEndDate: z.string().date(),

@@ -13,8 +13,8 @@ import type {
   PayrollCalculationInput,
 } from '@workspace/payroll-engine';
 import {
-  CutoffType,
   allocateNinetiethBucket,
+  CutoffType,
   calculateEmployee13thMonth,
   calculateMonthsWorkedInYear,
   calculatePhilippinePayroll,
@@ -24,8 +24,8 @@ import {
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
 import {
-  TimekeepingService,
   countUnpaidAbsenceDays,
+  TimekeepingService,
 } from '../timekeeping/timekeeping.service';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
@@ -135,10 +135,7 @@ export class PayrollService {
   }
 
   /** Disburses an approved run: the point of no return for cancellation. */
-  async disbursePayrollRun(params: {
-    runId: string;
-    organizationId: string;
-  }) {
+  async disbursePayrollRun(params: { runId: string; organizationId: string }) {
     return prisma.$transaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
         where: { id: params.runId, organizationId: params.organizationId },
@@ -166,10 +163,7 @@ export class PayrollService {
    * (Bank transmittal batches, once persisted, must additionally be voided
    * here before the run row is removed.)
    */
-  async cancelPayrollRun(params: {
-    runId: string;
-    organizationId: string;
-  }) {
+  async cancelPayrollRun(params: { runId: string; organizationId: string }) {
     return prisma.$transaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
         where: { id: params.runId, organizationId: params.organizationId },
@@ -669,10 +663,7 @@ export class PayrollService {
         },
         select: { date: true, dayType: true, isAbsent: true },
       });
-      const unpaidAbsenceDays = countUnpaidAbsenceDays(
-        dtrRows,
-        params.taxYear,
-      );
+      const unpaidAbsenceDays = countUnpaidAbsenceDays(dtrRows, params.taxYear);
 
       const ytdBucket = await transaction.payslip.aggregate({
         _sum: { deMinimisExcessCents: true, bonusPaidCents: true },

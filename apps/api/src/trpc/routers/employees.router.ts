@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { EMPLOYEE_RECORD_ROLES, assertEmployeeAccess } from './router-context';
 import type { RouterContext } from './router-context';
+import { assertEmployeeAccess, EMPLOYEE_RECORD_ROLES } from './router-context';
 
 export function createEmployeesRouter(ctx: RouterContext) {
   const {

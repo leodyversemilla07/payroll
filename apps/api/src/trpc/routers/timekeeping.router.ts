@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { TIMEKEEPING_READ_ROLES, assertEmployeeAccess } from './router-context';
 import type { RouterContext } from './router-context';
+import { assertEmployeeAccess, TIMEKEEPING_READ_ROLES } from './router-context';
 
 export function createTimekeepingRouter(ctx: RouterContext) {
   const {

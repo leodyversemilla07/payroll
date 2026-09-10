@@ -99,8 +99,7 @@ export function calculatePhilippinePayroll(
   // as before, for callers without YTD tracking (e.g. the interactive demo).
   const periodExcessCents = evaluatedAllowances.deMinimisExcessTaxableCents;
   let taxableAllowancesCents = evaluatedAllowances.taxableAllowancesCents;
-  let nonTaxableAllowancesCents =
-    evaluatedAllowances.nonTaxableAllowancesCents;
+  let nonTaxableAllowancesCents = evaluatedAllowances.nonTaxableAllowancesCents;
   let ytdOtherBenefitsTotalCents = periodExcessCents + periodBonusesCents;
   if (ytdOtherBenefitsCents !== undefined) {
     const bucket = allocateNinetiethBucket({

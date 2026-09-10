@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { PAYROLL_ROLES, assertEmployeeAccess } from './router-context';
 import type { RouterContext } from './router-context';
+import { assertEmployeeAccess, PAYROLL_ROLES } from './router-context';
 
 export function createLoansRouter(ctx: RouterContext) {
   const {
@@ -54,9 +54,7 @@ export function createLoansRouter(ctx: RouterContext) {
           referenceNumber: input.referenceNumber,
           principalCents: BigInt(Math.round(input.principalPesos * 100)),
           totalAmountCents: BigInt(Math.round(input.totalAmountPesos * 100)),
-          amortizationCents: BigInt(
-            Math.round(input.amortizationPesos * 100),
-          ),
+          amortizationCents: BigInt(Math.round(input.amortizationPesos * 100)),
           startDate: new Date(input.startDate),
           endDate: input.endDate ? new Date(input.endDate) : undefined,
         });

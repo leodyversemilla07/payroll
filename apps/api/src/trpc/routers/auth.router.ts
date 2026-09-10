@@ -3,8 +3,13 @@ import { z } from 'zod';
 import type { RouterContext } from './router-context';
 
 export function createAuthRouter(ctx: RouterContext) {
-  const { trpc, publicProcedure, protectedProcedure, authService, auditService } =
-    ctx;
+  const {
+    trpc,
+    publicProcedure,
+    protectedProcedure,
+    authService,
+    auditService,
+  } = ctx;
 
   return trpc.router({
     login: publicProcedure

@@ -6,16 +6,16 @@ import type {
 import {
   allocateNinetiethBucket,
   annualizeTax,
+  CutoffType,
   calculateEmployee13thMonth,
   calculateFinalPay,
   calculateMealAllowanceCap,
+  calculatePagibigContribution,
   calculatePhilhealthContribution,
   calculatePhilippinePayroll,
-  calculatePagibigContribution,
   calculateSssContribution,
   calculateStatutorySeparationPay,
   calculateWithholdingTax,
-  CutoffType,
   DeMinimisCategory,
   evaluateAllowances,
   PayBasis,
@@ -384,9 +384,7 @@ describe("Statutory boundary conditions", () => {
     it("taxes all excess once the cap is exhausted", () => {
       const legacy = calculatePhilippinePayroll(bucketInput());
       const result = calculatePhilippinePayroll(bucketInput(9000000n));
-      expect(result.taxableAllowancesCents).toBe(
-        legacy.taxableAllowancesCents,
-      );
+      expect(result.taxableAllowancesCents).toBe(legacy.taxableAllowancesCents);
       expect(result.withholdingTaxCents).toBe(legacy.withholdingTaxCents);
       expect(result.ytdOtherBenefitsTotalCents).toBe(9175000n);
     });
@@ -413,9 +411,11 @@ describe("Statutory boundary conditions", () => {
         totalUsedCents: 9125000n,
       });
       // Negative history clamps to zero instead of granting extra room.
-      expect(
-        allocateNinetiethBucket({ ytdUsedCents: -5n }),
-      ).toEqual({ exemptCents: 0n, taxableCents: 0n, totalUsedCents: 0n });
+      expect(allocateNinetiethBucket({ ytdUsedCents: -5n })).toEqual({
+        exemptCents: 0n,
+        taxableCents: 0n,
+        totalUsedCents: 0n,
+      });
     });
   });
 

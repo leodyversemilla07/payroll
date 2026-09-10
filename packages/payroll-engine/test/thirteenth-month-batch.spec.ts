@@ -132,30 +132,18 @@ describe("DOLE 13th Month Pay Batch & Compliance Engine", () => {
   describe("months of service in a tax year", () => {
     it("credits a full 12 months for prior-year hires", () => {
       // Midday timestamps keep the calendar month stable in any timezone.
-      expect(calculateMonthsWorkedInYear("2024-01-15T12:00:00", 2026)).toBe(
-        12,
-      );
-      expect(calculateMonthsWorkedInYear(new Date(2020, 5, 10), 2026)).toBe(
-        12,
-      );
+      expect(calculateMonthsWorkedInYear("2024-01-15T12:00:00", 2026)).toBe(12);
+      expect(calculateMonthsWorkedInYear(new Date(2020, 5, 10), 2026)).toBe(12);
     });
 
     it("prorates same-year hires from the hire month", () => {
-      expect(calculateMonthsWorkedInYear("2026-01-20T12:00:00", 2026)).toBe(
-        12,
-      );
-      expect(calculateMonthsWorkedInYear("2026-06-15T12:00:00", 2026)).toBe(
-        7,
-      );
-      expect(calculateMonthsWorkedInYear("2026-12-01T12:00:00", 2026)).toBe(
-        1,
-      );
+      expect(calculateMonthsWorkedInYear("2026-01-20T12:00:00", 2026)).toBe(12);
+      expect(calculateMonthsWorkedInYear("2026-06-15T12:00:00", 2026)).toBe(7);
+      expect(calculateMonthsWorkedInYear("2026-12-01T12:00:00", 2026)).toBe(1);
     });
 
     it("yields zero for future-dated hires and invalid dates", () => {
-      expect(calculateMonthsWorkedInYear("2027-03-01T12:00:00", 2026)).toBe(
-        0,
-      );
+      expect(calculateMonthsWorkedInYear("2027-03-01T12:00:00", 2026)).toBe(0);
       expect(calculateMonthsWorkedInYear("not-a-date", 2026)).toBe(0);
     });
   });
