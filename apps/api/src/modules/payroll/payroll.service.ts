@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma, prisma } from '@workspace/db';
@@ -45,6 +47,29 @@ interface ExecuteThirteenthMonthRunParams {
   paymentDate: Date;
 }
 
+export type PayrollRunAction = 'APPROVE' | 'DISBURSE' | 'CANCEL';
+
+const PAYROLL_TRANSITIONS: Record<PayrollRunAction, readonly string[]> = {
+  APPROVE: ['AUDITED'],
+  DISBURSE: ['APPROVED'],
+  CANCEL: ['DRAFT', 'PROCESSING', 'AUDITED', 'APPROVED'],
+};
+
+/**
+ * Guards the payroll run lifecycle. Disbursed money cannot be un-disbursed
+ * through this path; cancel first, then re-run.
+ */
+export function assertValidPayrollTransition(
+  currentStatus: string,
+  action: PayrollRunAction,
+): void {
+  if (!PAYROLL_TRANSITIONS[action].includes(currentStatus)) {
+    throw new ConflictException(
+      `Payroll run cannot be ${action.toLowerCase()}d from status ${currentStatus}`,
+    );
+  }
+}
+
 @Injectable()
 export class PayrollService {
   constructor(private readonly timekeepingService: TimekeepingService) {}
@@ -76,6 +101,143 @@ export class PayrollService {
           },
         },
       },
+    });
+  }
+
+  /**
+   * Approves an audited run for disbursement: the checker step of
+   * maker-checker. The approver must differ from the processor.
+   */
+  async approvePayrollRun(params: {
+    runId: string;
+    organizationId: string;
+    approvedById: string;
+  }) {
+    return prisma.$transaction(async (transaction) => {
+      const run = await transaction.payrollRun.findFirst({
+        where: { id: params.runId, organizationId: params.organizationId },
+      });
+      if (!run) {
+        throw new NotFoundException('Payroll run not found');
+      }
+      assertValidPayrollTransition(run.status, 'APPROVE');
+      if (run.processedById === params.approvedById) {
+        throw new ForbiddenException(
+          'The approver must differ from the employee who processed the run (maker-checker)',
+        );
+      }
+      return transaction.payrollRun.update({
+        where: { id: run.id },
+        data: { status: 'APPROVED', approvedById: params.approvedById },
+        include: { payslips: true },
+      });
+    });
+  }
+
+  /** Disburses an approved run: the point of no return for cancellation. */
+  async disbursePayrollRun(params: {
+    runId: string;
+    organizationId: string;
+  }) {
+    return prisma.$transaction(async (transaction) => {
+      const run = await transaction.payrollRun.findFirst({
+        where: { id: params.runId, organizationId: params.organizationId },
+      });
+      if (!run) {
+        throw new NotFoundException('Payroll run not found');
+      }
+      assertValidPayrollTransition(run.status, 'DISBURSE');
+      return transaction.payrollRun.update({
+        where: { id: run.id },
+        data: { status: 'DISBURSED' },
+        include: { payslips: true },
+      });
+    });
+  }
+
+  /**
+   * Cancels a run and reverses everything it posted: loan amortization is
+   * credited back (every payment row implies a previously active loan, so
+   * reactivation is an exact reversal), then payments, payslips, and the
+   * run row itself are removed so the cutoff can be re-run cleanly and
+   * later year-to-date bucket accounting stays exact. The audit log keeps
+   * the full trail. Blocked past disbursement, and blocked when a later
+   * run already builds on this one — cancel the later run first.
+   * (Bank transmittal batches, once persisted, must additionally be voided
+   * here before the run row is removed.)
+   */
+  async cancelPayrollRun(params: {
+    runId: string;
+    organizationId: string;
+  }) {
+    return prisma.$transaction(async (transaction) => {
+      const run = await transaction.payrollRun.findFirst({
+        where: { id: params.runId, organizationId: params.organizationId },
+      });
+      if (!run) {
+        throw new NotFoundException('Payroll run not found');
+      }
+      assertValidPayrollTransition(run.status, 'CANCEL');
+
+      // Direction matters: cancelling a regular run only over-withholds
+      // later specials (safe, refunded at annualization), but cancelling a
+      // special run would leave later regular runs under-withheld. Hence
+      // regular cancels ignore later specials, while special cancels are
+      // blocked by any later same-year run.
+      const isSpecialRun = run.cutoffSequence === 'SPECIAL_RUN';
+      const runYear = run.cutoffEndDate.getUTCFullYear();
+      const laterRun = await transaction.payrollRun.findFirst({
+        where: {
+          organizationId: params.organizationId,
+          id: { not: run.id },
+          status: { not: 'CANCELLED' },
+          ...(isSpecialRun
+            ? {
+                cutoffEndDate: {
+                  gt: run.cutoffEndDate,
+                  lt: new Date(Date.UTC(runYear + 1, 0, 1)),
+                },
+              }
+            : {
+                cutoffEndDate: { gt: run.cutoffEndDate },
+                cutoffSequence: { not: 'SPECIAL_RUN' },
+              }),
+        },
+        select: { id: true },
+      });
+      if (laterRun) {
+        throw new ConflictException(
+          'A later payroll run already builds on this run; cancel the later run first',
+        );
+      }
+
+      const loanPayments = await transaction.loanPayment.findMany({
+        where: { payslip: { payrollRunId: run.id } },
+        select: { loanId: true, amountPaidCents: true },
+      });
+      for (const payment of loanPayments) {
+        const restored = await transaction.employeeLoan.updateMany({
+          where: { id: payment.loanId },
+          data: {
+            balanceCents: { increment: payment.amountPaidCents },
+            isActive: true,
+          },
+        });
+        if (restored.count !== 1) {
+          throw new ConflictException(
+            `Loan ${payment.loanId} changed while the run was being cancelled`,
+          );
+        }
+      }
+      await transaction.loanPayment.deleteMany({
+        where: { payslip: { payrollRunId: run.id } },
+      });
+      await transaction.payslip.deleteMany({
+        where: { payrollRunId: run.id },
+      });
+      await transaction.payrollRun.delete({ where: { id: run.id } });
+
+      return { success: true, runId: run.id };
     });
   }
 

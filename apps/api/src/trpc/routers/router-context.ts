@@ -35,6 +35,10 @@ export const PAYROLL_TRIGGER_ROLES = [
   Role.SUPER_ADMIN,
   Role.PAYROLL_SPECIALIST,
 ] as const;
+export const PAYROLL_APPROVAL_ROLES = [
+  Role.SUPER_ADMIN,
+  Role.HR_ADMIN,
+] as const;
 export const LEAVE_APPROVAL_ROLES = [
   Role.SUPER_ADMIN,
   Role.HR_ADMIN,

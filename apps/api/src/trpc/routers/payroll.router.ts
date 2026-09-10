@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { PAYROLL_TRIGGER_ROLES } from './router-context';
+import {
+  PAYROLL_APPROVAL_ROLES,
+  PAYROLL_TRIGGER_ROLES,
+} from './router-context';
 import type { RouterContext } from './router-context';
 
 export function createPayrollRouter(ctx: RouterContext) {
@@ -27,11 +30,7 @@ export function createPayrollRouter(ctx: RouterContext) {
           cutoffStartDate: z.string().date(),
           cutoffEndDate: z.string().date(),
           paymentDate: z.string().date(),
-          cutoffSequence: z.enum([
-            'FIRST_CUTOFF',
-            'SECOND_CUTOFF',
-            'SPECIAL_RUN',
-          ]),
+          cutoffSequence: z.enum(['FIRST_CUTOFF', 'SECOND_CUTOFF']),
         }),
       )
       .mutation(async ({ input, ctx }) => {
@@ -79,6 +78,61 @@ export function createPayrollRouter(ctx: RouterContext) {
           newValue: { status: payrollRun.status },
         });
         return payrollRun;
+      }),
+
+    approveRun: trpc
+      .procedureForRoles(PAYROLL_APPROVAL_ROLES)
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(async ({ input, ctx }) => {
+        const payrollRun = await payrollService.approvePayrollRun({
+          runId: input.runId,
+          organizationId: ctx.user.organizationId,
+          approvedById: ctx.user.id,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'APPROVE',
+          entityType: 'PayrollRun',
+          entityId: payrollRun.id,
+          newValue: { status: payrollRun.status },
+        });
+        return payrollRun;
+      }),
+
+    disburseRun: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(async ({ input, ctx }) => {
+        const payrollRun = await payrollService.disbursePayrollRun({
+          runId: input.runId,
+          organizationId: ctx.user.organizationId,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'PayrollRun',
+          entityId: payrollRun.id,
+          newValue: { status: payrollRun.status },
+        });
+        return payrollRun;
+      }),
+
+    cancelRun: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await payrollService.cancelPayrollRun({
+          runId: input.runId,
+          organizationId: ctx.user.organizationId,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'PayrollRun',
+          entityId: result.runId,
+        });
+        return result;
       }),
   });
 }
