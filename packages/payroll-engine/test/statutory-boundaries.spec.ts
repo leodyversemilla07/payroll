@@ -8,6 +8,7 @@ import {
   annualizeTax,
   calculateEmployee13thMonth,
   calculateFinalPay,
+  calculateMealAllowanceCap,
   calculatePhilhealthContribution,
   calculatePhilippinePayroll,
   calculatePagibigContribution,
@@ -188,6 +189,18 @@ describe("Statutory boundary conditions", () => {
       expect(result.nonTaxableAllowancesCents).toBe(0n);
       expect(result.deMinimisExcessTaxableCents).toBe(50000n);
       expect(result.taxableAllowancesCents).toBe(50000n);
+    });
+  });
+
+  describe("overtime meal allowance cap", () => {
+    it("caps meals at 30% of the regional minimum wage per OT day", () => {
+      // NCR PHP 755/day x 5 OT days x 30% = PHP 1,132.50.
+      expect(calculateMealAllowanceCap(75500n, 5)).toBe(113250n);
+      expect(calculateMealAllowanceCap(75500n, 0)).toBe(0n);
+      expect(calculateMealAllowanceCap(75500n, -2)).toBe(0n);
+      expect(calculateMealAllowanceCap(0n, 5)).toBe(0n);
+      // Fractional days floor to whole days actually worked.
+      expect(calculateMealAllowanceCap(75500n, 2.9)).toBe(45300n);
     });
   });
 

@@ -26,6 +26,23 @@ export const MONTHLY_DE_MINIMIS_LIMITS: Record<DeMinimisCategory, Centavos> = {
 };
 
 /**
+ * Per-incident ceiling for overtime/night-shift meal allowances: 30% of the
+ * regional basic minimum wage per day actually worked overtime or on night
+ * shift (RR 29-2025). Callers pre-cap meal grants with this helper (e.g.
+ * NCR PHP 755/day x 5 OT days = PHP 1,132.50) before submitting them as
+ * DAILY_MEAL_OVERTIME allowances; the monthly table entry remains only a
+ * fallback guard.
+ */
+export function calculateMealAllowanceCap(
+  dailyMinimumWageCents: Centavos,
+  overtimeDays: number,
+): Centavos {
+  const days = Math.max(0, Math.floor(overtimeDays));
+  if (dailyMinimumWageCents <= 0n || days === 0) return 0n;
+  return (dailyMinimumWageCents * 30n * BigInt(days)) / 100n;
+}
+
+/**
  * Evaluates a list of employee allowances for a pay period.
  * Separates taxable allowances, non-taxable de minimis, and computes any excess that spills into taxable income.
  */

@@ -31,6 +31,11 @@ export const PAYROLL_ROLES = [
   Role.HR_ADMIN,
   Role.PAYROLL_SPECIALIST,
 ] as const;
+// Intentional separation of duties (maker-checker): payroll specialists
+// and super admins execute runs; super admins and HR admins approve them.
+// HR admins can view payroll but cannot trigger execution, and the service
+// additionally forbids self-approval, so no single user can run and approve
+// their own payroll.
 export const PAYROLL_TRIGGER_ROLES = [
   Role.SUPER_ADMIN,
   Role.PAYROLL_SPECIALIST,

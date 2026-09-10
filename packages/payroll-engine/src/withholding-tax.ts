@@ -55,6 +55,12 @@ export function calculateWithholdingTax(
   isSemiMonthly = true,
   isMinimumWageEarner = false,
 ): Centavos {
+  // Full exemption for minimum wage earners, matching industry practice and
+  // the RA 9504 exemption's intent. A strict reading of RR 8-2018 exempts
+  // only statutory minimum wage plus holiday, overtime, night differential,
+  // and hazard pay (leaving some non-SMW allowances arguably taxable);
+  // over-withholding from minimum-wage earners is the worse failure mode,
+  // so the exemption is applied to the whole withholding base instead.
   if (isMinimumWageEarner || taxableCompensationCents <= 0n) {
     return 0n;
   }
