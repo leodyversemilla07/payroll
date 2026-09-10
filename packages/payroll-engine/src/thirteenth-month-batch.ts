@@ -51,6 +51,24 @@ export interface DoleComplianceReportInput {
 }
 
 /**
+ * Whole months of service in a tax year from a hire date, for 13th-month
+ * proration. Same rule the DOLE report uses: a full 12 when hired in a
+ * prior year, otherwise 12 minus the hire month (minimum 1); future-dated
+ * hires yield 0.
+ */
+export function calculateMonthsWorkedInYear(
+  hireDate: Date | string,
+  taxYear: number,
+): number {
+  const hired = typeof hireDate === "string" ? new Date(hireDate) : hireDate;
+  if (Number.isNaN(hired.getTime())) return 0;
+  const hireYear = hired.getFullYear();
+  if (hireYear > taxYear) return 0;
+  if (hireYear === taxYear) return Math.max(1, 12 - hired.getMonth());
+  return 12;
+}
+
+/**
  * Computes individual 13th-month pay based on DOLE PD 851:
  * 13th Month Pay = Total Basic Salary Earned in the Calendar Year / 12
  */

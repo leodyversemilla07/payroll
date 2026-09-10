@@ -12,12 +12,19 @@ import type {
 } from '@workspace/payroll-engine';
 import {
   CutoffType,
+  allocateNinetiethBucket,
+  calculateEmployee13thMonth,
+  calculateMonthsWorkedInYear,
   calculatePhilippinePayroll,
+  calculateWithholdingTax,
   DeMinimisCategory,
   PayBasis,
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
-import { TimekeepingService } from '../timekeeping/timekeeping.service';
+import {
+  TimekeepingService,
+  countUnpaidAbsenceDays,
+} from '../timekeeping/timekeeping.service';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
 
@@ -28,6 +35,14 @@ interface ExecutePayrollRunParams {
   cutoffEndDate: Date;
   paymentDate: Date;
   cutoffSequence: 'FIRST_CUTOFF' | 'SECOND_CUTOFF' | 'SPECIAL_RUN';
+}
+
+interface ExecuteThirteenthMonthRunParams {
+  organizationId: string;
+  processedById: string;
+  cutoffStartDate: Date;
+  cutoffEndDate: Date;
+  paymentDate: Date;
 }
 
 @Injectable()
@@ -210,7 +225,7 @@ export class PayrollService {
         Date.UTC(params.cutoffEndDate.getUTCFullYear() + 1, 0, 1),
       );
       const ytdBucket = await transaction.payslip.aggregate({
-        _sum: { deMinimisExcessCents: true },
+        _sum: { deMinimisExcessCents: true, bonusPaidCents: true },
         where: {
           employeeId: employee.id,
           payrollRun: {
@@ -244,7 +259,8 @@ export class PayrollService {
         allowances,
         loans,
         ytdOtherBenefitsCents:
-          ytdBucket._sum.deMinimisExcessCents ?? 0n,
+          (ytdBucket._sum.deMinimisExcessCents ?? 0n) +
+          (ytdBucket._sum.bonusPaidCents ?? 0n),
         // 13th-month/bonus disbursements have no dedicated run type yet;
         // once they do, their bucket share is passed here so payouts share
         // the PHP 90,000 cap with de minimis excess.
@@ -335,6 +351,236 @@ export class PayrollService {
         totalDeductionsCents: runTotalDeductions,
         totalNetCents: runTotalNet,
         totalEmployerCostCents: runTotalEmployerCost,
+        status: 'AUDITED',
+      },
+      include: { payslips: true },
+    });
+  }
+
+  /**
+   * Executes an annual 13th-month disbursement run (PD 851).
+   *
+   * Unlike regular runs this disburses computed 13th-month payouts only:
+   * no basic pay, no timekeeping lookup, no statutory contributions
+   * (bonuses are not subject to SSS/PhilHealth/Pag-IBIG), and no loan
+   * amortization. Each payout is priced against the PHP 90,000 annual
+   * bucket together with year-to-date bonuses and de minimis excess, and
+   * the bucket-taxable remainder is withheld using the monthly TRAIN
+   * table; year-end annualization trues up any difference. All active
+   * employees are disbursed (managers included by company policy); the
+   * DOLE compliance report separately limits statutory coverage to
+   * rank-and-file staff.
+   */
+  async executeThirteenthMonthRun(params: ExecuteThirteenthMonthRunParams) {
+    const normalized = {
+      ...params,
+      cutoffStartDate: normalizeDate(params.cutoffStartDate),
+      cutoffEndDate: normalizeDate(params.cutoffEndDate),
+      paymentDate: normalizeDate(params.paymentDate),
+    };
+
+    if (normalized.cutoffStartDate > normalized.cutoffEndDate) {
+      throw new BadRequestException(
+        'Cutoff start date must not be after cutoff end date',
+      );
+    }
+    if (normalized.paymentDate < normalized.cutoffEndDate) {
+      throw new BadRequestException(
+        'Payment date must not be before cutoff end date',
+      );
+    }
+
+    const taxYear = normalized.cutoffEndDate.getUTCFullYear();
+    const runKey = {
+      ...normalized,
+      cutoffSequence: 'SPECIAL_RUN' as const,
+    };
+
+    for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
+      try {
+        return await prisma.$transaction(
+          (transaction) =>
+            this.executeThirteenthMonthInTransaction(transaction, {
+              ...normalized,
+              taxYear,
+            }),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 10_000,
+            timeout: 120_000,
+          },
+        );
+      } catch (error) {
+        if (isPrismaError(error, 'P2034')) {
+          if (attempt < PAYROLL_TRANSACTION_RETRIES) continue;
+          throw new ConflictException(
+            'Payroll data changed concurrently; retry the payroll run',
+          );
+        }
+
+        if (isPrismaError(error, 'P2002')) {
+          return this.resolveExistingRun(runKey);
+        }
+
+        throw error;
+      }
+    }
+
+    throw new ConflictException('Payroll run could not be completed');
+  }
+
+  private async executeThirteenthMonthInTransaction(
+    transaction: Prisma.TransactionClient,
+    params: ExecuteThirteenthMonthRunParams & { taxYear: number },
+  ) {
+    const runKey = {
+      organizationId: params.organizationId,
+      processedById: params.processedById,
+      cutoffStartDate: params.cutoffStartDate,
+      cutoffEndDate: params.cutoffEndDate,
+      paymentDate: params.paymentDate,
+      cutoffSequence: 'SPECIAL_RUN' as const,
+    };
+    const existing = await transaction.payrollRun.findUnique({
+      where: payrollRunKey(runKey),
+      include: { payslips: true },
+    });
+
+    if (existing) return this.assertIdempotentMatch(existing, runKey);
+
+    const payrollRun = await transaction.payrollRun.create({
+      data: {
+        organizationId: params.organizationId,
+        processedById: params.processedById,
+        cutoffSequence: 'SPECIAL_RUN',
+        cutoffStartDate: params.cutoffStartDate,
+        cutoffEndDate: params.cutoffEndDate,
+        paymentDate: params.paymentDate,
+        status: 'PROCESSING',
+      },
+    });
+
+    const employees = await transaction.employee.findMany({
+      where: {
+        organizationId: params.organizationId,
+        employmentStatus: 'ACTIVE',
+      },
+      include: { compensation: true },
+    });
+
+    if (employees.length === 0) {
+      throw new UnprocessableEntityException(
+        'Payroll cannot proceed without active employees',
+      );
+    }
+
+    const yearStart = new Date(Date.UTC(params.taxYear, 0, 1));
+    const yearEnd = new Date(Date.UTC(params.taxYear + 1, 0, 1));
+
+    let runTotalGross = 0n;
+    let runTotalDeductions = 0n;
+    let runTotalNet = 0n;
+
+    for (const employee of employees) {
+      const compensation = employee.compensation;
+      if (!compensation) {
+        throw new UnprocessableEntityException(
+          `Employee ${employee.employeeNumber} has no compensation profile`,
+        );
+      }
+
+      this.assertValidCompensation(employee.employeeNumber, {
+        payBasis: employee.payBasis,
+        monthlyRate: compensation.basicRateMonthlyCents,
+        dailyRate: compensation.basicRateDailyCents,
+        hourlyRate: compensation.basicRateHourlyCents,
+      });
+
+      const monthsWorked = calculateMonthsWorkedInYear(
+        employee.hireDate,
+        params.taxYear,
+      );
+      const dtrRows = await transaction.dailyTimeRecord.findMany({
+        where: {
+          employeeId: employee.id,
+          date: { gte: yearStart, lt: yearEnd },
+        },
+        select: { date: true, dayType: true, isAbsent: true },
+      });
+      const unpaidAbsenceDays = countUnpaidAbsenceDays(
+        dtrRows,
+        params.taxYear,
+      );
+
+      const ytdBucket = await transaction.payslip.aggregate({
+        _sum: { deMinimisExcessCents: true, bonusPaidCents: true },
+        where: {
+          employeeId: employee.id,
+          payrollRun: {
+            cutoffEndDate: { gte: yearStart, lt: yearEnd },
+          },
+        },
+      });
+      const ytdUsed =
+        (ytdBucket._sum.deMinimisExcessCents ?? 0n) +
+        (ytdBucket._sum.bonusPaidCents ?? 0n);
+
+      const payout = calculateEmployee13thMonth(
+        {
+          employeeId: employee.id,
+          employeeNumber: employee.employeeNumber,
+          fullName: `${employee.firstName} ${employee.lastName}`,
+          monthlyBasicRateCents: compensation.basicRateMonthlyCents,
+          hireDate: employee.hireDate.toISOString().slice(0, 10),
+          monthsWorkedInYear: monthsWorked,
+          unpaidAbsenceDays,
+          // Bucket pricing below owns the PHP 90,000 split against live
+          // YTD usage (including de minimis excess), so no prior offset here.
+          otherTaxableBonusesCents: 0n,
+        },
+        compensation.basicRateDailyCents,
+      );
+
+      const bucket = allocateNinetiethBucket({
+        ytdUsedCents: ytdUsed,
+        periodBonusesCents: payout.thirteenthMonthPayCents,
+      });
+      const withholdingTaxCents = compensation.isTaxExempt
+        ? 0n
+        : calculateWithholdingTax(bucket.taxableCents, false, false);
+      const netPayCents =
+        payout.thirteenthMonthPayCents > withholdingTaxCents
+          ? payout.thirteenthMonthPayCents - withholdingTaxCents
+          : 0n;
+
+      await transaction.payslip.create({
+        data: {
+          payrollRunId: payrollRun.id,
+          employeeId: employee.id,
+          basicPayCents: 0n,
+          taxableAllowancesCents: bucket.taxableCents,
+          nonTaxableAllowancesCents: bucket.exemptCents,
+          grossPayCents: payout.thirteenthMonthPayCents,
+          withholdingTaxCents,
+          totalDeductionsCents: withholdingTaxCents,
+          netPayCents,
+          bonusPaidCents: payout.thirteenthMonthPayCents,
+          deMinimisExcessCents: 0n,
+        },
+      });
+
+      runTotalGross += payout.thirteenthMonthPayCents;
+      runTotalDeductions += withholdingTaxCents;
+      runTotalNet += netPayCents;
+    }
+
+    return transaction.payrollRun.update({
+      where: { id: payrollRun.id },
+      data: {
+        totalGrossCents: runTotalGross,
+        totalDeductionsCents: runTotalDeductions,
+        totalNetCents: runTotalNet,
+        totalEmployerCostCents: 0n,
         status: 'AUDITED',
       },
       include: { payslips: true },

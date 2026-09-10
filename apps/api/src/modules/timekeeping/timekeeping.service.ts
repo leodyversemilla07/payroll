@@ -334,3 +334,44 @@ export function summarizeAttendanceRecords(
     holidayNightDiffHours: holidayNightDiffMinutes / 60,
   };
 }
+
+export interface AbsenceDayRecord {
+  date: Date | string;
+  dayType: string;
+  isAbsent: boolean;
+}
+
+/**
+ * Counts unpaid absence days in a calendar year for 13th-month LWOP
+ * deduction. Mirrors summarizeAttendanceRecords: only absences on regular
+ * workdays (and special working holidays) reduce the 13th-month base.
+ */
+export function countUnpaidAbsenceDays(
+  records: AbsenceDayRecord[],
+  taxYear: number,
+): number {
+  const yearStart = Date.UTC(taxYear, 0, 1);
+  const yearEnd = Date.UTC(taxYear + 1, 0, 1);
+  let days = 0;
+
+  for (const record of records) {
+    if (!record.isAbsent) {
+      continue;
+    }
+    const time =
+      record.date instanceof Date
+        ? record.date.getTime()
+        : Date.parse(record.date);
+    if (Number.isNaN(time) || time < yearStart || time >= yearEnd) {
+      continue;
+    }
+    if (
+      record.dayType === 'REGULAR_WORKDAY' ||
+      record.dayType === 'SPECIAL_WORKING_HOLIDAY'
+    ) {
+      days += 1;
+    }
+  }
+
+  return days;
+}

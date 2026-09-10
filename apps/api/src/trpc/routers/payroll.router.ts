@@ -4,6 +4,9 @@ import type { RouterContext } from './router-context';
 
 export function createPayrollRouter(ctx: RouterContext) {
   const { trpc, payrollProcedure, payrollService, auditService } = ctx;
+  const payrollTriggerProcedure = trpc.procedureForRoles(
+    PAYROLL_TRIGGER_ROLES,
+  );
 
   return trpc.router({
     listRuns: payrollProcedure.query(({ ctx }) =>
@@ -19,9 +22,7 @@ export function createPayrollRouter(ctx: RouterContext) {
         ),
       ),
 
-    triggerRun: trpc
-      .procedureForRoles(PAYROLL_TRIGGER_ROLES)
-      .input(
+    triggerRun: payrollTriggerProcedure.input(
         z.object({
           cutoffStartDate: z.string().date(),
           cutoffEndDate: z.string().date(),
@@ -41,6 +42,33 @@ export function createPayrollRouter(ctx: RouterContext) {
           cutoffEndDate: new Date(input.cutoffEndDate),
           paymentDate: new Date(input.paymentDate),
           cutoffSequence: input.cutoffSequence,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'PayrollRun',
+          entityId: payrollRun.id,
+          newValue: { status: payrollRun.status },
+        });
+        return payrollRun;
+      }),
+
+    triggerThirteenthMonthRun: payrollTriggerProcedure
+      .input(
+        z.object({
+          cutoffStartDate: z.string().date(),
+          cutoffEndDate: z.string().date(),
+          paymentDate: z.string().date(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const payrollRun = await payrollService.executeThirteenthMonthRun({
+          organizationId: ctx.user.organizationId,
+          processedById: ctx.user.id,
+          cutoffStartDate: new Date(input.cutoffStartDate),
+          cutoffEndDate: new Date(input.cutoffEndDate),
+          paymentDate: new Date(input.paymentDate),
         });
         await auditService.record({
           user: ctx.user,
