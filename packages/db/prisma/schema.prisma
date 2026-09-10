@@ -71,6 +71,8 @@ model Branch {
   employees       Employee[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 model Department {
@@ -83,6 +85,8 @@ model Department {
   employees       Employee[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 // ----------------------------------------------------
@@ -142,6 +146,8 @@ model Employee {
   user              User?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  @@index([organizationId])
 }
 
 model User {
@@ -226,6 +232,8 @@ model EmployeeAllowance {
   isActive          Boolean           @default(true)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  @@index([employeeId])
 }
 
 // ----------------------------------------------------
@@ -271,6 +279,7 @@ model DailyTimeRecord {
   updatedAt         DateTime     @updatedAt
 
   @@unique([employeeId, date])
+  @@index([date])
 }
 
 model OvertimeRequest {
@@ -285,6 +294,8 @@ model OvertimeRequest {
   approvedById      String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+
+  @@index([employeeId])
 }
 
 model LeaveBalance {
@@ -316,6 +327,8 @@ model LeaveRequest {
   approvedById      String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+
+  @@index([employeeId])
 }
 
 // ----------------------------------------------------
@@ -348,6 +361,8 @@ model EmployeeLoan {
   payments          LoanPayment[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  @@index([employeeId])
 }
 
 model LoanPayment {
@@ -360,6 +375,8 @@ model LoanPayment {
   balanceAfterCents BigInt
   paymentDate       DateTime     @default(now())
   createdAt         DateTime     @default(now())
+
+  @@index([loanId])
 }
 
 // ----------------------------------------------------
@@ -465,6 +482,8 @@ model Payslip {
   updatedAt             DateTime      @updatedAt
 
   @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+  @@index([createdAt])
 }
 
 // ----------------------------------------------------
@@ -494,6 +513,8 @@ model BankTransmittalBatch {
   fileExportPath  String
   generatedById   String
   createdAt       DateTime     @default(now())
+
+  @@index([payrollRunId])
 }
 
 model AuditLog {
