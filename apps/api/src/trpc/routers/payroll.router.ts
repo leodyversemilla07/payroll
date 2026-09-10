@@ -1,0 +1,56 @@
+import { z } from 'zod';
+import { PAYROLL_TRIGGER_ROLES } from './router-context';
+import type { RouterContext } from './router-context';
+
+export function createPayrollRouter(ctx: RouterContext) {
+  const { trpc, payrollProcedure, payrollService, auditService } = ctx;
+
+  return trpc.router({
+    listRuns: payrollProcedure.query(({ ctx }) =>
+      payrollService.listPayrollRuns(ctx.user.organizationId),
+    ),
+
+    getRunDetails: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .query(({ input, ctx }) =>
+        payrollService.getPayrollRunDetails(
+          input.runId,
+          ctx.user.organizationId,
+        ),
+      ),
+
+    triggerRun: trpc
+      .procedureForRoles(PAYROLL_TRIGGER_ROLES)
+      .input(
+        z.object({
+          cutoffStartDate: z.string().date(),
+          cutoffEndDate: z.string().date(),
+          paymentDate: z.string().date(),
+          cutoffSequence: z.enum([
+            'FIRST_CUTOFF',
+            'SECOND_CUTOFF',
+            'SPECIAL_RUN',
+          ]),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const payrollRun = await payrollService.executePayrollRun({
+          organizationId: ctx.user.organizationId,
+          processedById: ctx.user.id,
+          cutoffStartDate: new Date(input.cutoffStartDate),
+          cutoffEndDate: new Date(input.cutoffEndDate),
+          paymentDate: new Date(input.paymentDate),
+          cutoffSequence: input.cutoffSequence,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'PayrollRun',
+          entityId: payrollRun.id,
+          newValue: { status: payrollRun.status },
+        });
+        return payrollRun;
+      }),
+  });
+}
