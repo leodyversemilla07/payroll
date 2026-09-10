@@ -55,6 +55,22 @@ export function calculateEmployee13thMonth(
   emp: ThirteenthMonthEmployeeInput,
   dailyRateCents?: bigint,
 ): ThirteenthMonthEmployeeResult {
+  // PD 851 covers rank-and-file employees with at least one month of service
+  // in the calendar year. Shorter tenure carries no 13th-month entitlement.
+  if (emp.monthsWorkedInYear < 1) {
+    return {
+      employeeId: emp.employeeId,
+      employeeNumber: emp.employeeNumber,
+      fullName: emp.fullName,
+      totalBasicEarnedCents: 0n,
+      thirteenthMonthPayCents: 0n,
+      taxExemptPortionCents: 0n,
+      taxableExcessCents: 0n,
+      isProrated: true,
+      monthsWorked: 0,
+    };
+  }
+
   // 1. Calculate base basic salary earned
   const months = Math.min(12, Math.max(1, emp.monthsWorkedInYear));
   const baseEarned = emp.monthlyBasicRateCents * BigInt(months);

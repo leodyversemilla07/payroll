@@ -16,7 +16,7 @@ describe("DOLE Service Incentive Leave (SIL) & Monetization Engine", () => {
     expect(result.taxablePortionCents).toBe(0n);
   });
 
-  it("should clamp tax exemption to BIR statutory ceiling of 10 days", () => {
+  it("should clamp tax exemption to the BIR 12-day ceiling (RR 29-2025)", () => {
     // 15 days unused leave monetization, Daily rate: PHP 2,000.00 (200,000 cents)
     const dailyRateCents = 200000n;
     const result = calculateSilCashConversion({
@@ -26,10 +26,10 @@ describe("DOLE Service Incentive Leave (SIL) & Monetization Engine", () => {
 
     // Total: 15 * 2,000 = PHP 30,000.00
     expect(result.totalMonetizedCashCents).toBe(3000000n);
-    // 10 days exempt: 10 * 2,000 = PHP 20,000.00
-    expect(result.taxExemptDeMinimisCents).toBe(2000000n);
-    // 5 days excess: 5 * 2,000 = PHP 10,000.00
-    expect(result.taxablePortionCents).toBe(1000000n);
+    // 12 days exempt: 12 * 2,000 = PHP 24,000.00
+    expect(result.taxExemptDeMinimisCents).toBe(2400000n);
+    // 3 days excess: 3 * 2,000 = PHP 6,000.00
+    expect(result.taxablePortionCents).toBe(600000n);
   });
 
   it("should handle fractional leave balances accurately", () => {

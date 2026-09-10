@@ -26,14 +26,19 @@ export enum DayType {
   DOUBLE_HOLIDAY = "DOUBLE_HOLIDAY",
 }
 
+// BIR de minimis ceilings per RR No. 2-98 as amended, latest by RR No. 29-2025
+// (effective January 6, 2026). Amounts within a category ceiling are exempt
+// from income and withholding tax; any excess spills into the PHP 90,000
+// annual 13th-month-and-other-benefits bucket (TRAIN Law).
 export enum DeMinimisCategory {
-  RICE_SUBSIDY = "RICE_SUBSIDY", // Ceiling: PHP 2,000 / month
-  UNIFORM_CLOTHING = "UNIFORM_CLOTHING", // Ceiling: PHP 6,000 / year (PHP 500 / mo)
-  MEDICAL_CASH_ALLOWANCE = "MEDICAL_CASH_ALLOWANCE", // Ceiling: PHP 1,500 / semester (PHP 250 / mo)
-  LAUNDRY_ALLOWANCE = "LAUNDRY_ALLOWANCE", // Ceiling: PHP 300 / month
-  DAILY_MEAL_OVERTIME = "DAILY_MEAL_OVERTIME", // Ceiling: 25% of basic minimum wage
-  ACHIEVEMENT_AWARD = "ACHIEVEMENT_AWARD", // Ceiling: PHP 10,000 / year
-  GIFTS_CHRISTMAS_MAJOR = "GIFTS_CHRISTMAS_MAJOR", // Ceiling: PHP 5,000 / year
+  RICE_SUBSIDY = "RICE_SUBSIDY", // Ceiling: PHP 2,500 / month
+  UNIFORM_CLOTHING = "UNIFORM_CLOTHING", // Ceiling: PHP 8,000 / year
+  MEDICAL_CASH_ALLOWANCE = "MEDICAL_CASH_ALLOWANCE", // Ceiling: PHP 2,000 / semester, dependents
+  ACTUAL_MEDICAL_ASSISTANCE = "ACTUAL_MEDICAL_ASSISTANCE", // Ceiling: PHP 12,000 / year
+  LAUNDRY_ALLOWANCE = "LAUNDRY_ALLOWANCE", // Ceiling: PHP 400 / month
+  DAILY_MEAL_OVERTIME = "DAILY_MEAL_OVERTIME", // Ceiling: 30% of basic minimum wage per OT/night-shift day
+  ACHIEVEMENT_AWARD = "ACHIEVEMENT_AWARD", // Ceiling: PHP 12,000 / year
+  GIFTS_CHRISTMAS_MAJOR = "GIFTS_CHRISTMAS_MAJOR", // Ceiling: PHP 6,000 / year
   OTHER = "OTHER",
 }
 

@@ -31,7 +31,7 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
     // 3. Pro-rated 13th month: 400,000 / 12 = PHP 33,333.33
     expect(result.proratedThirteenthMonthCents).toBe(3333333n);
 
-    // 4. Monetized leave: 6 days * 2,298.85 = PHP 13,793.10 (100% tax-exempt under 10-day cap)
+    // 4. Monetized leave: 6 days * 2,298.85 = PHP 13,793.10 (100% tax-exempt under 12-day cap)
     expect(result.monetizedLeaveCents).toBe(1379310n);
     expect(result.monetizedLeaveExemptCents).toBe(1379310n);
     expect(result.monetizedLeaveTaxableCents).toBe(0n);

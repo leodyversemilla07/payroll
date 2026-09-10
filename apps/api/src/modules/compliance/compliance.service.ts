@@ -20,6 +20,9 @@ export interface Bir1601CSummary {
   nonTaxableCompensationPesos: number; // Statutory EE share + De Minimis
   taxableCompensationPesos: number;
   totalTaxWithheldPesos: number;
+  // BIR remittance deadline: 10th day of the following month, or January 15
+  // for the December return. eFPS filers follow their staggered eFPS schedule.
+  remittanceDeadline: string; // YYYY-MM-DD
 }
 
 @Injectable()
@@ -159,6 +162,10 @@ export class ComplianceService {
       }
     }
 
+    const deadlineYear = month === 12 ? year + 1 : year;
+    const deadlineMonth = month === 12 ? 1 : month + 1;
+    const deadlineDay = month === 12 ? 15 : 10;
+
     return {
       taxablePeriod: `${year}-${String(month).padStart(2, '0')}`,
       totalEmployees: payslips.length,
@@ -167,6 +174,7 @@ export class ComplianceService {
       nonTaxableCompensationPesos: Number(nonTaxableCents) / 100,
       taxableCompensationPesos: Number(taxableCents) / 100,
       totalTaxWithheldPesos: Number(taxWithheldCents) / 100,
+      remittanceDeadline: `${deadlineYear}-${String(deadlineMonth).padStart(2, '0')}-${String(deadlineDay).padStart(2, '0')}`,
     };
   }
 

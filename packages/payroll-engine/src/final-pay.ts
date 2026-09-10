@@ -27,6 +27,8 @@ export interface FinalPayCalculationInput {
   ytdTaxableCompensationCents: bigint;
   totalYtdTaxWithheldCents: bigint;
   outstandingLoanBalanceCents: bigint; // Company cash advances / loans
+  retireeAge?: number; // Age at separation; gates the RA 7641 tax exemption
+  isRepeatRetirementClaim?: boolean; // RA 7641 exemption may be availed only once
 }
 
 export interface FinalPayCalculationResult {
@@ -58,6 +60,8 @@ export function calculateStatutorySeparationPay(
   monthlyBasicRateCents: bigint,
   dailyRateCents: bigint,
   yearsOfService: number,
+  retireeAge?: number,
+  isRepeatRetirementClaim = false,
 ): { separationPayCents: bigint; isTaxExempt: boolean } {
   // A fraction of at least 6 months is considered as one whole year per DOLE rules
   const roundedYears = BigInt(Math.max(1, Math.round(yearsOfService)));
@@ -80,12 +84,24 @@ export function calculateStatutorySeparationPay(
       return { separationPayCents: pay, isTaxExempt: true };
     }
     case SeparationType.RETIREMENT: {
+      // RA 7641 covers employees with at least 5 years of service. Shorter
+      // tenure carries no statutory retirement benefit (unless a CBA grants one).
+      if (roundedYears < 5) {
+        return { separationPayCents: 0n, isTaxExempt: false };
+      }
       // RA 7641: 0.5 month salary (15 days) + 5 days SIL + 1/12 of 13th month (2.5 days) = 22.5 days pay per year
       const daysPerYear = 22.5;
       const daysScaled = BigInt(Math.round(daysPerYear * 100));
       const payPerYear = (dailyRateCents * daysScaled) / 100n;
       const pay = payPerYear * roundedYears;
-      return { separationPayCents: pay, isTaxExempt: true };
+      // Tax-exempt only at age 60+, with 5+ years served, availed once.
+      // An unknown age preserves the historical exempt treatment; callers
+      // should pass retireeAge (the API derives it from date of birth).
+      const ageEligible = retireeAge === undefined || retireeAge >= 60;
+      return {
+        separationPayCents: pay,
+        isTaxExempt: ageEligible && !isRepeatRetirementClaim,
+      };
     }
     default:
       // Voluntary resignation carries NO statutory separation pay unless in CBA/company policy
@@ -124,6 +140,8 @@ export function calculateFinalPay(
     input.monthlyBasicRateCents,
     input.dailyRateCents,
     input.yearsOfService,
+    input.retireeAge,
+    input.isRepeatRetirementClaim ?? false,
   );
 
   // 5. Tax Annualization
@@ -171,8 +189,15 @@ export function calculateFinalPay(
     netFinalPayCents = 0n;
   }
 
+  const retirementIneligible =
+    input.separationType === SeparationType.RETIREMENT &&
+    separationPayCents === 0n;
+
   const remarks =
     `Final Pay generated for ${input.separationType}. ` +
+    (retirementIneligible
+      ? "No statutory retirement benefit: RA 7641 requires at least 5 years of service. "
+      : "") +
     (taxAdjustmentCents < 0n
       ? `Includes BIR Form 2316 tax refund of ${(Number(-taxAdjustmentCents) / 100).toFixed(2)} PHP.`
       : "");

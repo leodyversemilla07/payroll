@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { AttendanceSummary } from "../src/index.js";
 import {
   annualizeTax,
+  calculateEmployee13thMonth,
+  calculateFinalPay,
   calculatePhilhealthContribution,
   calculatePhilippinePayroll,
   calculatePagibigContribution,
   calculateSssContribution,
+  calculateStatutorySeparationPay,
   calculateWithholdingTax,
   CutoffType,
   DeMinimisCategory,
   evaluateAllowances,
   PayBasis,
+  SeparationType,
   WorkDayDivisor,
 } from "../src/index.js";
 
@@ -180,6 +184,132 @@ describe("Statutory boundary conditions", () => {
       expect(result.nonTaxableAllowancesCents).toBe(0n);
       expect(result.deMinimisExcessTaxableCents).toBe(50000n);
       expect(result.taxableAllowancesCents).toBe(50000n);
+    });
+  });
+
+  describe("RR 29-2025 de minimis ceilings", () => {
+    it("exempts rice subsidy up to PHP 2,500 per month", () => {
+      // PHP 3,000 semi-monthly rice grant against a PHP 1,250 cutoff limit.
+      const result = evaluateAllowances(
+        [
+          {
+            name: "Rice Subsidy",
+            amountCents: 300000n,
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
+          },
+        ],
+        true,
+      );
+      expect(result.nonTaxableAllowancesCents).toBe(125000n);
+      expect(result.deMinimisExcessTaxableCents).toBe(175000n);
+      expect(result.taxableAllowancesCents).toBe(175000n);
+    });
+
+    it("caps uniform allowance at PHP 8,000 per year", () => {
+      // PHP 8,000 annual grant against a PHP 4,000 cutoff limit.
+      const result = evaluateAllowances(
+        [
+          {
+            name: "Uniform Allowance",
+            amountCents: 800000n,
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.UNIFORM_CLOTHING,
+          },
+        ],
+        true,
+      );
+      expect(result.nonTaxableAllowancesCents).toBe(33333n);
+      expect(result.deMinimisExcessTaxableCents).toBe(766667n);
+    });
+  });
+
+  describe("RA 7641 retirement eligibility", () => {
+    const dailyRateCents = 200000n; // PHP 2,000.00 / day
+
+    it("grants no statutory benefit below 5 years of service", () => {
+      const separation = calculateStatutorySeparationPay(
+        SeparationType.RETIREMENT,
+        5000000n,
+        dailyRateCents,
+        4.0,
+        61,
+      );
+      expect(separation.separationPayCents).toBe(0n);
+      expect(separation.isTaxExempt).toBe(false);
+    });
+
+    it("rounds a 6-month fraction up into the 5-year minimum", () => {
+      // 4.5 years = 4 years and 6 months -> 5 years -> 5 x 22.5 days.
+      const separation = calculateStatutorySeparationPay(
+        SeparationType.RETIREMENT,
+        5000000n,
+        dailyRateCents,
+        4.5,
+        60,
+      );
+      // 22.5 days x 2,000 = PHP 45,000.00 per year x 5 years.
+      expect(separation.separationPayCents).toBe(22500000n);
+      expect(separation.isTaxExempt).toBe(true);
+    });
+
+    it("taxes the benefit when claimed a second time", () => {
+      const separation = calculateStatutorySeparationPay(
+        SeparationType.RETIREMENT,
+        5000000n,
+        dailyRateCents,
+        10.0,
+        65,
+        true,
+      );
+      expect(separation.separationPayCents).toBe(45000000n);
+      expect(separation.isTaxExempt).toBe(false);
+    });
+
+    it("taxes the benefit below age 60", () => {
+      const separation = calculateStatutorySeparationPay(
+        SeparationType.RETIREMENT,
+        5000000n,
+        dailyRateCents,
+        10.0,
+        55,
+      );
+      expect(separation.separationPayCents).toBe(45000000n);
+      expect(separation.isTaxExempt).toBe(false);
+    });
+
+    it("explains ineligibility in the final-pay remarks", () => {
+      const result = calculateFinalPay({
+        separationType: SeparationType.RETIREMENT,
+        monthlyBasicRateCents: 5000000n,
+        dailyRateCents,
+        yearsOfService: 3.0,
+        unpaidDaysWorkedInLastPeriod: 0,
+        totalYtdBasicEarnedCents: 30000000n,
+        unusedLeaveDays: 0,
+        ytdTaxableCompensationCents: 30000000n,
+        totalYtdTaxWithheldCents: 2000000n,
+        outstandingLoanBalanceCents: 0n,
+        retireeAge: 62,
+      });
+      expect(result.separationPayCents).toBe(0n);
+      expect(result.remarks).toContain("at least 5 years");
+    });
+  });
+
+  describe("PD 851 one-month service minimum", () => {
+    it("grants no 13th-month pay below one month of service", () => {
+      const result = calculateEmployee13thMonth({
+        employeeId: "emp-1",
+        employeeNumber: "EMP-1",
+        fullName: "Short Timer",
+        monthlyBasicRateCents: 3000000n,
+        hireDate: "2026-12-20",
+        monthsWorkedInYear: 0,
+        unpaidAbsenceDays: 0,
+      });
+      expect(result.thirteenthMonthPayCents).toBe(0n);
+      expect(result.monthsWorked).toBe(0);
     });
   });
 

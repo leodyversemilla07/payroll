@@ -24,7 +24,9 @@ describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
       },
       compensation: {
         payBasis: PayBasis.MONTHLY,
-        monthlyBasicRateCents: 1540000n, // PHP 15,400.00 / mo
+        // NCR minimum wage under Wage Order No. NCR-27 (PHP 755/day from
+        // 2026-07-25): PHP 755 x 313 / 12 = PHP 19,692.92 / mo, rounded.
+        monthlyBasicRateCents: 1969300n, // PHP 19,693.00 / mo
         divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
         isMinimumWageEarner: true,
       },
@@ -63,7 +65,7 @@ describe("E2E Philippine Enterprise Payroll Lifecycle", () => {
     const result = calculatePhilippinePayroll(input);
 
     // 1. Basic Pay for 1st cutoff
-    expect(result.basicPayForPeriodCents).toBe(770000n); // PHP 7,700.00
+    expect(result.basicPayForPeriodCents).toBe(984650n); // PHP 9,846.50
 
     // 2. Overtime & Holiday Pay
     expect(result.overtimePayCents).toBeGreaterThan(0n);

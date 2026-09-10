@@ -253,12 +253,12 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
 
   describe("6. De Minimis & 13th Month Pay", () => {
     it("should separate exempt de minimis and spill excess into taxable compensation", () => {
-      // Rice subsidy limit is 2,000/mo (1,000 per semi-monthly cutoff)
+      // Rice subsidy limit is 2,500/mo under RR 29-2025 (1,250 per semi-monthly cutoff)
       const result = evaluateAllowances(
         [
           {
             name: "Rice Allowance",
-            amountCents: 150000n, // PHP 1,500 given in semi-monthly (exceeds 1,000 limit)
+            amountCents: 150000n, // PHP 1,500 given in semi-monthly (exceeds 1,250 limit)
             isTaxable: false,
             deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
           },
@@ -266,9 +266,9 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
         true,
       );
 
-      expect(result.nonTaxableAllowancesCents).toBe(100000n); // 1,000 exempt
-      expect(result.deMinimisExcessTaxableCents).toBe(50000n); // 500 excess
-      expect(result.taxableAllowancesCents).toBe(50000n);
+      expect(result.nonTaxableAllowancesCents).toBe(125000n); // 1,250 exempt
+      expect(result.deMinimisExcessTaxableCents).toBe(25000n); // 250 excess
+      expect(result.taxableAllowancesCents).toBe(25000n);
     });
 
     it("should calculate 13th month payout and apply PHP 90,000 tax-exempt ceiling", () => {

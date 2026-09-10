@@ -211,12 +211,17 @@ enum AllowanceType {
   NON_TAXABLE_FIXED
 }
 
+// BIR de minimis ceilings per RR No. 2-98 as amended, latest by RR No. 29-2025
+// (effective January 6, 2026).
 enum DeMinimisCategory {
-  RICE_SUBSIDY           // Max 2,000/mo
-  UNIFORM_CLOTHING       // Max 6,000/yr
-  MEDICAL_CASH_ALLOWANCE // Max 1,500/semester
-  LAUNDRY_ALLOWANCE      // Max 300/mo
-  DAILY_MEAL_OVERTIME    // 25% of basic min wage
+  RICE_SUBSIDY           // Max 2,500/mo
+  UNIFORM_CLOTHING       // Max 8,000/yr
+  MEDICAL_CASH_ALLOWANCE // Max 2,000/semester, dependents
+  ACTUAL_MEDICAL_ASSISTANCE // Max 12,000/yr
+  LAUNDRY_ALLOWANCE      // Max 400/mo
+  DAILY_MEAL_OVERTIME    // 30% of basic min wage per OT/night-shift day
+  ACHIEVEMENT_AWARD      // Max 12,000/yr
+  GIFTS_CHRISTMAS_MAJOR  // Max 6,000/yr
   OTHER
 }
 

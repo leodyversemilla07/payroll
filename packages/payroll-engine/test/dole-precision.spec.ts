@@ -29,8 +29,8 @@ function attendanceWith(
   };
 }
 
-// Hourly rates below are real deriveRates outputs (261-day divisor):
-// PHP 15,400/mo -> 8,850/hr and PHP 65,000/mo -> 37,356/hr.
+// Hourly inputs below mirror real deriveRates outputs (261-day divisor),
+// e.g. PHP 65,000/mo -> 37,356/hr.
 describe("DOLE premium exact arithmetic", () => {
   it("rounds an exact half centavo up for rest-day work", () => {
     // 8,850 x 146min x 130bps / 6,000 = 27,995.5 -> 27,996.

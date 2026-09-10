@@ -13,13 +13,17 @@ export interface SilConversionResult {
   dailyRateCents: bigint;
   unusedLeaveDays: number;
   totalMonetizedCashCents: bigint;
-  taxExemptDeMinimisCents: bigint; // Max 10 days cumulative per calendar year
-  taxablePortionCents: bigint; // Excess over 10 days
+  taxExemptDeMinimisCents: bigint; // Max 12 days cumulative per calendar year
+  taxablePortionCents: bigint; // Excess over 12 days
   remarks: string;
 }
 
-/** Maximum tax-exempt monetized leave credits under BIR De Minimis rules */
-export const BIR_MAX_TAX_EXEMPT_LEAVE_DAYS = 10;
+/**
+ * Maximum tax-exempt monetized private-sector vacation leave credits.
+ * RR No. 11-2018 allowed 10 days; RR No. 29-2025 (effective 2026-01-06)
+ * raised it to 12 days per calendar year.
+ */
+export const BIR_MAX_TAX_EXEMPT_LEAVE_DAYS = 12;
 
 /**
  * Calculates the cash monetization of unused Service Incentive Leave (SIL) or Vacation Leave.
@@ -60,9 +64,9 @@ export function calculateSilCashConversion(
 
   let remarks = `Monetized ${input.unusedLeaveDays} day(s) at daily rate.`;
   if (taxableDays > 0) {
-    remarks += ` ${exemptDays} day(s) tax-exempt De Minimis; ${taxableDays} day(s) excess over 10-day cap.`;
+    remarks += ` ${exemptDays} day(s) tax-exempt De Minimis; ${taxableDays} day(s) excess over 12-day cap.`;
   } else {
-    remarks += ` 100% tax-exempt under BIR 10-day De Minimis cap.`;
+    remarks += ` 100% tax-exempt under BIR 12-day De Minimis cap.`;
   }
 
   return {

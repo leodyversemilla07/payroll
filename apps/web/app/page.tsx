@@ -213,7 +213,9 @@ const INITIAL_EMPLOYEES: [DemoEmployee, ...DemoEmployee[]] = [
     department: "Logistics",
     role: "Logistics Assistant",
     payBasis: PayBasis.MONTHLY,
-    monthlyBasicRateCents: 1540000n, // PHP 15,400.00 (Minimum Wage Tier)
+    // NCR minimum wage under Wage Order No. NCR-27 (PHP 755/day from
+    // 2026-07-25): PHP 755 x 313 / 12 = PHP 19,692.92 / mo, rounded.
+    monthlyBasicRateCents: 1969300n, // PHP 19,693.00 (Minimum Wage Tier)
     isMinimumWageEarner: true,
     tin: "456-789-012-000",
     sssNo: "07-4455667-8",
@@ -1361,7 +1363,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   <Coins className="size-4" />
                 </div>
                 <div className="text-xl font-bold text-white mt-1">
-                  Max 10 Days
+                  Max 12 Days
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
                   100% Tax-Exempt leave cash conversion
@@ -2892,14 +2894,14 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   </span>
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-400">
-                  <span>Tax-Exempt De Minimis (Up to 10 days):</span>
+                  <span>Tax-Exempt De Minimis (Up to 12 days):</span>
                   <span className="text-emerald-400 font-mono">
                     {formatPHP(silMonetizationCalc.taxExemptDeMinimisCents)}
                   </span>
                 </div>
                 {silMonetizationCalc.taxablePortionCents > 0n && (
                   <div className="flex justify-between text-[11px] text-slate-400">
-                    <span>Taxable Excess (over 10-day cap):</span>
+                    <span>Taxable Excess (over 12-day cap):</span>
                     <span className="text-rose-400 font-mono">
                       {formatPHP(silMonetizationCalc.taxablePortionCents)}
                     </span>

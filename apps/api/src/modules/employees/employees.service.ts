@@ -224,6 +224,17 @@ export class EmployeesService {
           ? Number(silBalanceRecord.balance)
           : 5.0;
 
+    // RA 7641 exempts retirement benefits only at age 60+, with 5+ years
+    // served, availed once. Derive the age from the birth record so the
+    // engine can apply the exemption test.
+    const retireeAge =
+      input.separationType === 'RETIREMENT' && employee.dateOfBirth
+        ? Math.floor(
+            (exitDate.getTime() - employee.dateOfBirth.getTime()) /
+              (365.25 * 24 * 3600 * 1000),
+          )
+        : undefined;
+
     const monthIndex = exitDate.getMonth() + 1;
     const totalYtdBasicEarnedCents = monthlyBasicRateCents * BigInt(monthIndex);
     const ytdTaxableCompensationCents = totalYtdBasicEarnedCents;
@@ -234,6 +245,7 @@ export class EmployeesService {
       monthlyBasicRateCents,
       dailyRateCents,
       yearsOfService: serviceYears,
+      retireeAge,
       unpaidDaysWorkedInLastPeriod: input.unpaidDaysWorked ?? 0,
       totalYtdBasicEarnedCents,
       unusedLeaveDays,

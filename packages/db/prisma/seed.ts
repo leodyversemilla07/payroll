@@ -233,7 +233,9 @@ async function main() {
       bankName: "Security Bank",
       bankAccountNumber: "309876543212",
       bankAccountName: "Pedro Penduko",
-      basicRateMonthlyCents: 1540000n, // PHP 15,400.00 Minimum Wage Earner
+      // NCR minimum wage under Wage Order No. NCR-27 (PHP 755/day from
+      // 2026-07-25): PHP 755 x 313 / 12 = PHP 19,692.92 / mo, rounded.
+      basicRateMonthlyCents: 1969300n, // PHP 19,693.00 Minimum Wage Earner
       isTaxExempt: true,
     },
   ];
