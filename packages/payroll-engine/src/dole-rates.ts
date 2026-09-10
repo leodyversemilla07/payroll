@@ -59,7 +59,60 @@ export const DOLE_MULTIPLIERS = {
 };
 
 /**
+ * Exact integer multipliers in basis points (parts per hundred), mirroring
+ * DOLE_MULTIPLIERS. Floating-point cannot represent values like 1.69 or the
+ * monthly base-pay adjustment (1.3 - 1 = 0.30000000000000004) exactly, so all
+ * premium math below runs on integers.
+ */
+interface PremiumBasisPoints {
+  regularOT: number;
+  restDay: number;
+  restDayOT: number;
+  specialHoliday: number;
+  specialHolidayOT: number;
+  specialHolidayRestDay: number;
+  specialHolidayRestDayOT: number;
+  regularHoliday: number;
+  regularHolidayOT: number;
+  regularHolidayRestDay: number;
+  regularHolidayRestDayOT: number;
+  regularHolidayUnworked: number;
+  nightDiff: number;
+}
+
+function premiumBasisPoints(monthlyPaidBase: boolean): PremiumBasisPoints {
+  // Monthly salaries already include the first eight hours of base pay for
+  // rest days and holidays. Daily/hourly workers need the full statutory rate.
+  const base = monthlyPaidBase ? 100 : 0;
+  return {
+    regularOT: 125,
+    restDay: 130 - base,
+    restDayOT: 169,
+    specialHoliday: 130 - base,
+    specialHolidayOT: 169,
+    specialHolidayRestDay: 150 - base,
+    specialHolidayRestDayOT: 195,
+    regularHoliday: 200 - base,
+    regularHolidayOT: 260,
+    regularHolidayRestDay: 260 - base,
+    regularHolidayRestDayOT: 338,
+    regularHolidayUnworked: monthlyPaidBase ? 0 : 100,
+    nightDiff: 10,
+  };
+}
+
+// pay = rateCents * (minutes / 60) * (bps / 100), so single-multiplier terms
+// share the denominator 60 * 100. Night differentials layer a second 10%
+// factor, giving those terms the denominator 60 * 100 * 100.
+const SINGLE_DENOMINATOR = 6000n;
+const NIGHT_DENOMINATOR = 600000n;
+
+/**
  * Computes all DOLE premiums, overtimes, night differentials, and holiday compensations.
+ *
+ * Every term is evaluated as an exact integer rational and each premium
+ * category is rounded half-up once, matching historical centavo results
+ * while removing binary floating-point drift.
  */
 export function calculateDolePremiums(
   hourlyRateCents: Centavos,
@@ -72,102 +125,84 @@ export function calculateDolePremiums(
   restDayPayCents: Centavos;
   totalPremiumPayCents: Centavos;
 } {
-  const hourly = Number(hourlyRateCents);
-  const includedBaseMultiplier = payBasis === PayBasis.MONTHLY ? 1 : 0;
+  const bps = premiumBasisPoints(payBasis === PayBasis.MONTHLY);
 
-  // Monthly salaries already include the first eight hours of base pay for
-  // rest days and holidays. Daily/hourly workers need the full statutory rate.
-  const restDayMultiplier = DOLE_MULTIPLIERS.REST_DAY - includedBaseMultiplier;
-  const specialHolidayMultiplier =
-    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY - includedBaseMultiplier;
-  const specialHolidayRestDayMultiplier =
-    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY_REST_DAY - includedBaseMultiplier;
-  const regularHolidayMultiplier =
-    DOLE_MULTIPLIERS.REGULAR_HOLIDAY - includedBaseMultiplier;
-  const regularHolidayRestDayMultiplier =
-    DOLE_MULTIPLIERS.REGULAR_HOLIDAY_REST_DAY - includedBaseMultiplier;
+  // Attendance hours arrive as minutes / 60. Recovering whole minutes keeps
+  // the production path (integer DTR minutes) bit-exact.
+  const toMinutes = (hours: number): bigint =>
+    BigInt(Math.round(hours * 60));
+
+  // Exact numerator of rateCents * (minutes / 60) * (bps / 100).
+  const singleTerm = (hours: number, multiplierBps: number): bigint =>
+    hourlyRateCents * toMinutes(hours) * BigInt(multiplierBps);
+
+  const roundSingle = (numerator: bigint): Centavos =>
+    (numerator + SINGLE_DENOMINATOR / 2n) / SINGLE_DENOMINATOR;
 
   // 1. Regular Overtime (125%)
-  const regularOT =
-    attendance.regularOvertimeHours * hourly * DOLE_MULTIPLIERS.REGULAR_OT;
+  const overtimePayCents = roundSingle(
+    singleTerm(attendance.regularOvertimeHours, bps.regularOT),
+  );
 
   // 2. Rest Day Work (130% for first 8 hrs, 169% for OT)
-  const restDayBase = attendance.restDayHours * hourly * restDayMultiplier;
-  const restDayOT =
-    attendance.restDayOvertimeHours * hourly * DOLE_MULTIPLIERS.REST_DAY_OT;
-  const totalRestDay = restDayBase + restDayOT;
+  const restDayPayCents = roundSingle(
+    singleTerm(attendance.restDayHours, bps.restDay) +
+      singleTerm(attendance.restDayOvertimeHours, bps.restDayOT),
+  );
 
-  // 3. Special Non-Working Holidays
-  const specialHol =
-    attendance.specialHolidayHours * hourly * specialHolidayMultiplier;
-  const specialHolOT =
-    attendance.specialHolidayOvertimeHours *
-    hourly *
-    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY_OT;
-  const specialHolRestDay =
-    attendance.specialHolidayRestDayHours *
-    hourly *
-    specialHolidayRestDayMultiplier;
-  const specialHolRestDayOT =
-    attendance.specialHolidayRestDayOvertimeHours *
-    hourly *
-    DOLE_MULTIPLIERS.SPECIAL_HOLIDAY_REST_DAY_OT;
+  // 3. & 4. Special Non-Working and Regular Holidays. Unworked regular
+  // holidays convert whole days to hours; monthly staff already received
+  // base pay for them, hence the zero multiplier.
+  const holidayPayCents = roundSingle(
+    singleTerm(attendance.specialHolidayHours, bps.specialHoliday) +
+      singleTerm(
+        attendance.specialHolidayOvertimeHours,
+        bps.specialHolidayOT,
+      ) +
+      singleTerm(
+        attendance.specialHolidayRestDayHours,
+        bps.specialHolidayRestDay,
+      ) +
+      singleTerm(
+        attendance.specialHolidayRestDayOvertimeHours,
+        bps.specialHolidayRestDayOT,
+      ) +
+      singleTerm(attendance.regularHolidayHours, bps.regularHoliday) +
+      singleTerm(
+        (attendance.regularHolidayUnworkedDays ?? 0) * 8,
+        bps.regularHolidayUnworked,
+      ) +
+      singleTerm(
+        attendance.regularHolidayOvertimeHours,
+        bps.regularHolidayOT,
+      ) +
+      singleTerm(
+        attendance.regularHolidayRestDayHours,
+        bps.regularHolidayRestDay,
+      ) +
+      singleTerm(
+        attendance.regularHolidayRestDayOvertimeHours,
+        bps.regularHolidayRestDayOT,
+      ),
+  );
 
-  // 4. Regular Holidays (200% base worked, 260% OT, 260% on Rest Day, 338% OT on Rest Day)
-  const regularHol =
-    attendance.regularHolidayHours * hourly * regularHolidayMultiplier;
-  const regularHolidayUnworked =
-    (attendance.regularHolidayUnworkedDays ?? 0) *
-    8 *
-    hourly *
-    (payBasis === PayBasis.MONTHLY ? 0 : 1);
-  const regularHolOT =
-    attendance.regularHolidayOvertimeHours *
-    hourly *
-    DOLE_MULTIPLIERS.REGULAR_HOLIDAY_OT;
-  const regularHolRestDay =
-    attendance.regularHolidayRestDayHours *
-    hourly *
-    regularHolidayRestDayMultiplier;
-  const regularHolRestDayOT =
-    attendance.regularHolidayRestDayOvertimeHours *
-    hourly *
-    DOLE_MULTIPLIERS.REGULAR_HOLIDAY_REST_DAY_OT;
-
-  const totalHolidays =
-    specialHol +
-    specialHolOT +
-    specialHolRestDay +
-    specialHolRestDayOT +
-    regularHol +
-    regularHolidayUnworked +
-    regularHolOT +
-    regularHolRestDay +
-    regularHolRestDayOT;
-
-  // 5. Night Shift Differential (10% additional per hour between 10PM and 6AM)
-  const regularNightDiff =
-    attendance.regularNightDiffHours * hourly * DOLE_MULTIPLIERS.NIGHT_DIFF;
-  const overtimeNightDiff =
-    attendance.overtimeNightDiffHours *
-    hourly *
-    (DOLE_MULTIPLIERS.REGULAR_OT * DOLE_MULTIPLIERS.NIGHT_DIFF);
-  const restDayNightDiff =
-    attendance.restDayNightDiffHours *
-    hourly *
-    (DOLE_MULTIPLIERS.REST_DAY * DOLE_MULTIPLIERS.NIGHT_DIFF);
-  const holidayNightDiff =
-    attendance.holidayNightDiffHours *
-    hourly *
-    (DOLE_MULTIPLIERS.REGULAR_HOLIDAY * DOLE_MULTIPLIERS.NIGHT_DIFF);
-
-  const totalNightDiff =
-    regularNightDiff + overtimeNightDiff + restDayNightDiff + holidayNightDiff;
-
-  const overtimePayCents = BigInt(Math.round(regularOT));
-  const restDayPayCents = BigInt(Math.round(totalRestDay));
-  const holidayPayCents = BigInt(Math.round(totalHolidays));
-  const nightDiffPayCents = BigInt(Math.round(totalNightDiff));
+  // 5. Night Shift Differential (10% additional per hour between 10PM and 6AM).
+  // Overtime, rest-day, and holiday night hours layer the 10% factor on top
+  // of the full base premium, independent of the monthly base-pay adjustment.
+  const nightSingle = (hours: number): bigint =>
+    hourlyRateCents * toMinutes(hours) * BigInt(bps.nightDiff) * 100n;
+  const nightLayered = (hours: number, baseBps: number): bigint =>
+    hourlyRateCents *
+    toMinutes(hours) *
+    BigInt(baseBps) *
+    BigInt(bps.nightDiff);
+  const nightDiffPayCents =
+    (nightSingle(attendance.regularNightDiffHours) +
+      nightLayered(attendance.overtimeNightDiffHours, 125) +
+      nightLayered(attendance.restDayNightDiffHours, 130) +
+      nightLayered(attendance.holidayNightDiffHours, 200) +
+      NIGHT_DENOMINATOR / 2n) /
+    NIGHT_DENOMINATOR;
 
   const totalPremiumPayCents =
     overtimePayCents + restDayPayCents + holidayPayCents + nightDiffPayCents;
