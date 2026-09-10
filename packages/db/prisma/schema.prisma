@@ -476,6 +476,10 @@ model Payslip {
   
   // 13th Month Accrual
   thirteenthMonthAccrualCents BigInt  @default(0)
+
+  // PHP 90,000 Bucket Accounting
+  // Total de minimis excess this period (exempt + taxable) for YTD cap tracking.
+  deMinimisExcessCents  BigInt        @default(0)
   
   // PDF Storage & Security
   pdfStoragePath        String?

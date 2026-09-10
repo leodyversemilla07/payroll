@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { AttendanceSummary } from "../src/index.js";
+import type {
+  AttendanceSummary,
+  PayrollCalculationInput,
+} from "../src/index.js";
 import {
+  allocateNinetiethBucket,
   annualizeTax,
   calculateEmployee13thMonth,
   calculateFinalPay,
@@ -294,6 +298,111 @@ describe("Statutory boundary conditions", () => {
       });
       expect(result.separationPayCents).toBe(0n);
       expect(result.remarks).toContain("at least 5 years");
+    });
+  });
+
+  describe("PHP 90,000 other-benefits bucket", () => {
+    // PHP 30,000/mo, first cutoff, all statutory deducted in FIRST_CUTOFF.
+    // Rice grant PHP 3,000 semi-monthly: PHP 1,250 within-limit exempt,
+    // PHP 1,750 excess joining the bucket.
+    function bucketInput(
+      ytdOtherBenefitsCents?: bigint,
+      periodBonusesCents?: bigint,
+    ): PayrollCalculationInput {
+      return {
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "FIRST_CUTOFF",
+          deductPhilhealthIn: "FIRST_CUTOFF",
+          deductPagibigIn: "FIRST_CUTOFF",
+          deductTaxIn: "FIRST_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.MONTHLY,
+          monthlyBasicRateCents: 3000000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: { ...EMPTY_ATTENDANCE },
+        allowances: [
+          {
+            name: "Rice Subsidy",
+            amountCents: 300000n,
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
+          },
+        ],
+        loans: [],
+        ytdOtherBenefitsCents,
+        periodBonusesCents,
+      };
+    }
+
+    it("keeps excess fully taxable without YTD history (legacy)", () => {
+      const result = calculatePhilippinePayroll(bucketInput());
+      expect(result.deMinimisExcessTaxableCents).toBe(175000n);
+      expect(result.taxableAllowancesCents).toBe(175000n);
+      expect(result.nonTaxableAllowancesCents).toBe(125000n);
+      expect(result.ytdOtherBenefitsTotalCents).toBe(175000n);
+      // Taxable income PHP 14,300 -> (14,300 - 10,417) x 15% = PHP 582.45.
+      expect(result.withholdingTaxCents).toBe(58245n);
+    });
+
+    it("exempts excess within remaining cap when history is empty", () => {
+      const result = calculatePhilippinePayroll(bucketInput(0n));
+      expect(result.deMinimisExcessTaxableCents).toBe(175000n);
+      expect(result.taxableAllowancesCents).toBe(0n);
+      expect(result.nonTaxableAllowancesCents).toBe(300000n);
+      expect(result.ytdOtherBenefitsTotalCents).toBe(175000n);
+      // Taxable income PHP 12,550 -> (12,550 - 10,417) x 15% = PHP 319.95.
+      expect(result.withholdingTaxCents).toBe(31995n);
+    });
+
+    it("splits excess at the cap boundary", () => {
+      const result = calculatePhilippinePayroll(bucketInput(8900000n));
+      // PHP 1,000 of cap left: PHP 1,000 exempt, PHP 750 taxable.
+      expect(result.taxableAllowancesCents).toBe(75000n);
+      expect(result.nonTaxableAllowancesCents).toBe(225000n);
+      expect(result.ytdOtherBenefitsTotalCents).toBe(9075000n);
+      // Taxable income PHP 13,300 -> (13,300 - 10,417) x 15% = PHP 432.45.
+      expect(result.withholdingTaxCents).toBe(43245n);
+    });
+
+    it("taxes all excess once the cap is exhausted", () => {
+      const legacy = calculatePhilippinePayroll(bucketInput());
+      const result = calculatePhilippinePayroll(bucketInput(9000000n));
+      expect(result.taxableAllowancesCents).toBe(
+        legacy.taxableAllowancesCents,
+      );
+      expect(result.withholdingTaxCents).toBe(legacy.withholdingTaxCents);
+      expect(result.ytdOtherBenefitsTotalCents).toBe(9175000n);
+    });
+
+    it("routes current-period bonuses through the same bucket", () => {
+      const result = calculatePhilippinePayroll(bucketInput(0n, 5000000n));
+      // PHP 50,000 bonus + PHP 1,750 excess = PHP 51,750, all within cap.
+      expect(result.taxableAllowancesCents).toBe(0n);
+      expect(result.nonTaxableAllowancesCents).toBe(5300000n);
+      expect(result.grossPayCents).toBe(1500000n + 5300000n);
+      expect(result.ytdOtherBenefitsTotalCents).toBe(5175000n);
+    });
+
+    it("allocates the bucket directly", () => {
+      expect(
+        allocateNinetiethBucket({
+          ytdUsedCents: 8900000n,
+          periodBonusesCents: 50000n,
+          periodDeMinimisExcessCents: 175000n,
+        }),
+      ).toEqual({
+        exemptCents: 100000n,
+        taxableCents: 125000n,
+        totalUsedCents: 9125000n,
+      });
+      // Negative history clamps to zero instead of granting extra room.
+      expect(
+        allocateNinetiethBucket({ ytdUsedCents: -5n }),
+      ).toEqual({ exemptCents: 0n, taxableCents: 0n, totalUsedCents: 0n });
     });
   });
 

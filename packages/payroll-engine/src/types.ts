@@ -135,6 +135,16 @@ export interface PayrollCalculationInput {
   otherDeductionsCents?: Centavos;
   ytdTaxableCompensationCents?: Centavos;
   ytdTaxWithheldCents?: Centavos;
+  /**
+   * Year-to-date 13th-month + bonus + de minimis excess already counted
+   * toward the PHP 90,000 annual bucket. When provided (even 0n), the
+   * bucket prices this period's additions and only the overflow is
+   * taxable. When omitted, de minimis excess stays fully taxable
+   * (legacy behavior for callers without YTD tracking).
+   */
+  ytdOtherBenefitsCents?: Centavos;
+  /** 13th-month/bonus payouts this period joining the PHP 90,000 bucket. */
+  periodBonusesCents?: Centavos;
 }
 
 export interface StatutoryContributionResult {
@@ -166,10 +176,18 @@ export interface PayrollCalculationResult {
   restDayPayCents: Centavos;
   totalPremiumPayCents: Centavos;
 
-  // Allowances & De Minimis
+  // Allowances & De Minimis. When the PHP 90,000 bucket is active
+  // (ytdOtherBenefitsCents provided), bucket-exempt excess is reclassified
+  // from taxableAllowancesCents into nonTaxableAllowancesCents, and any
+  // bucket-taxable 13th-month/bonus payouts join taxableAllowancesCents.
   taxableAllowancesCents: Centavos;
   nonTaxableAllowancesCents: Centavos;
+  // Total de minimis excess computed this period (metric for YTD bucket
+  // accounting), regardless of how much of it the bucket exempted.
   deMinimisExcessTaxableCents: Centavos;
+  // Year-to-date 13th-month + bonus + de minimis excess after this period.
+  // Equals this period's additions when no YTD history was provided.
+  ytdOtherBenefitsTotalCents: Centavos;
 
   // Gross Compensation
   grossPayCents: Centavos;

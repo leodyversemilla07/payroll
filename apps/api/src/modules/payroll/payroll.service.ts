@@ -199,6 +199,26 @@ export class PayrollService {
             : loan.amortizationCents,
       }));
 
+      // Year-to-date de minimis excess already counted toward the PHP 90,000
+      // annual bucket, keyed to the cutoff's tax year. Payslips predating
+      // the bucket-excess column contribute zero, so usage starts from that
+      // migration forward and converges at year-end annualization.
+      const bucketYearStart = new Date(
+        Date.UTC(params.cutoffEndDate.getUTCFullYear(), 0, 1),
+      );
+      const bucketYearEnd = new Date(
+        Date.UTC(params.cutoffEndDate.getUTCFullYear() + 1, 0, 1),
+      );
+      const ytdBucket = await transaction.payslip.aggregate({
+        _sum: { deMinimisExcessCents: true },
+        where: {
+          employeeId: employee.id,
+          payrollRun: {
+            cutoffEndDate: { gte: bucketYearStart, lt: bucketYearEnd },
+          },
+        },
+      });
+
       const calculationInput: PayrollCalculationInput = {
         cutoffType:
           params.cutoffSequence === 'FIRST_CUTOFF'
@@ -223,6 +243,12 @@ export class PayrollService {
         attendance: attendanceSummary,
         allowances,
         loans,
+        ytdOtherBenefitsCents:
+          ytdBucket._sum.deMinimisExcessCents ?? 0n,
+        // 13th-month/bonus disbursements have no dedicated run type yet;
+        // once they do, their bucket share is passed here so payouts share
+        // the PHP 90,000 cap with de minimis excess.
+        periodBonusesCents: 0n,
       };
 
       const result = calculatePhilippinePayroll(calculationInput);
@@ -258,6 +284,7 @@ export class PayrollService {
           totalDeductionsCents: result.totalDeductionsCents,
           netPayCents: result.netPayCents,
           thirteenthMonthAccrualCents: result.thirteenthMonthAccrualCents,
+          deMinimisExcessCents: result.deMinimisExcessTaxableCents,
         },
       });
 

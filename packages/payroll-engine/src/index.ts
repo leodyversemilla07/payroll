@@ -1,5 +1,6 @@
 import { evaluateAllowances } from "./de-minimis";
 import { calculateDolePremiums, deriveRates } from "./dole-rates";
+import { allocateNinetiethBucket } from "./other-benefits";
 import { calculatePagibigContribution } from "./pagibig";
 import { calculatePhilhealthContribution } from "./philhealth";
 import { calculateSssContribution } from "./sss";
@@ -17,6 +18,7 @@ export * from "./bir-2316";
 export * from "./de-minimis";
 export * from "./dole-rates";
 export * from "./final-pay";
+export * from "./other-benefits";
 export * from "./pagibig";
 export * from "./philhealth";
 export * from "./sil-conversion";
@@ -41,6 +43,8 @@ export function calculatePhilippinePayroll(
     allowances,
     loans,
     otherDeductionsCents = 0n,
+    ytdOtherBenefitsCents,
+    periodBonusesCents = 0n,
   } = input;
   const isSemiMonthly = cutoffType !== CutoffType.MONTHLY_SINGLE;
 
@@ -88,12 +92,37 @@ export function calculatePhilippinePayroll(
   // 5. Allowances & De Minimis Evaluation
   const evaluatedAllowances = evaluateAllowances(allowances, isSemiMonthly);
 
+  // 5b. PHP 90,000 annual other-benefits bucket (TRAIN). This period's de
+  // minimis excess plus any 13th-month/bonus payouts consume the remaining
+  // cap; only the overflow stays taxable. Active only when the caller
+  // supplies YTD usage — otherwise the excess remains fully taxable, exactly
+  // as before, for callers without YTD tracking (e.g. the interactive demo).
+  const periodExcessCents = evaluatedAllowances.deMinimisExcessTaxableCents;
+  let taxableAllowancesCents = evaluatedAllowances.taxableAllowancesCents;
+  let nonTaxableAllowancesCents =
+    evaluatedAllowances.nonTaxableAllowancesCents;
+  let ytdOtherBenefitsTotalCents = periodExcessCents + periodBonusesCents;
+  if (ytdOtherBenefitsCents !== undefined) {
+    const bucket = allocateNinetiethBucket({
+      ytdUsedCents: ytdOtherBenefitsCents,
+      periodBonusesCents,
+      periodDeMinimisExcessCents: periodExcessCents,
+    });
+    taxableAllowancesCents =
+      evaluatedAllowances.taxableAllowancesCents -
+      periodExcessCents +
+      bucket.taxableCents;
+    nonTaxableAllowancesCents =
+      evaluatedAllowances.nonTaxableAllowancesCents + bucket.exemptCents;
+    ytdOtherBenefitsTotalCents = bucket.totalUsedCents;
+  }
+
   // 6. Gross Pay Computation
   const grossPayCents =
     netBasicPayCents +
     dolePremiums.totalPremiumPayCents +
-    evaluatedAllowances.taxableAllowancesCents +
-    evaluatedAllowances.nonTaxableAllowancesCents;
+    taxableAllowancesCents +
+    nonTaxableAllowancesCents;
 
   // 7. Full Monthly Statutory Contributions (Standard Monthly Tables)
   const fullMonthlySss = calculateSssContribution(
@@ -139,7 +168,7 @@ export function calculatePhilippinePayroll(
   const grossTaxableEarnings =
     netBasicPayCents +
     dolePremiums.totalPremiumPayCents +
-    evaluatedAllowances.taxableAllowancesCents;
+    taxableAllowancesCents;
 
   const taxableIncomeCents =
     grossTaxableEarnings > totalStatutoryEmployeeCents
@@ -196,10 +225,10 @@ export function calculatePhilippinePayroll(
     holidayPayCents: dolePremiums.holidayPayCents,
     restDayPayCents: dolePremiums.restDayPayCents,
     totalPremiumPayCents: dolePremiums.totalPremiumPayCents,
-    taxableAllowancesCents: evaluatedAllowances.taxableAllowancesCents,
-    nonTaxableAllowancesCents: evaluatedAllowances.nonTaxableAllowancesCents,
-    deMinimisExcessTaxableCents:
-      evaluatedAllowances.deMinimisExcessTaxableCents,
+    taxableAllowancesCents,
+    nonTaxableAllowancesCents,
+    deMinimisExcessTaxableCents: periodExcessCents,
+    ytdOtherBenefitsTotalCents,
     grossPayCents,
     sssContribution,
     philhealthContribution,
