@@ -131,18 +131,45 @@ export function generateBir2316Certificate(
   let holidayPayTaxableCents = 0n;
   let nightDiffTaxableCents = 0n;
 
+  // Employee statutory contributions are part of gross compensation, not
+  // additional earnings. Allocate them against wage components before
+  // reporting them separately on line 40 to avoid double-counting gross pay
+  // and over-reporting taxable income. Basic salary normally covers them;
+  // any remainder moves through the other wage components.
+  let remainingContributionCents = statutoryContributionsCents;
+  const netOfContribution = (amountCents: bigint): bigint => {
+    const applied =
+      amountCents < remainingContributionCents
+        ? amountCents
+        : remainingContributionCents;
+    remainingContributionCents -= applied;
+    return amountCents - applied;
+  };
+  const netBasic = netOfContribution(income.totalBasicSalaryCents);
+  const netOvertime = netOfContribution(income.totalOvertimePayCents);
+  const netHoliday = netOfContribution(income.totalHolidayPayCents);
+  const netNightDiff = netOfContribution(income.totalNightDiffPayCents);
+  const netOtherTaxable = netOfContribution(
+    income.totalOtherTaxableAllowancesCents,
+  );
+  if (remainingContributionCents > 0n) {
+    throw new RangeError(
+      "Statutory contributions exceed recorded taxable earnings",
+    );
+  }
+
   if (isMwe) {
     // Under Section 24(A)(2) of Tax Code (RA 9504 / TRAIN), MWEs are exempt from income tax
     // on their basic pay, holiday, OT, and night diff.
-    basicMweCents = income.totalBasicSalaryCents;
-    holidayPayMweCents = income.totalHolidayPayCents;
-    overtimePayMweCents = income.totalOvertimePayCents;
-    nightDiffMweCents = income.totalNightDiffPayCents;
+    basicMweCents = netBasic;
+    holidayPayMweCents = netHoliday;
+    overtimePayMweCents = netOvertime;
+    nightDiffMweCents = netNightDiff;
   } else {
-    basicSalaryRegularCents = income.totalBasicSalaryCents;
-    overtimePayTaxableCents = income.totalOvertimePayCents;
-    holidayPayTaxableCents = income.totalHolidayPayCents;
-    nightDiffTaxableCents = income.totalNightDiffPayCents;
+    basicSalaryRegularCents = netBasic;
+    overtimePayTaxableCents = netOvertime;
+    holidayPayTaxableCents = netHoliday;
+    nightDiffTaxableCents = netNightDiff;
   }
 
   const deMinimisBenefitsCents = income.totalDeMinimisBenefitsCents;
@@ -165,7 +192,7 @@ export function generateBir2316Certificate(
       overtimePayTaxableCents +
       holidayPayTaxableCents +
       nightDiffTaxableCents +
-      income.totalOtherTaxableAllowancesCents +
+      netOtherTaxable +
       thirteenthMonthExcessTaxableCents;
 
   const grossCompensationIncomeCents =
@@ -205,7 +232,7 @@ export function generateBir2316Certificate(
       overtimePayTaxableCents,
       holidayPayTaxableCents,
       nightDiffTaxableCents,
-      otherTaxableAllowancesCents: income.totalOtherTaxableAllowancesCents,
+      otherTaxableAllowancesCents: netOtherTaxable,
       thirteenthMonthExcessTaxableCents,
       totalTaxableCompensationCents,
     },
@@ -258,7 +285,7 @@ export function formatBir2316TextDocument(
     `  Line 31: Total Amount of Taxes Withheld from Present Employer ...... PHP ${f(cert.partIVA.totalTaxWithheldCents).padStart(14)}`,
     `  Line 32: Year-End Tax Adjustment:`,
     cert.partIVA.refundDueEmployeeCents > 0n
-      ? `           OVERWITHHELD TAX REFUNDED TO EMPLOYEE ..................... PHP ${f(cert.partIVA.refundDueEmployeeCents).padStart(14)}`
+      ? `           OVERWITHHELD TAX DUE FOR REFUND ........................ PHP ${f(cert.partIVA.refundDueEmployeeCents).padStart(14)}`
       : cert.partIVA.taxPayableByEmployeeCents > 0n
         ? `           AMOUNT OF TAX STILL PAYABLE BY EMPLOYEE ................... PHP ${f(cert.partIVA.taxPayableByEmployeeCents).padStart(14)}`
         : `           TAX BALANCE EQUALIZED (PHP 0.00 ADJUSTMENT)`,

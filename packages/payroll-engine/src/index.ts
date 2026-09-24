@@ -6,6 +6,7 @@ import { calculatePhilhealthContribution } from "./philhealth";
 import { calculateSssContribution } from "./sss";
 import { calculateThirteenthMonthAccrual } from "./thirteenth-month";
 import type {
+  LoanDeductionInput,
   PayrollCalculationInput,
   PayrollCalculationResult,
   StatutoryContributionResult,
@@ -28,6 +29,13 @@ export * from "./thirteenth-month-batch";
 export * from "./types";
 export * from "./withholding-tax";
 
+export class InsufficientPayError extends Error {
+  constructor() {
+    super("Gross pay cannot cover mandatory deductions");
+    this.name = "InsufficientPayError";
+  }
+}
+
 /**
  * Master Philippine Payroll Calculation Engine
  * Pure, deterministic function computing a complete payslip with exact centavo precision.
@@ -45,6 +53,8 @@ export function calculatePhilippinePayroll(
     otherDeductionsCents = 0n,
     ytdOtherBenefitsCents,
     periodBonusesCents = 0n,
+    priorMonthlyTaxableIncomeCents,
+    priorMonthlyTaxWithheldCents = 0n,
   } = input;
   const isSemiMonthly = cutoffType !== CutoffType.MONTHLY_SINGLE;
 
@@ -181,30 +191,60 @@ export function calculatePhilippinePayroll(
   );
 
   if (shouldDeductTax && !compensation.isMinimumWageEarner) {
-    withholdingTaxCents = calculateWithholdingTax(
-      taxableIncomeCents,
-      isSemiMonthly,
-      compensation.isMinimumWageEarner,
-    );
+    if (priorMonthlyTaxableIncomeCents !== undefined) {
+      // Second-cutoff reconciliation: statutory contributions may have been
+      // deducted on the first cutoff, so use both actual taxable bases rather
+      // than estimating the month from this period's salary alone.
+      const monthlyTax = calculateWithholdingTax(
+        priorMonthlyTaxableIncomeCents + taxableIncomeCents,
+        false,
+      );
+      withholdingTaxCents =
+        monthlyTax > priorMonthlyTaxWithheldCents
+          ? monthlyTax - priorMonthlyTaxWithheldCents
+          : 0n;
+    } else {
+      withholdingTaxCents = calculateWithholdingTax(
+        taxableIncomeCents,
+        isSemiMonthly,
+        compensation.isMinimumWageEarner,
+      );
+    }
   }
 
-  // 10. Loan Deductions
+  // 10. Reserve gross pay for statutory deductions, tax, and other
+  // mandatory deductions before collecting any loan amortization. If those
+  // cannot be covered, abort instead of issuing an internally inconsistent
+  // payslip or recording a loan payment the employee did not make.
+  if (otherDeductionsCents < 0n || loans.some((loan) => loan.amountCents < 0n)) {
+    throw new RangeError("Deductions cannot be negative");
+  }
+  const mandatoryDeductionsCents =
+    totalStatutoryEmployeeCents + withholdingTaxCents + otherDeductionsCents;
+  if (mandatoryDeductionsCents > grossPayCents) {
+    throw new InsufficientPayError();
+  }
+
+  let remainingForLoansCents = grossPayCents - mandatoryDeductionsCents;
+  const appliedLoanDeductions: Pick<
+    LoanDeductionInput,
+    "loanId" | "amountCents"
+  >[] = [];
   let loanDeductionsCents = 0n;
   for (const loan of loans) {
-    loanDeductionsCents += loan.amountCents;
+    const amountCents =
+      loan.amountCents < remainingForLoansCents
+        ? loan.amountCents
+        : remainingForLoansCents;
+    if (amountCents === 0n) continue;
+    appliedLoanDeductions.push({ loanId: loan.loanId, amountCents });
+    loanDeductionsCents += amountCents;
+    remainingForLoansCents -= amountCents;
   }
 
   // 11. Total Deductions & Net Pay
-  const totalDeductionsCents =
-    totalStatutoryEmployeeCents +
-    withholdingTaxCents +
-    loanDeductionsCents +
-    otherDeductionsCents;
-
-  const netPayCents =
-    grossPayCents > totalDeductionsCents
-      ? grossPayCents - totalDeductionsCents
-      : 0n;
+  const totalDeductionsCents = mandatoryDeductionsCents + loanDeductionsCents;
+  const netPayCents = grossPayCents - totalDeductionsCents;
 
   // 12. 13th Month Accrual for this Period
   const thirteenthMonthAccrualCents =
@@ -236,6 +276,7 @@ export function calculatePhilippinePayroll(
     totalStatutoryEmployerCents,
     taxableIncomeCents,
     withholdingTaxCents,
+    appliedLoanDeductions,
     loanDeductionsCents,
     otherDeductionsCents,
     totalDeductionsCents,

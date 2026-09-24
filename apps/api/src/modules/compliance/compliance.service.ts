@@ -1,7 +1,31 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { prisma } from '@workspace/db';
+import type {
+  ThirteenthMonthBatchResult,
+  ThirteenthMonthEmployeeResult,
+} from '@workspace/payroll-engine';
 
 export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
+
+function csvField(value: string): string {
+  if (/^[\s]*[=+@-]/.test(value) || /[\r\n]/.test(value)) {
+    throw new UnprocessableEntityException(
+      'Bank transmittal contains an unsafe CSV field',
+    );
+  }
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+export interface DoleReportDetails {
+  natureOfBusiness: string;
+  contactPerson: string;
+  contactNumber: string;
+  contactTitle: string;
+}
 
 export interface BankTransmittalItem {
   employeeNumber: string;
@@ -35,17 +59,53 @@ export class ComplianceService {
     bankFormat: BankFormat,
     organizationId: string,
   ): Promise<string> {
+    const run = await prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, organizationId },
+      select: { status: true },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status !== 'APPROVED' && run.status !== 'DISBURSED') {
+      throw new UnprocessableEntityException(
+        'Bank transmittals require an approved payroll run',
+      );
+    }
+
     const payslips = await prisma.payslip.findMany({
       where: {
         payrollRunId,
-        payrollRun: { organizationId },
+        payrollRun: {
+          organizationId,
+          status: { in: ['APPROVED', 'DISBURSED'] },
+        },
       },
       include: {
         employee: true,
       },
     });
 
-    const items: BankTransmittalItem[] = payslips.map((ps) => {
+    // A bank file includes only that bank's accounts. Never silently export
+    // placeholder account numbers or an empty file as a payment instruction.
+    const bankPayslips = payslips.filter((ps) =>
+      ps.employee.bankName.toUpperCase().includes(bankFormat),
+    );
+    if (bankPayslips.length === 0) {
+      throw new UnprocessableEntityException(
+        `No ${bankFormat} payslips exist in this payroll run`,
+      );
+    }
+    if (
+      bankPayslips.some(
+        (ps) =>
+          !ps.employee.bankAccountNumber.trim() ||
+          /^0+$/.test(ps.employee.bankAccountNumber.trim()),
+      )
+    ) {
+      throw new UnprocessableEntityException(
+        'Bank transmittal contains a missing or placeholder account number',
+      );
+    }
+
+    const items: BankTransmittalItem[] = bankPayslips.map((ps) => {
       const netPesos = Number(ps.netPayCents) / 100;
       return {
         employeeNumber: ps.employee.employeeNumber,
@@ -73,7 +133,7 @@ export class ComplianceService {
           'Account_Number,Amount,Beneficiary_Name,Employee_ID,Reference';
         const rows = items.map(
           (i) =>
-            `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.employeeNumber}","${i.remarks}"`,
+            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.employeeNumber)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -82,7 +142,7 @@ export class ComplianceService {
         const headers = 'BPI_Account_Number,Payee_Name,Amount,Remarks';
         const rows = items.map(
           (i) =>
-            `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"${i.remarks}"`,
+            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -92,7 +152,7 @@ export class ComplianceService {
           'Recipient_Account,Recipient_Name,Amount,Currency,Remarks,Employee_ID';
         const rows = items.map(
           (i) =>
-            `"${i.accountNumber}","${i.accountName}",${i.amountPesos.toFixed(2)},"PHP","${i.remarks}","${i.employeeNumber}"`,
+            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},"PHP",${csvField(i.remarks)},${csvField(i.employeeNumber)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -101,7 +161,7 @@ export class ComplianceService {
         const headers = 'Metrobank_Account,Amount,Customer_Name,Description';
         const rows = items.map(
           (i) =>
-            `"${i.accountNumber}",${i.amountPesos.toFixed(2)},"${i.accountName}","${i.remarks}"`,
+            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -118,22 +178,32 @@ export class ComplianceService {
   ): Promise<Bir1601CSummary> {
     const payslips = await prisma.payslip.findMany({
       where: {
-        payrollRun: { organizationId },
-        createdAt: {
-          gte: new Date(year, month - 1, 1),
-          lt: new Date(year, month, 1),
+        payrollRun: {
+          organizationId,
+          status: 'DISBURSED',
+          paymentDate: {
+            gte: new Date(Date.UTC(year, month - 1, 1)),
+            lt: new Date(Date.UTC(year, month, 1)),
+          },
         },
       },
       include: {
-        employee: true,
+        employee: { include: { compensation: true } },
       },
     });
+
+    if (payslips.length === 0) {
+      throw new UnprocessableEntityException(
+        `No disbursed payslips exist for ${year}-${String(month).padStart(2, '0')}`,
+      );
+    }
 
     let grossCents = 0n;
     let nonTaxableCents = 0n;
     let taxableCents = 0n;
     let taxWithheldCents = 0n;
-    let mweCount = 0;
+    const employeeIds = new Set<string>();
+    const mweIds = new Set<string>();
 
     for (const ps of payslips) {
       grossCents += ps.grossPayCents;
@@ -157,8 +227,9 @@ export class ComplianceService {
           : 0n;
       taxableCents += taxable;
       taxWithheldCents += ps.withholdingTaxCents;
-      if (taxable === 0n && ps.withholdingTaxCents === 0n) {
-        mweCount++;
+      employeeIds.add(ps.employeeId);
+      if (ps.employee.compensation?.isTaxExempt) {
+        mweIds.add(ps.employeeId);
       }
     }
 
@@ -168,8 +239,8 @@ export class ComplianceService {
 
     return {
       taxablePeriod: `${year}-${String(month).padStart(2, '0')}`,
-      totalEmployees: payslips.length,
-      minimumWageEarnersCount: mweCount,
+      totalEmployees: employeeIds.size,
+      minimumWageEarnersCount: mweIds.size,
       grossCompensationPesos: Number(grossCents) / 100,
       nonTaxableCompensationPesos: Number(nonTaxableCents) / 100,
       taxableCompensationPesos: Number(taxableCents) / 100,
@@ -195,25 +266,32 @@ export class ComplianceService {
         organization: true,
         compensation: true,
         payslips: {
-          include: {
-            payrollRun: true,
+          where: {
+            payrollRun: {
+              organizationId,
+              status: 'DISBURSED',
+              paymentDate: {
+                gte: new Date(Date.UTC(taxYear, 0, 1)),
+                lt: new Date(Date.UTC(taxYear + 1, 0, 1)),
+              },
+            },
           },
         },
       },
     });
 
     if (!employee?.compensation) {
-      throw new Error(
+      throw new NotFoundException(
         `Employee ${employeeId} or compensation profile not found`,
+      );
+    }
+    if (employee.payslips.length === 0) {
+      throw new UnprocessableEntityException(
+        `No disbursed payslips exist for employee ${employeeId} in ${taxYear}`,
       );
     }
 
     const org = employee.organization;
-
-    // Filter payslips for the tax year
-    const yearPayslips = employee.payslips.filter(
-      (p) => p.payrollRun.cutoffEndDate.getFullYear() === taxYear,
-    );
 
     let totalBasicSalaryCents = 0n;
     let totalOvertimePayCents = 0n;
@@ -221,35 +299,52 @@ export class ComplianceService {
     let totalNightDiffPayCents = 0n;
     let totalDeMinimisBenefitsCents = 0n;
     let totalThirteenthMonthAndBonusesCents = 0n;
+    let totalOtherTaxableAllowancesCents = 0n;
     let totalSssEmployeeShareCents = 0n;
     let totalPhilhealthEmployeeShareCents = 0n;
     let totalPagibigEmployeeShareCents = 0n;
     let totalTaxWithheldCents = 0n;
 
-    if (yearPayslips.length > 0) {
-      for (const p of yearPayslips) {
-        totalBasicSalaryCents += p.basicPayCents;
+    for (const p of employee.payslips) {
+      if (p.deMinimisExcessCents > 0n) {
+        throw new UnprocessableEntityException(
+          'BIR 2316 cannot yet classify de minimis excess between exempt and taxable benefits; reconcile this employee before exporting',
+        );
+      }
+      // Special-run taxable/exempt allowances are the two sides of the
+      // recorded bonus payout; counting them here would count it twice.
+      if (p.bonusPaidCents > 0n) {
+        totalThirteenthMonthAndBonusesCents += p.bonusPaidCents;
+      } else {
+        const timeDeductions =
+          p.tardinessDeductionCents +
+          p.undertimeDeductionCents +
+          p.absenceDeductionCents;
+        totalBasicSalaryCents +=
+          p.basicPayCents > timeDeductions
+            ? p.basicPayCents - timeDeductions
+            : 0n;
         totalOvertimePayCents += p.overtimePayCents;
         totalHolidayPayCents += p.holidayPayCents;
         totalNightDiffPayCents += p.nightDiffPayCents;
         totalDeMinimisBenefitsCents += p.nonTaxableAllowancesCents;
-        totalSssEmployeeShareCents += p.sssEmployeeCents;
-        totalPhilhealthEmployeeShareCents += p.philhealthEmployeeCents;
-        totalPagibigEmployeeShareCents += p.pagibigEmployeeCents;
-        totalTaxWithheldCents += p.withholdingTaxCents;
+        totalOtherTaxableAllowancesCents +=
+          p.taxableAllowancesCents + p.restDayPayCents;
       }
-      totalThirteenthMonthAndBonusesCents = totalBasicSalaryCents / 12n;
-    } else {
-      const monthlyRateCents = employee.compensation.basicRateMonthlyCents;
-      totalBasicSalaryCents = monthlyRateCents * 12n;
-      totalThirteenthMonthAndBonusesCents = monthlyRateCents;
-      totalDeMinimisBenefitsCents = 2400000n; // ₱24,000 Rice subsidy
-      totalSssEmployeeShareCents = 2100000n;
-      totalPhilhealthEmployeeShareCents = 1500000n;
-      totalPagibigEmployeeShareCents = 240000n;
-      totalTaxWithheldCents = employee.compensation.isTaxExempt
-        ? 0n
-        : (totalBasicSalaryCents * 8n) / 100n;
+      totalSssEmployeeShareCents += p.sssEmployeeCents;
+      totalPhilhealthEmployeeShareCents += p.philhealthEmployeeCents;
+      totalPagibigEmployeeShareCents += p.pagibigEmployeeCents;
+      totalTaxWithheldCents += p.withholdingTaxCents;
+    }
+
+    if (
+      employee.compensation.isTaxExempt &&
+      (totalOtherTaxableAllowancesCents > 0n ||
+        totalThirteenthMonthAndBonusesCents > 9000000n)
+    ) {
+      throw new UnprocessableEntityException(
+        'BIR 2316 requires manual tax review for minimum-wage earners with other taxable benefits',
+      );
     }
 
     const certData = generateBir2316Certificate(
@@ -265,8 +360,8 @@ export class ComplianceService {
       },
       {
         registeredName: org.name,
-        tin: org.tin || '123-456-789-000',
-        rdoCode: org.rdoCode || '047',
+        tin: org.tin,
+        rdoCode: org.rdoCode,
         registeredAddress: org.registeredAddress,
       },
       {
@@ -276,13 +371,23 @@ export class ComplianceService {
         totalNightDiffPayCents,
         totalDeMinimisBenefitsCents,
         totalThirteenthMonthAndBonusesCents,
-        totalOtherTaxableAllowancesCents: 0n,
+        totalOtherTaxableAllowancesCents,
         totalSssEmployeeShareCents,
         totalPhilhealthEmployeeShareCents,
         totalPagibigEmployeeShareCents,
         totalTaxWithheldCents,
       },
     );
+
+    const recordedGrossCents = employee.payslips.reduce(
+      (sum, p) => sum + p.grossPayCents,
+      0n,
+    );
+    if (certData.partIVA.grossCompensationIncomeCents !== recordedGrossCents) {
+      throw new UnprocessableEntityException(
+        'BIR 2316 totals cannot be reconciled with recorded payslips; review benefit classifications before exporting',
+      );
+    }
 
     const formattedDocument = formatBir2316TextDocument(certData);
 
@@ -297,28 +402,44 @@ export class ComplianceService {
    */
   async generateDole13thMonthReport(
     organizationId: string,
+    details: DoleReportDetails,
     taxYear = new Date().getFullYear(),
   ) {
-    const { calculate13thMonthBatch, formatDole13thMonthComplianceReport } =
-      await import('@workspace/payroll-engine');
+    const {
+      calculateMonthsWorkedInYear,
+      formatDole13thMonthComplianceReport,
+    } = await import('@workspace/payroll-engine');
+    const yearStart = new Date(Date.UTC(taxYear, 0, 1));
+    const yearEnd = new Date(Date.UTC(taxYear + 1, 0, 1));
 
     // PD 851 covers rank-and-file employees only; Labor Code managerial
     // employees are counted separately for report transparency.
     const employees = await prisma.employee.findMany({
       where: {
         organizationId,
-        employmentStatus: 'ACTIVE',
         isManagerial: false,
+        hireDate: { lt: yearEnd },
       },
       include: {
-        organization: true,
         compensation: true,
+        payslips: {
+          where: {
+            payrollRun: {
+              organizationId,
+              cutoffSequence: {
+                in: ['FIRST_CUTOFF', 'SECOND_CUTOFF', 'SPECIAL_RUN'],
+              },
+              status: 'DISBURSED',
+              paymentDate: { gte: yearStart, lt: yearEnd },
+            },
+          },
+        },
       },
     });
     const excludedManagerialCount = await prisma.employee.count({
       where: {
         organizationId,
-        employmentStatus: 'ACTIVE',
+        hireDate: { lt: yearEnd },
         isManagerial: true,
       },
     });
@@ -326,38 +447,108 @@ export class ComplianceService {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
     });
-    const orgName = organization?.name || 'Unknown organization';
-    const orgAddress = organization?.registeredAddress || 'Not provided';
+    if (!organization) throw new NotFoundException('Organization not found');
 
-    const employeeInputs = employees.map((employee) => {
-      const hireDate = employee.hireDate;
-      const hireYear = hireDate.getFullYear();
-      let monthsWorked = 12;
-      if (hireYear === taxYear) {
-        monthsWorked = Math.max(1, 12 - hireDate.getMonth());
+    const employeeResults: ThirteenthMonthEmployeeResult[] = [];
+    for (const employee of employees) {
+      const specials = employee.payslips.filter(
+        (p) => p.bonusPaidCents > 0n,
+      );
+      if (
+        employee.employmentStatus === 'ACTIVE' &&
+        employee.hireDate < yearEnd &&
+        specials.length === 0
+      ) {
+        throw new UnprocessableEntityException(
+          `Employee ${employee.employeeNumber} has no disbursed 13th-month payout for ${taxYear}`,
+        );
+      }
+      if (specials.length === 0) continue;
+      if (!employee.compensation) {
+        throw new UnprocessableEntityException(
+          `Employee ${employee.employeeNumber} has no compensation profile`,
+        );
       }
 
-      return {
+      const totalBasicEarnedCents = employee.payslips.reduce((sum, p) => {
+        if (p.bonusPaidCents > 0n) return sum;
+        const deductions =
+          p.tardinessDeductionCents +
+          p.undertimeDeductionCents +
+          p.absenceDeductionCents;
+        return (
+          sum +
+          (p.basicPayCents > deductions ? p.basicPayCents - deductions : 0n)
+        );
+      }, 0n);
+      const thirteenthMonthPayCents = specials.reduce(
+        (sum, p) => sum + p.bonusPaidCents,
+        0n,
+      );
+      const taxExemptPortionCents = specials.reduce(
+        (sum, p) => sum + p.nonTaxableAllowancesCents,
+        0n,
+      );
+      const taxableExcessCents = specials.reduce(
+        (sum, p) => sum + p.taxableAllowancesCents,
+        0n,
+      );
+      if (
+        taxExemptPortionCents + taxableExcessCents !==
+        thirteenthMonthPayCents
+      ) {
+        throw new UnprocessableEntityException(
+          `Employee ${employee.employeeNumber} has an inconsistent 13th-month payslip`,
+        );
+      }
+      const monthsWorked = calculateMonthsWorkedInYear(
+        employee.hireDate,
+        taxYear,
+      );
+      employeeResults.push({
         employeeId: employee.id,
         employeeNumber: employee.employeeNumber,
         fullName: `${employee.firstName} ${employee.lastName}`,
-        monthlyBasicRateCents:
-          employee.compensation?.basicRateMonthlyCents ?? 2500000n,
-        hireDate: hireDate.toISOString().slice(0, 10),
-        monthsWorkedInYear: monthsWorked,
-        unpaidAbsenceDays: 0,
-      };
-    });
+        totalBasicEarnedCents,
+        thirteenthMonthPayCents,
+        taxExemptPortionCents,
+        taxableExcessCents,
+        isProrated:
+          monthsWorked < 12 ||
+          totalBasicEarnedCents <
+            employee.compensation.basicRateMonthlyCents * 12n,
+        monthsWorked,
+      });
+    }
 
-    const batchResult = calculate13thMonthBatch(taxYear, employeeInputs);
+    if (employeeResults.length === 0) {
+      throw new UnprocessableEntityException(
+        `No disbursed 13th-month payouts exist for ${taxYear}`,
+      );
+    }
+    const batchResult: ThirteenthMonthBatchResult = {
+      taxYear,
+      totalBenefitedEmployees: employeeResults.length,
+      totalThirteenthMonthPayCents: employeeResults.reduce(
+        (sum, result) => sum + result.thirteenthMonthPayCents,
+        0n,
+      ),
+      totalTaxExemptCents: employeeResults.reduce(
+        (sum, result) => sum + result.taxExemptPortionCents,
+        0n,
+      ),
+      totalTaxableExcessCents: employeeResults.reduce(
+        (sum, result) => sum + result.taxableExcessCents,
+        0n,
+      ),
+      employeeResults,
+    };
 
     const reportText = formatDole13thMonthComplianceReport({
       taxYear,
-      establishmentName: orgName,
-      registeredAddress: orgAddress,
-      natureOfBusiness: 'Information Technology & Services',
-      contactPerson: 'HR & Payroll Director',
-      contactNumber: '+63 2 8123 4567',
+      establishmentName: organization.name,
+      registeredAddress: organization.registeredAddress,
+      ...details,
       batchResult,
       excludedManagerialCount,
     });

@@ -44,6 +44,7 @@ export interface DoleComplianceReportInput {
   natureOfBusiness: string;
   contactPerson: string;
   contactNumber: string;
+  contactTitle?: string;
   batchResult: ThirteenthMonthBatchResult;
   // Labor Code managerial employees are outside PD 851 coverage and are
   // listed in the report for transparency instead of the benefit ledger.
@@ -216,6 +217,6 @@ export function formatDole13thMonthComplianceReport(
     "with the provisions of Presidential Decree No. 851 and its implementing guidelines.",
     "",
     `Authorized Representative: ${input.contactPerson}          Date: ${new Date().toISOString().slice(0, 10)}`,
-    "Position / Title: HR & Payroll Director",
+    `Position / Title: ${input.contactTitle ?? "Not provided"}`,
   ].join("\r\n");
 }

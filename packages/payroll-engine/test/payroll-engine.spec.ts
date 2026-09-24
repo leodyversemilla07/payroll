@@ -251,6 +251,166 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
+  describe("Monthly withholding across cutoffs", () => {
+    const baseInput: PayrollCalculationInput = {
+      cutoffType: CutoffType.FIRST_CUTOFF,
+      schedule: {
+        deductSssIn: "FIRST_CUTOFF",
+        deductPhilhealthIn: "FIRST_CUTOFF",
+        deductPagibigIn: "FIRST_CUTOFF",
+        deductTaxIn: "SECOND_CUTOFF",
+      },
+      compensation: {
+        payBasis: PayBasis.MONTHLY,
+        monthlyBasicRateCents: 3000000n,
+        divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+        isMinimumWageEarner: false,
+      },
+      attendance: EMPTY_ATTENDANCE,
+      allowances: [],
+      loans: [],
+    };
+
+    it("withholds the monthly tax on the combined first and second cutoff bases", () => {
+      const first = calculatePhilippinePayroll(baseInput);
+      const second = calculatePhilippinePayroll({
+        ...baseInput,
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        priorMonthlyTaxableIncomeCents: first.taxableIncomeCents,
+        priorMonthlyTaxWithheldCents: first.withholdingTaxCents,
+      });
+
+      const fullMonthTax = calculateWithholdingTax(
+        first.taxableIncomeCents + second.taxableIncomeCents,
+        false,
+      );
+      expect(first.withholdingTaxCents).toBe(0n);
+      expect(second.withholdingTaxCents).toBe(fullMonthTax);
+      expect(second.withholdingTaxCents).toBeGreaterThan(
+        calculateWithholdingTax(second.taxableIncomeCents, true),
+      );
+    });
+
+    it("uses actual first-cutoff taxable earnings, not a salary estimate", () => {
+      const first = calculatePhilippinePayroll({
+        ...baseInput,
+        attendance: { ...EMPTY_ATTENDANCE, absentDays: 2 },
+      });
+      const second = calculatePhilippinePayroll({
+        ...baseInput,
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        allowances: [
+          { name: "Taxable bonus", amountCents: 200000n, isTaxable: true },
+        ],
+        priorMonthlyTaxableIncomeCents: first.taxableIncomeCents,
+        priorMonthlyTaxWithheldCents: 0n,
+      });
+
+      expect(second.withholdingTaxCents).toBe(
+        calculateWithholdingTax(
+          first.taxableIncomeCents + second.taxableIncomeCents,
+          false,
+        ),
+      );
+    });
+
+    it("withholds only the outstanding tax when tax was already withheld", () => {
+      const second = calculatePhilippinePayroll({
+        ...baseInput,
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        priorMonthlyTaxableIncomeCents: 1500000n,
+        priorMonthlyTaxWithheldCents: 100000n,
+      });
+      const monthlyTax = calculateWithholdingTax(
+        1500000n + second.taxableIncomeCents,
+        false,
+      );
+      expect(second.withholdingTaxCents).toBe(
+        monthlyTax > 100000n ? monthlyTax - 100000n : 0n,
+      );
+    });
+
+    it("uses the monthly table for a second-cutoff-only employee", () => {
+      const second = calculatePhilippinePayroll({
+        ...baseInput,
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        priorMonthlyTaxableIncomeCents: 0n,
+        priorMonthlyTaxWithheldCents: 0n,
+      });
+      expect(second.withholdingTaxCents).toBe(
+        calculateWithholdingTax(second.taxableIncomeCents, false),
+      );
+    });
+  });
+
+  describe("Affordable loan deductions", () => {
+    const baseInput: PayrollCalculationInput = {
+      cutoffType: CutoffType.FIRST_CUTOFF,
+      schedule: {
+        deductSssIn: "FIRST_CUTOFF",
+        deductPhilhealthIn: "FIRST_CUTOFF",
+        deductPagibigIn: "FIRST_CUTOFF",
+        deductTaxIn: "SECOND_CUTOFF",
+      },
+      compensation: {
+        payBasis: PayBasis.MONTHLY,
+        monthlyBasicRateCents: 3000000n,
+        divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+        isMinimumWageEarner: false,
+      },
+      attendance: EMPTY_ATTENDANCE,
+      allowances: [],
+      loans: [],
+    };
+
+    it("applies only affordable loan installments in input order after mandatory and other deductions", () => {
+      const result = calculatePhilippinePayroll({
+        ...baseInput,
+        otherDeductionsCents: 100000n,
+        loans: [
+          { loanId: "loan-a", name: "Loan A", amountCents: 1000000n },
+          { loanId: "loan-b", name: "Loan B", amountCents: 1000000n },
+        ],
+      });
+      const available =
+        result.grossPayCents -
+        result.totalStatutoryEmployeeCents -
+        result.withholdingTaxCents -
+        result.otherDeductionsCents;
+
+      expect(result.appliedLoanDeductions).toEqual([
+        { loanId: "loan-a", amountCents: 1000000n },
+        { loanId: "loan-b", amountCents: available - 1000000n },
+      ]);
+      expect(result.loanDeductionsCents).toBe(available);
+      expect(result.totalDeductionsCents).toBe(result.grossPayCents);
+      expect(result.netPayCents).toBe(0n);
+    });
+
+    it("leaves all loans untouched when no pay remains after compulsory deductions", () => {
+      const regular = calculatePhilippinePayroll(baseInput);
+      const result = calculatePhilippinePayroll({
+        ...baseInput,
+        otherDeductionsCents:
+          regular.grossPayCents - regular.totalStatutoryEmployeeCents,
+        loans: [{ loanId: "loan-a", name: "Loan A", amountCents: 50000n }],
+      });
+      expect(result.appliedLoanDeductions).toEqual([]);
+      expect(result.loanDeductionsCents).toBe(0n);
+      expect(result.netPayCents).toBe(0n);
+    });
+
+    it("refuses payroll when statutory or other mandatory deductions exceed earnings", () => {
+      expect(() =>
+        calculatePhilippinePayroll({
+          ...baseInput,
+          attendance: { ...EMPTY_ATTENDANCE, absentDays: 15 },
+          loans: [{ loanId: "loan-a", name: "Loan A", amountCents: 50000n }],
+        }),
+      ).toThrow("Gross pay cannot cover mandatory deductions");
+    });
+  });
+
   describe("6. De Minimis & 13th Month Pay", () => {
     it("should separate exempt de minimis and spill excess into taxable compensation", () => {
       // Rice subsidy limit is 2,500/mo under RR 29-2025 (1,250 per semi-monthly cutoff)

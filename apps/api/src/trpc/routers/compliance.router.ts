@@ -79,10 +79,24 @@ export function createComplianceRouter(ctx: RouterContext) {
       }),
 
     exportDole13thMonth: payrollProcedure
-      .input(z.object({ taxYear: z.number().int().optional() }))
+      .input(
+        z.object({
+          taxYear: z.number().int().min(2020).max(2100).optional(),
+          natureOfBusiness: z.string().trim().min(1).max(200),
+          contactPerson: z.string().trim().min(1).max(200),
+          contactNumber: z.string().trim().min(1).max(50),
+          contactTitle: z.string().trim().min(1).max(200),
+        }),
+      )
       .mutation(async ({ input, ctx }) => {
         const result = await complianceService.generateDole13thMonthReport(
           ctx.user.organizationId,
+          {
+            natureOfBusiness: input.natureOfBusiness,
+            contactPerson: input.contactPerson,
+            contactNumber: input.contactNumber,
+            contactTitle: input.contactTitle,
+          },
           input.taxYear,
         );
         await auditService.record({

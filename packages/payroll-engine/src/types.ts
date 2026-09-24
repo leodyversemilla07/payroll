@@ -136,6 +136,13 @@ export interface PayrollCalculationInput {
   ytdTaxableCompensationCents?: Centavos;
   ytdTaxWithheldCents?: Centavos;
   /**
+   * Prior regular-cutoff taxable income in this calendar month. When supplied,
+   * withholding uses the monthly table on the combined amount, less tax already
+   * withheld in the month. Supply 0n for a second cutoff with no first payslip.
+   */
+  priorMonthlyTaxableIncomeCents?: Centavos;
+  priorMonthlyTaxWithheldCents?: Centavos;
+  /**
    * Year-to-date 13th-month + bonus + de minimis excess already counted
    * toward the PHP 90,000 annual bucket. When provided (even 0n), the
    * bucket prices this period's additions and only the overflow is
@@ -204,6 +211,8 @@ export interface PayrollCalculationResult {
   withholdingTaxCents: Centavos;
 
   // Other Deductions
+  /** Loan installments actually collected, in input order (unpaid portions remain outstanding). */
+  appliedLoanDeductions: Pick<LoanDeductionInput, "loanId" | "amountCents">[];
   loanDeductionsCents: Centavos;
   otherDeductionsCents: Centavos;
   totalDeductionsCents: Centavos;

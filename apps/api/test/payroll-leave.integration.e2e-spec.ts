@@ -1,0 +1,370 @@
+import { randomUUID } from 'node:crypto';
+import type { Request, Response } from 'express';
+import { Prisma, prisma, Role } from '@workspace/db';
+import { AuditService } from '../src/audit/audit.service';
+import { AuthService } from '../src/auth/auth.service';
+import { ComplianceService } from '../src/modules/compliance/compliance.service';
+import { EmployeesService } from '../src/modules/employees/employees.service';
+import { LeavesService } from '../src/modules/leaves/leaves.service';
+import { LoansService } from '../src/modules/loans/loans.service';
+import { PayrollService } from '../src/modules/payroll/payroll.service';
+import { TimekeepingService } from '../src/modules/timekeeping/timekeeping.service';
+import { createApiRouter } from '../src/trpc/routers/app.router';
+import { type Context, TrpcService } from '../src/trpc/trpc.service';
+
+// Unlike the mocked service specs, these exercise real PostgreSQL transactions,
+// Prisma relations, tenant-scoped tRPC procedures, and audit persistence. Run
+// only against the dedicated test database provisioned in CI.
+const testTag = randomUUID().slice(0, 8);
+const ownedOrganizationIds: string[] = [];
+
+const timekeepingService = new TimekeepingService();
+const leavesService = new LeavesService();
+const router = createApiRouter(
+  new TrpcService(),
+  new EmployeesService(),
+  timekeepingService,
+  new PayrollService(timekeepingService),
+  new LoansService(),
+  new ComplianceService(),
+  leavesService,
+  new AuthService(),
+  new AuditService(),
+);
+
+type CallerUser = NonNullable<Context['user']>;
+function callerFor(user: CallerUser) {
+  const req = {
+    ip: '127.0.0.1',
+    get: () => 'payroll-integration-test',
+    headers: {},
+  } as unknown as Request;
+  return router.createCaller({ req, res: {} as Response, user });
+}
+
+async function createOrganization(label: string) {
+  const organization = await prisma.organization.create({
+    data: {
+      name: `${label}-${testTag}`,
+      tin: '123-456-789-000',
+      rdoCode: '047',
+      registeredAddress: 'Makati City',
+    },
+  });
+  ownedOrganizationIds.push(organization.id);
+  return organization;
+}
+
+async function createUser(
+  organizationId: string,
+  role: Role,
+  name: string,
+  employeeId?: string,
+) {
+  const user = await prisma.user.create({
+    data: {
+      organizationId,
+      employeeId,
+      name,
+      role,
+      email: `${name.toLowerCase().replaceAll(' ', '-')}-${testTag}@test.invalid`,
+      passwordHash: 'integration-test-no-login',
+    },
+  });
+  return {
+    id: user.id,
+    organizationId: user.organizationId,
+    employeeId: user.employeeId ?? undefined,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
+describe('PostgreSQL-backed payroll and leave integration', () => {
+  jest.setTimeout(30_000);
+  let organizationId: string;
+  let employeeId: string;
+  let hr: CallerUser;
+  let specialist: CallerUser;
+  let staff: CallerUser;
+  let foreignHr: CallerUser;
+
+  beforeAll(async () => {
+    if (process.env.NODE_ENV !== 'test' || !process.env.DATABASE_URL) {
+      throw new Error(
+        'A dedicated test DATABASE_URL and NODE_ENV=test are required',
+      );
+    }
+    const organization = await createOrganization('Payroll-test');
+    const otherOrganization = await createOrganization('Foreign-test');
+    organizationId = organization.id;
+    const branch = await prisma.branch.create({
+      data: {
+        organizationId,
+        name: 'HQ',
+        code: 'HQ',
+        address: 'Makati City',
+      },
+    });
+    const department = await prisma.department.create({
+      data: { organizationId, name: 'Operations', code: 'OPS' },
+    });
+    const employee = await prisma.employee.create({
+      data: {
+        organizationId,
+        branchId: branch.id,
+        departmentId: department.id,
+        employeeNumber: `TEST-${testTag}`,
+        firstName: 'Test',
+        lastName: 'Employee',
+        email: `employee-${testTag}@test.invalid`,
+        dateOfBirth: new Date('1995-01-01'),
+        gender: 'Not specified',
+        civilStatus: 'Single',
+        contactNumber: 'N/A',
+        residentialAddress: 'Makati City',
+        tin: '123-456-789-000',
+        sssNo: '00-0000000-0',
+        philhealthNo: '00-000000000-0',
+        pagibigNo: '0000-0000-0000',
+        hireDate: new Date('2025-01-01'),
+        bankName: 'BDO',
+        bankAccountNumber: '1234567890',
+        bankAccountName: 'Test Employee',
+        compensation: {
+          create: {
+            basicRateMonthlyCents: 3000000n,
+            basicRateDailyCents: 137931n,
+            basicRateHourlyCents: 17241n,
+          },
+        },
+      },
+    });
+    employeeId = employee.id;
+    await prisma.leaveBalance.create({
+      data: {
+        employeeId,
+        year: 2026,
+        leaveType: 'SIL',
+        totalCredits: new Prisma.Decimal(5),
+        usedCredits: new Prisma.Decimal(0),
+        balance: new Prisma.Decimal(5),
+      },
+    });
+    hr = await createUser(organizationId, Role.HR_ADMIN, 'HR Admin');
+    specialist = await createUser(
+      organizationId,
+      Role.PAYROLL_SPECIALIST,
+      'Payroll Specialist',
+    );
+    staff = await createUser(organizationId, Role.EMPLOYEE, 'Staff', employeeId);
+    foreignHr = await createUser(
+      otherOrganization.id,
+      Role.HR_ADMIN,
+      'Foreign HR',
+    );
+  });
+
+  afterAll(async () => {
+    if (ownedOrganizationIds.length === 0) return;
+    const orgScope = { organizationId: { in: ownedOrganizationIds } };
+    const employeeScope = { employee: orgScope };
+    await prisma.loanPayment.deleteMany({ where: { loan: employeeScope } });
+    await prisma.payslip.deleteMany({ where: { payrollRun: orgScope } });
+    await prisma.payrollRun.deleteMany({ where: orgScope });
+    await prisma.leaveRequest.deleteMany({ where: employeeScope });
+    await prisma.leaveBalance.deleteMany({ where: employeeScope });
+    await prisma.dailyTimeRecord.deleteMany({ where: employeeScope });
+    await prisma.employeeLoan.deleteMany({ where: employeeScope });
+    await prisma.employee.deleteMany({ where: orgScope });
+    await prisma.organization.deleteMany({
+      where: { id: { in: ownedOrganizationIds } },
+    });
+    await prisma.$disconnect();
+  });
+
+  it('enforces tenant access and approves paid leave only once', async () => {
+    const request = await callerFor(staff).leaves.request({
+      employeeId,
+      leaveType: 'SIL',
+      startDate: '2026-09-10',
+      endDate: '2026-09-11',
+      daysCount: 2,
+      isPaid: true,
+      reason: 'Family leave',
+    });
+    await expect(
+      callerFor(staff).leaves.approve({ requestId: request.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      callerFor(foreignHr).leaves.approve({ requestId: request.id }),
+    ).rejects.toThrow();
+
+    const approved = await callerFor(hr).leaves.approve({
+      requestId: request.id,
+    });
+    const repeated = await callerFor(hr).leaves.approve({
+      requestId: request.id,
+    });
+    const balance = await prisma.leaveBalance.findUniqueOrThrow({
+      where: {
+        employeeId_leaveType_year: { employeeId, leaveType: 'SIL', year: 2026 },
+      },
+    });
+    expect(approved.status).toBe('APPROVED');
+    expect(repeated.approvedById).toBe(hr.id);
+    expect(balance.balance.toString()).toBe('3');
+    expect(balance.usedCredits.toString()).toBe('2');
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          organizationId,
+          entityType: 'LeaveRequest',
+          entityId: request.id,
+          action: 'APPROVE',
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it('rolls back an approval when paid leave exceeds the remaining balance', async () => {
+    const request = await prisma.leaveRequest.create({
+      data: {
+        employeeId,
+        leaveType: 'SIL',
+        startDate: new Date('2026-09-21'),
+        endDate: new Date('2026-09-24'),
+        daysCount: new Prisma.Decimal(4),
+        isPaid: true,
+        reason: 'Over balance',
+      },
+    });
+    await expect(
+      callerFor(hr).leaves.approve({ requestId: request.id }),
+    ).rejects.toThrow();
+    const unchanged = await prisma.leaveRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    const balance = await prisma.leaveBalance.findUniqueOrThrow({
+      where: {
+        employeeId_leaveType_year: { employeeId, leaveType: 'SIL', year: 2026 },
+      },
+    });
+    expect(unchanged.status).toBe('PENDING');
+    expect(balance.balance.toString()).toBe('3');
+  });
+
+  it('cannot overdraw a leave balance when two requests are approved concurrently', async () => {
+    const requests = await Promise.all(
+      [0, 1].map((day) =>
+        prisma.leaveRequest.create({
+          data: {
+            employeeId,
+            leaveType: 'SIL',
+            startDate: new Date(Date.UTC(2026, 9, 1 + day * 3)),
+            endDate: new Date(Date.UTC(2026, 9, 2 + day * 3)),
+            daysCount: new Prisma.Decimal(2),
+            isPaid: true,
+            reason: 'Concurrent leave test',
+          },
+        }),
+      ),
+    );
+    const outcomes = await Promise.allSettled(
+      requests.map((request) =>
+        callerFor(hr).leaves.approve({ requestId: request.id }),
+      ),
+    );
+    expect(
+      outcomes.filter((outcome) => outcome.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const balance = await prisma.leaveBalance.findUniqueOrThrow({
+      where: {
+        employeeId_leaveType_year: { employeeId, leaveType: 'SIL', year: 2026 },
+      },
+    });
+    expect(balance.balance.toString()).toBe('1');
+    expect(balance.usedCredits.toString()).toBe('4');
+    expect(
+      await prisma.leaveRequest.count({
+        where: {
+          id: { in: requests.map((request) => request.id) },
+          status: 'APPROVED',
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it('collects only affordable loan payments and exactly reverses them on cancellation', async () => {
+    const loan = await prisma.employeeLoan.create({
+      data: {
+        employeeId,
+        loanType: 'COMPANY_CASH_ADVANCE',
+        principalCents: 2000000n,
+        totalAmountCents: 2000000n,
+        amortizationCents: 2000000n,
+        balanceCents: 2000000n,
+        startDate: new Date('2026-09-01'),
+      },
+    });
+    await prisma.dailyTimeRecord.create({
+      data: {
+        employeeId,
+        date: new Date('2026-09-16'),
+        actualWorkedMinutes: 480,
+        isApproved: true,
+      },
+    });
+    const run = await callerFor(specialist).payroll.triggerRun({
+      cutoffStartDate: '2026-09-16',
+      cutoffEndDate: '2026-09-30',
+      paymentDate: '2026-10-01',
+      cutoffSequence: 'SECOND_CUTOFF',
+    });
+    expect(run.status).toBe('AUDITED');
+    await expect(
+      callerFor(specialist).payroll.triggerRun({
+        cutoffStartDate: '2026-09-01',
+        cutoffEndDate: '2026-09-15',
+        paymentDate: '2026-09-16',
+        cutoffSequence: 'FIRST_CUTOFF',
+      }),
+    ).rejects.toThrow();
+    expect(
+      await prisma.payrollRun.count({ where: { organizationId } }),
+    ).toBe(1);
+    const slip = await prisma.payslip.findFirstOrThrow({
+      where: { payrollRunId: run.id, employeeId },
+    });
+    const payment = await prisma.loanPayment.findFirstOrThrow({
+      where: { loanId: loan.id, payslipId: slip.id },
+    });
+    expect(slip.grossPayCents).toBe(1500000n);
+    expect(slip.loanDeductionsCents).toBe(1500000n);
+    expect(slip.totalDeductionsCents + slip.netPayCents).toBe(
+      slip.grossPayCents,
+    );
+    expect(payment.amountPaidCents).toBe(1500000n);
+    expect(
+      (await prisma.employeeLoan.findUniqueOrThrow({ where: { id: loan.id } }))
+        .balanceCents,
+    ).toBe(500000n);
+
+    await expect(
+      callerFor(specialist).payroll.approveRun({ runId: run.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await callerFor(hr).payroll.approveRun({ runId: run.id });
+    await callerFor(specialist).payroll.cancelRun({ runId: run.id });
+    expect(
+      (await prisma.employeeLoan.findUniqueOrThrow({ where: { id: loan.id } }))
+        .balanceCents,
+    ).toBe(2000000n);
+    expect(
+      await prisma.loanPayment.count({ where: { loanId: loan.id } }),
+    ).toBe(0);
+    expect(
+      await prisma.payslip.count({ where: { payrollRunId: run.id } }),
+    ).toBe(0);
+  });
+});

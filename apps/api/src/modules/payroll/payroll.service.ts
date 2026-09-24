@@ -20,6 +20,7 @@ import {
   calculatePhilippinePayroll,
   calculateWithholdingTax,
   DeMinimisCategory,
+  InsufficientPayError,
   PayBasis,
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
@@ -278,6 +279,83 @@ export class PayrollService {
 
     if (existing) return this.assertIdempotentMatch(existing, params);
 
+    const monthStart = new Date(
+      Date.UTC(
+        params.cutoffEndDate.getUTCFullYear(),
+        params.cutoffEndDate.getUTCMonth(),
+        1,
+      ),
+    );
+    const nextMonth = new Date(
+      Date.UTC(
+        params.cutoffEndDate.getUTCFullYear(),
+        params.cutoffEndDate.getUTCMonth() + 1,
+        1,
+      ),
+    );
+    if (params.cutoffSequence === 'FIRST_CUTOFF') {
+      // A later first cutoff would invalidate the already-posted monthly tax
+      // reconciliation on a second cutoff. A new hire can still have only a
+      // second-cutoff payslip; that payslip is taxed on actual earnings.
+      const secondRun = await transaction.payrollRun.findFirst({
+        where: {
+          organizationId: params.organizationId,
+          cutoffSequence: 'SECOND_CUTOFF',
+          cutoffEndDate: { gte: monthStart, lt: nextMonth },
+          status: { in: ['AUDITED', 'APPROVED', 'DISBURSED'] },
+        },
+        select: { id: true },
+      });
+      if (secondRun) {
+        throw new ConflictException(
+          'The second cutoff for this month has already been processed; cancel it before processing the first cutoff',
+        );
+      }
+    }
+
+    // Read actual first-cutoff payslips once per run, within the serializable
+    // transaction, rather than guessing the taxable base from monthly salary.
+    const priorMonthlyTax = new Map<
+      string,
+      { taxableCents: bigint; withheldCents: bigint }
+    >();
+    if (params.cutoffSequence === 'SECOND_CUTOFF') {
+      const priorPayslips = await transaction.payslip.findMany({
+        where: {
+          payrollRun: {
+            organizationId: params.organizationId,
+            cutoffSequence: 'FIRST_CUTOFF',
+            cutoffEndDate: { gte: monthStart, lt: params.cutoffEndDate },
+            status: { in: ['AUDITED', 'APPROVED', 'DISBURSED'] },
+          },
+        },
+        select: {
+          employeeId: true,
+          grossPayCents: true,
+          nonTaxableAllowancesCents: true,
+          sssEmployeeCents: true,
+          philhealthEmployeeCents: true,
+          pagibigEmployeeCents: true,
+          withholdingTaxCents: true,
+        },
+      });
+      for (const payslip of priorPayslips) {
+        const prior = priorMonthlyTax.get(payslip.employeeId) ?? {
+          taxableCents: 0n,
+          withheldCents: 0n,
+        };
+        const taxable =
+          payslip.grossPayCents -
+          payslip.nonTaxableAllowancesCents -
+          payslip.sssEmployeeCents -
+          payslip.philhealthEmployeeCents -
+          payslip.pagibigEmployeeCents;
+        prior.taxableCents += taxable > 0n ? taxable : 0n;
+        prior.withheldCents += payslip.withholdingTaxCents;
+        priorMonthlyTax.set(payslip.employeeId, prior);
+      }
+    }
+
     const payrollRun = await transaction.payrollRun.create({
       data: {
         organizationId: params.organizationId,
@@ -361,14 +439,18 @@ export class PayrollService {
         }),
       );
 
-      const loans: LoanDeductionInput[] = employee.loans.map((loan) => ({
-        loanId: loan.id,
-        name: loan.loanType,
-        amountCents:
-          loan.amortizationCents > loan.balanceCents
-            ? loan.balanceCents
-            : loan.amortizationCents,
-      }));
+      // Stable order ensures partial payments always prioritize the same
+      // loans, independent of the database's unspecified row order.
+      const loans: LoanDeductionInput[] = [...employee.loans]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((loan) => ({
+          loanId: loan.id,
+          name: loan.loanType,
+          amountCents:
+            loan.amortizationCents > loan.balanceCents
+              ? loan.balanceCents
+              : loan.amortizationCents,
+        }));
 
       // Year-to-date de minimis excess already counted toward the PHP 90,000
       // annual bucket, keyed to the cutoff's tax year. Payslips predating
@@ -414,6 +496,14 @@ export class PayrollService {
         attendance: attendanceSummary,
         allowances,
         loans,
+        ...(params.cutoffSequence === 'SECOND_CUTOFF'
+          ? {
+              priorMonthlyTaxableIncomeCents:
+                priorMonthlyTax.get(employee.id)?.taxableCents ?? 0n,
+              priorMonthlyTaxWithheldCents:
+                priorMonthlyTax.get(employee.id)?.withheldCents ?? 0n,
+            }
+          : {}),
         ytdOtherBenefitsCents:
           (ytdBucket._sum.deMinimisExcessCents ?? 0n) +
           (ytdBucket._sum.bonusPaidCents ?? 0n),
@@ -423,7 +513,17 @@ export class PayrollService {
         periodBonusesCents: 0n,
       };
 
-      const result = calculatePhilippinePayroll(calculationInput);
+      let result: ReturnType<typeof calculatePhilippinePayroll>;
+      try {
+        result = calculatePhilippinePayroll(calculationInput);
+      } catch (error) {
+        if (error instanceof InsufficientPayError) {
+          throw new UnprocessableEntityException(
+            `Employee ${employee.employeeNumber} has insufficient gross pay to cover mandatory deductions`,
+          );
+        }
+        throw error;
+      }
       const payslip = await transaction.payslip.create({
         data: {
           payrollRunId: payrollRun.id,
@@ -461,8 +561,10 @@ export class PayrollService {
       });
 
       for (const loan of employee.loans) {
-        const deduction = loans.find((item) => item.loanId === loan.id);
-        if (!deduction || deduction.amountCents <= 0n) continue;
+        const deduction = result.appliedLoanDeductions.find(
+          (item) => item.loanId === loan.id,
+        );
+        if (!deduction) continue;
 
         const balanceAfterCents = loan.balanceCents - deduction.amountCents;
         const update = await transaction.employeeLoan.updateMany({

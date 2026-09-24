@@ -49,15 +49,16 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     );
 
     // Part IV-C checks
-    expect(cert.partIVC.basicSalaryRegularCents).toBe(60000000n);
+    expect(cert.partIVC.basicSalaryRegularCents).toBe(60000000n - 3840000n);
     expect(cert.partIVC.overtimePayTaxableCents).toBe(3000000n);
     expect(cert.partIVC.thirteenthMonthExcessTaxableCents).toBe(0n);
-    expect(cert.partIVC.totalTaxableCompensationCents).toBe(63000000n);
+    expect(cert.partIVC.totalTaxableCompensationCents).toBe(
+      63000000n - 3840000n,
+    );
 
     // Part IV-A summary checks
     expect(cert.partIVA.grossCompensationIncomeCents).toBe(
-      cert.partIVB.totalNonTaxableCompensationCents +
-        cert.partIVC.totalTaxableCompensationCents,
+      60000000n + 3000000n + 2400000n + 5000000n,
     );
     expect(cert.partIVA.taxDueAnnualCents).toBeGreaterThan(0n);
 
@@ -94,7 +95,7 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
 
     // MWE: All basic, overtime, holiday, night diff must be in Part IV-B
     expect(cert.isMwe).toBe(true);
-    expect(cert.partIVB.basicMweCents).toBe(18480000n);
+    expect(cert.partIVB.basicMweCents).toBe(18480000n - 1542000n);
     expect(cert.partIVB.overtimePayMweCents).toBe(1500000n);
     expect(cert.partIVB.holidayPayMweCents).toBe(1000000n);
     expect(cert.partIVB.nightDiffMweCents).toBe(500000n);
@@ -103,6 +104,9 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     expect(cert.partIVC.totalTaxableCompensationCents).toBe(0n);
     expect(cert.partIVA.taxDueAnnualCents).toBe(0n);
     expect(cert.partIVA.taxAdjustmentCents).toBe(0n);
+    expect(cert.partIVA.grossCompensationIncomeCents).toBe(
+      18480000n + 1500000n + 1000000n + 500000n + 1200000n + 1540000n,
+    );
   });
 
   it("Scenario 3: Executive with 13th Month + Performance Bonus exceeding ₱90,000 Cap", () => {
@@ -133,7 +137,10 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     expect(cert.partIVB.thirteenthMonthExemptCents).toBe(9000000n); // Exactly PHP 90,000
     expect(cert.partIVC.thirteenthMonthExcessTaxableCents).toBe(6000000n); // PHP 60,000 excess
     expect(cert.partIVC.totalTaxableCompensationCents).toBe(
-      120000000n + 6000000n,
+      120000000n + 6000000n - 5340000n,
+    );
+    expect(cert.partIVA.grossCompensationIncomeCents).toBe(
+      120000000n + 15000000n + 2400000n,
     );
   });
 });

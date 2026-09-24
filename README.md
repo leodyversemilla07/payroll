@@ -51,6 +51,15 @@ sorter is intentionally disabled because its fix is unsafe and it cannot load
 the project's Tailwind configuration. The smoke test launches the compiled API
 and verifies its HTTP health endpoint.
 
+`pnpm test` runs the payroll-engine Vitest suite and API Jest unit tests (the
+latter mock Prisma). `pnpm test:e2e` also runs PostgreSQL-backed tRPC
+integration tests for tenant authorization, leave approval transactions, and
+payroll loan reversal. Run e2e tests with `NODE_ENV=test` and a **disposable,
+migrated test database** in `DATABASE_URL`; they create and clean up their own
+tenant fixtures. CI provides PostgreSQL 16 and applies migrations before testing.
+Browser tests are not configured yet; the web dashboard remains an in-memory
+demo rather than an API-backed flow.
+
 ## Database commands
 
 ```bash

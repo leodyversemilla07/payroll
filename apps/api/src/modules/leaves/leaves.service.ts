@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, prisma } from '@workspace/db';
 import { calculateSilCashConversion } from '@workspace/payroll-engine';
 
@@ -108,60 +112,90 @@ export class LeavesService {
   }
 
   /**
-   * Approves a leave request and deducts from employee's leave balance.
+   * Approves a pending request once, with its paid-leave debit in the same
+   * serializable transaction. A replay returns the existing approval without
+   * modifying the balance or attributing it to a different approver.
    */
   async approveLeaveRequest(
     requestId: string,
     organizationId: string,
     approvedById: string,
   ) {
-    const request = await prisma.leaveRequest.findFirst({
-      where: { id: requestId, employee: { organizationId } },
-    });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await prisma.$transaction(
+          async (transaction) => {
+            const request = await transaction.leaveRequest.findFirst({
+              where: { id: requestId, employee: { organizationId } },
+            });
+            if (!request) {
+              throw new NotFoundException(
+                `Leave request ${requestId} not found`,
+              );
+            }
+            if (request.status === 'APPROVED') {
+              return { request, newlyApproved: false };
+            }
+            if (request.status !== 'PENDING') {
+              throw new ConflictException(
+                'Only pending leave requests can be approved',
+              );
+            }
 
-    if (!request) {
-      throw new NotFoundException(`Leave request ${requestId} not found`);
-    }
+            const updated = await transaction.leaveRequest.updateMany({
+              where: { id: requestId, status: 'PENDING' },
+              data: { status: 'APPROVED', approvedById },
+            });
+            if (updated.count !== 1) {
+              throw new ConflictException(
+                'Leave request was changed while being approved',
+              );
+            }
 
-    const year = request.startDate.getFullYear();
+            if (request.isPaid) {
+              const deducted = await transaction.leaveBalance.updateMany({
+                where: {
+                  employeeId: request.employeeId,
+                  leaveType: request.leaveType,
+                  year: request.startDate.getUTCFullYear(),
+                  balance: { gte: request.daysCount },
+                },
+                data: {
+                  usedCredits: { increment: request.daysCount },
+                  balance: { decrement: request.daysCount },
+                },
+              });
+              if (deducted.count !== 1) {
+                throw new ConflictException(
+                  'Paid leave requires an existing balance with enough available days',
+                );
+              }
+            }
 
-    // Deduct from balance if paid
-    if (request.isPaid) {
-      const balanceRecord = await prisma.leaveBalance.findUnique({
-        where: {
-          employeeId_leaveType_year: {
-            employeeId: request.employeeId,
-            leaveType: request.leaveType,
-            year,
+            const approved = await transaction.leaveRequest.findUniqueOrThrow({
+              where: { id: requestId },
+            });
+            return { request: approved, newlyApproved: true };
           },
-        },
-      });
-
-      if (balanceRecord) {
-        const days = Number(request.daysCount);
-        const newUsed = Number(balanceRecord.usedCredits) + days;
-        const newBalance = Math.max(
-          0,
-          Number(balanceRecord.totalCredits) - newUsed,
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
-
-        await prisma.leaveBalance.update({
-          where: { id: balanceRecord.id },
-          data: {
-            usedCredits: new Prisma.Decimal(newUsed),
-            balance: new Prisma.Decimal(newBalance),
-          },
-        });
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'P2034'
+        ) {
+          if (attempt < 3) continue;
+          throw new ConflictException(
+            'Leave approval changed concurrently; retry',
+          );
+        }
+        throw error;
       }
     }
 
-    return prisma.leaveRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'APPROVED',
-        approvedById,
-      },
-    });
+    throw new ConflictException('Leave approval could not be completed');
   }
 
   /**

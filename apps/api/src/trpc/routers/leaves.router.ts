@@ -68,18 +68,21 @@ export function createLeavesRouter(ctx: RouterContext) {
       .procedureForRoles(LEAVE_APPROVAL_ROLES)
       .input(z.object({ requestId: z.string().uuid() }))
       .mutation(async ({ input, ctx }) => {
-        const request = await leavesService.approveLeaveRequest(
-          input.requestId,
-          ctx.user.organizationId,
-          ctx.user.id,
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'APPROVE',
-          entityType: 'LeaveRequest',
-          entityId: request.id,
-        });
+        const { request, newlyApproved } =
+          await leavesService.approveLeaveRequest(
+            input.requestId,
+            ctx.user.organizationId,
+            ctx.user.id,
+          );
+        if (newlyApproved) {
+          await auditService.record({
+            user: ctx.user,
+            request: ctx.req,
+            action: 'APPROVE',
+            entityType: 'LeaveRequest',
+            entityId: request.id,
+          });
+        }
         return request;
       }),
 
