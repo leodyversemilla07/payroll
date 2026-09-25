@@ -28,7 +28,8 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
 Services are available at:
 
-- Web: http://localhost:3000
+- Web portal: http://localhost:3000 (sign in with a bootstrapped API account)
+- Separate in-memory demo: http://localhost:3000/demo (never persisted)
 - API: http://localhost:4000
 - tRPC: http://localhost:4000/trpc
 - MinIO console: http://localhost:9001
@@ -42,6 +43,8 @@ pnpm test
 pnpm test:e2e
 pnpm build
 pnpm test:smoke
+pnpm --filter web exec playwright install chromium # once per machine
+pnpm --filter web test:browser # after pnpm build
 ```
 
 Biome is the repository-wide formatter and linter. Use `pnpm check` to verify
@@ -57,8 +60,14 @@ integration tests for tenant authorization, leave approval transactions, and
 payroll loan reversal. Run e2e tests with `NODE_ENV=test` and a **disposable,
 migrated test database** in `DATABASE_URL`; they create and clean up their own
 tenant fixtures. CI provides PostgreSQL 16 and applies migrations before testing.
-Browser tests are not configured yet; the web dashboard remains an in-memory
-demo rather than an API-backed flow.
+The browser test runs against the built Next.js app with mocked tRPC responses;
+it verifies the sign-in, staff lists, payslip detail, sign-out and demo separation.
+The portal reads persisted data via the API (requires a running API and a staff
+account for lists); it does not run or disburse payroll. Use the separate `/demo`
+for simulated, in-memory workflows only. Use `localhost` consistently for web
+and API so the development session cookie is sent to both; set
+`NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
+`CORS_ORIGIN` when deploying on different origins.
 
 ## Paid-leave payroll rules
 

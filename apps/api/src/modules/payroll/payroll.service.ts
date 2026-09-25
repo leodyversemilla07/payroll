@@ -87,16 +87,47 @@ export class PayrollService {
   async getPayrollRunDetails(payrollRunId: string, organizationId: string) {
     return prisma.payrollRun.findFirst({
       where: { id: payrollRunId, organizationId },
-      include: {
+      select: {
+        id: true,
+        cutoffSequence: true,
+        cutoffStartDate: true,
+        cutoffEndDate: true,
+        paymentDate: true,
+        status: true,
+        totalGrossCents: true,
+        totalDeductionsCents: true,
+        totalNetCents: true,
         payslips: {
-          include: {
+          select: {
+            id: true,
+            employeeId: true,
             employee: {
-              include: {
-                department: true,
-                branch: true,
-              },
+              select: { employeeNumber: true, firstName: true, lastName: true },
             },
+            basicPayCents: true,
+            paidLeavePayCents: true,
+            overtimePayCents: true,
+            nightDiffPayCents: true,
+            holidayPayCents: true,
+            restDayPayCents: true,
+            taxableAllowancesCents: true,
+            nonTaxableAllowancesCents: true,
+            grossPayCents: true,
+            tardinessDeductionCents: true,
+            undertimeDeductionCents: true,
+            absenceDeductionCents: true,
+            sssEmployeeCents: true,
+            sssWispEmployeeCents: true,
+            philhealthEmployeeCents: true,
+            pagibigEmployeeCents: true,
+            withholdingTaxCents: true,
+            loanDeductionsCents: true,
+            otherDeductionsCents: true,
+            totalDeductionsCents: true,
+            netPayCents: true,
+            bonusPaidCents: true,
           },
+          orderBy: { employee: { employeeNumber: 'asc' } },
         },
       },
     });
