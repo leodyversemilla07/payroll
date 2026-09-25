@@ -64,7 +64,9 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
 
     // Document text generation
     const textDoc = formatBir2316TextDocument(cert);
-    expect(textDoc).toContain("BIR FORM 2316");
+    expect(textDoc).toContain("NOT BIR FORM 2316");
+    expect(textDoc).not.toContain("Line 25:");
+    expect(textDoc).not.toContain("Employer Authorized Representative:");
     expect(textDoc).toContain("Dela Cruz, Juan");
     expect(textDoc).toContain("Acme Philippines Technologies Inc.");
   });
@@ -107,6 +109,40 @@ describe("BIR Form 2316 Certificate Generation Engine", () => {
     expect(cert.partIVA.grossCompensationIncomeCents).toBe(
       18480000n + 1500000n + 1000000n + 500000n + 1200000n + 1540000n,
     );
+  });
+
+  it("rejects MWE taxable allowances and bonus excess rather than dropping taxable income", () => {
+    const employee = {
+      employeeNumber: "MWE-1",
+      firstName: "Ana",
+      lastName: "Reyes",
+      tin: "123-456-789-000",
+      residentialAddress: "Manila",
+      isMinimumWageEarner: true,
+    };
+    const income = {
+      totalBasicSalaryCents: 20000000n,
+      totalOvertimePayCents: 0n,
+      totalHolidayPayCents: 0n,
+      totalNightDiffPayCents: 0n,
+      totalDeMinimisBenefitsCents: 0n,
+      totalThirteenthMonthAndBonusesCents: 0n,
+      totalOtherTaxableAllowancesCents: 100000n,
+      totalSssEmployeeShareCents: 0n,
+      totalPhilhealthEmployeeShareCents: 0n,
+      totalPagibigEmployeeShareCents: 0n,
+      totalTaxWithheldCents: 0n,
+    };
+    expect(() =>
+      generateBir2316Certificate(2026, employee, mockEmployer, income),
+    ).toThrow("MWE taxable benefits require manual tax review");
+    expect(() =>
+      generateBir2316Certificate(2026, employee, mockEmployer, {
+        ...income,
+        totalOtherTaxableAllowancesCents: 0n,
+        totalThirteenthMonthAndBonusesCents: 9000001n,
+      }),
+    ).toThrow("MWE taxable benefits require manual tax review");
   });
 
   it("Scenario 3: Executive with 13th Month + Performance Bonus exceeding ₱90,000 Cap", () => {

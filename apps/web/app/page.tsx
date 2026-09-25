@@ -370,8 +370,11 @@ function StaffPortal({
                         ["Tardiness", slip.tardinessDeductionCents],
                         ["Undertime", slip.undertimeDeductionCents],
                         ["Absence", slip.absenceDeductionCents],
-                        ["SSS", slip.sssEmployeeCents],
-                        ["SSS WISP", slip.sssWispEmployeeCents],
+                        ["SSS (including WISP)", slip.sssEmployeeCents],
+                        [
+                          "WISP (included in SSS above)",
+                          slip.sssWispEmployeeCents,
+                        ],
                         ["PhilHealth", slip.philhealthEmployeeCents],
                         ["Pag-IBIG", slip.pagibigEmployeeCents],
                         ["Withholding tax", slip.withholdingTaxCents],

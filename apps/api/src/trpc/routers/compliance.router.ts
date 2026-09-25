@@ -54,7 +54,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         return result;
       }),
 
-    exportBir2316: payrollProcedure
+    previewBir2316Reconciliation: payrollProcedure
       .input(
         z.object({
           employeeId: z.string().uuid(),
@@ -71,7 +71,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           user: ctx.user,
           request: ctx.req,
           action: 'EXPORT',
-          entityType: 'BIR2316',
+          entityType: 'BIR2316Reconciliation',
           entityId: input.employeeId,
           newValue: { taxYear: input.taxYear },
         });

@@ -460,14 +460,14 @@ model Payslip {
   
   // Statutory Employee Deductions
   sssEmployeeCents      BigInt        @default(0)
-  sssWispEmployeeCents  BigInt        @default(0)
+  sssWispEmployeeCents  BigInt        @default(0) // Subset of sssEmployeeCents; do not add twice
   philhealthEmployeeCents BigInt      @default(0)
   pagibigEmployeeCents  BigInt        @default(0)
   withholdingTaxCents   BigInt        @default(0)
   
   // Statutory Employer Shares (for Cost/Ledger)
   sssEmployerCents      BigInt        @default(0)
-  sssWispEmployerCents  BigInt        @default(0)
+  sssWispEmployerCents  BigInt        @default(0) // Subset of sssEmployerCents; do not add twice
   sssECCents            BigInt        @default(0) // Employees' Compensation
   philhealthEmployerCents BigInt      @default(0)
   pagibigEmployerCents  BigInt        @default(0)

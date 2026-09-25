@@ -49,7 +49,7 @@ const EXPECTED_PROCEDURES = [
   'loans.create',
   'compliance.exportBankTransmittal',
   'compliance.exportBir1601C',
-  'compliance.exportBir2316',
+  'compliance.previewBir2316Reconciliation',
   'compliance.exportDole13thMonth',
   'leaves.getBalances',
   'leaves.request',

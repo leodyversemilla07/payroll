@@ -250,7 +250,8 @@ export class ComplianceService {
   }
 
   /**
-   * Generates official BIR Form 2316 Certificate of Compensation Payment / Tax Withheld.
+   * Previews a read-only BIR 2316 reconciliation worksheet. NOT an official
+   * certificate: tax adjustments are computed but not settled by this method.
    */
   async generateBir2316(
     employeeId: string,
@@ -331,6 +332,7 @@ export class ComplianceService {
         totalOtherTaxableAllowancesCents +=
           p.taxableAllowancesCents + p.restDayPayCents;
       }
+      // sssEmployeeCents already includes the WISP subset recorded separately.
       totalSssEmployeeShareCents += p.sssEmployeeCents;
       totalPhilhealthEmployeeShareCents += p.philhealthEmployeeCents;
       totalPagibigEmployeeShareCents += p.pagibigEmployeeCents;
@@ -389,10 +391,20 @@ export class ComplianceService {
       );
     }
 
+    // The payslip ledger is not a year-end tax adjustment ledger: a difference
+    // here is still due for collection/refund, not proof that it happened.
+    const taxAdjustmentCents = certData.partIVA.taxAdjustmentCents;
+    const reconciliationStatus =
+      taxAdjustmentCents === 0n
+        ? 'BALANCED'
+        : taxAdjustmentCents > 0n
+          ? 'DEFICIENCY_REVIEW'
+          : 'REFUND_REVIEW';
     const formattedDocument = formatBir2316TextDocument(certData);
 
     return {
       certificate: certData,
+      reconciliationStatus,
       formattedDocument,
     };
   }

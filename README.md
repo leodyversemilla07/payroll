@@ -69,6 +69,15 @@ and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
 `CORS_ORIGIN` when deploying on different origins.
 
+## Compliance previews (not filing documents)
+
+`compliance.previewBir2316Reconciliation` produces an internal, read-only
+worksheet, **not** an official BIR Form 2316. Its tax difference is not an
+actual refund or deduction. Previous-employer income, remittances, year-end
+tax settlements, and the current official form layout still require review.
+See [the release-gate checklist](docs/validation-gates.md) before any BIR
+certificate or bank file is issued. Do not use this project for live payroll.
+
 ## Paid-leave payroll rules
 
 Approved paid leave is credited as **whole Monday–Friday workdays** when the

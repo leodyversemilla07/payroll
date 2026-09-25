@@ -1699,16 +1699,16 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                     action: () => exportBir1601C(),
                   },
                   {
-                    name: "BIR Form 2316 Certificate (Individual)",
-                    desc: "Annual Certificate of Compensation & Withholding Tax (TRAIN Law)",
+                    name: "Demo tax reconciliation (individual)",
+                    desc: "Illustrative annual totals only — not BIR Form 2316",
                     action: () => setIsBir2316ModalOpen(true),
                   },
                   {
-                    name: "BIR Form 2316 Batch (Summary)",
-                    desc: "Annual Certificate of Compensation & Withholding Tax Batch",
+                    name: "Demo annual tax summary (batch)",
+                    desc: "Illustrative data only — not a BIR certificate",
                     action: () => {
                       const text = [
-                        "BIR FORM 2316 - CERTIFICATE OF COMPENSATION PAYMENT / TAX WITHHELD",
+                        "DEMO ANNUAL TAX SUMMARY - NOT BIR FORM 2316 - DO NOT FILE",
                         `Employer: Acme Philippines Technologies Inc. (TIN: 123-456-789-000)`,
                         "----------------------------------------------------------------",
                         ...computedPayrollResults.map(
@@ -1717,13 +1717,11 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                         ),
                       ].join("\r\n");
                       downloadFile(
-                        "BIR_2316_Batch_Summary.txt",
+                        "DEMO_Annual_Tax_Summary.txt",
                         text,
                         "text/plain;charset=utf-8;",
                       );
-                      showToast(
-                        "📥 Exported BIR Form 2316 Annual Certificate Summary!",
-                      );
+                      showToast("Downloaded demo-only tax summary");
                     },
                   },
                   {
@@ -3267,7 +3265,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 8: BIR FORM 2316 CERTIFICATE OF COMPENSATION PAYMENT & TAX WITHHELD */}
+      {/* MODAL 8: SIMULATED TAX RECONCILIATION WORKSHEET (NOT BIR FORM 2316) */}
       {/* ========================================================================= */}
       {isBir2316ModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -3275,12 +3273,12 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <FileCheck2 className="size-4 text-purple-400" /> BIR Form
-                  2316 Certificate
+                  <FileCheck2 className="size-4 text-purple-400" /> Demo tax
+                  reconciliation worksheet
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Certificate of Compensation Payment / Tax Withheld • Tax Year
-                  2026 (TRAIN Law Compliant)
+                  Not an official BIR Form 2316. Simulated values only; tax
+                  differences are not settled. Do not file or issue.
                 </p>
               </div>
               <button
@@ -3354,7 +3352,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               {/* Part IV-A Summary */}
               <div className="bg-purple-950/20 border border-purple-800/30 p-4 rounded-xl space-y-2">
                 <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider border-b border-purple-800/40 pb-1 flex justify-between">
-                  <span>Part IV-A: Summary of Compensation & Tax</span>
+                  <span>Internal summary (not official form fields)</span>
                   <span className="font-mono text-[10px]">
                     Tax Year {bir2316Cert.taxYear}
                   </span>
@@ -3363,7 +3361,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
                   <div className="flex justify-between">
                     <span className="text-slate-300">
-                      Line 25: Gross Compensation Income:
+                      Gross compensation income:
                     </span>
                     <span className="font-mono text-white font-semibold">
                       {formatPHP(
@@ -3373,16 +3371,14 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-300">
-                      Line 30: Annual Tax Due:
+                      Calculated annual tax due:
                     </span>
                     <span className="font-mono text-white font-semibold">
                       {formatPHP(bir2316Cert.partIVA.taxDueAnnualCents)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">
-                      Line 26: Total Non-Taxable Income:
-                    </span>
+                    <span className="text-slate-300">Non-taxable income:</span>
                     <span className="font-mono text-emerald-400">
                       {formatPHP(
                         bir2316Cert.partIVA.totalNonTaxableCompensationCents,
@@ -3391,16 +3387,14 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-300">
-                      Line 31: Total Taxes Withheld:
+                      Simulated taxes withheld:
                     </span>
                     <span className="font-mono text-amber-400">
                       {formatPHP(bir2316Cert.partIVA.totalTaxWithheldCents)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-300">
-                      Line 27: Total Taxable Income:
-                    </span>
+                    <span className="text-slate-300">Taxable income:</span>
                     <span className="font-mono text-blue-400 font-bold">
                       {formatPHP(
                         bir2316Cert.partIVA.totalTaxableCompensationCents,
@@ -3409,14 +3403,16 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-300">
-                      Line 32: Year-End Tax Adjustment:
+                      Unsettled difference to review:
                     </span>
                     <span
                       className={`font-mono font-bold ${bir2316Cert.partIVA.refundDueEmployeeCents > 0n ? "text-emerald-400" : "text-slate-300"}`}
                     >
-                      {bir2316Cert.partIVA.refundDueEmployeeCents > 0n
-                        ? `Refund +${formatPHP(bir2316Cert.partIVA.refundDueEmployeeCents)}`
-                        : "Equalized (₱0.00)"}
+                      {bir2316Cert.partIVA.taxAdjustmentCents < 0n
+                        ? `Refund to review ${formatPHP(-bir2316Cert.partIVA.taxAdjustmentCents)}`
+                        : bir2316Cert.partIVA.taxAdjustmentCents > 0n
+                          ? `Deficiency to review ${formatPHP(bir2316Cert.partIVA.taxAdjustmentCents)}`
+                          : "No calculated difference"}
                     </span>
                   </div>
                 </div>
@@ -3426,7 +3422,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-                    Part IV-B: Non-Taxable / Exempt Income
+                    Non-Taxable / Exempt Income
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-slate-400">
@@ -3469,7 +3465,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
 
                 <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-                    Part IV-C: Taxable Income
+                    Taxable Income
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-slate-400">
@@ -3518,18 +3514,16 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`)
                   onClick={() => {
                     const text = formatBir2316TextDocument(bir2316Cert);
                     downloadFile(
-                      `BIR_Form_2316_${selectedBir2316Emp.name.replace(/\s+/g, "_")}_2026.txt`,
+                      `DEMO_Tax_Reconciliation_${selectedBir2316Emp.name.replace(/\s+/g, "_")}_2026.txt`,
                       text,
                       "text/plain;charset=utf-8;",
                     );
-                    showToast(
-                      "📥 Exported Official BIR Form 2316 Certificate!",
-                    );
+                    showToast("Downloaded demo-only reconciliation worksheet");
                   }}
                   className="border-slate-800 hover:bg-slate-800 text-slate-300"
                 >
-                  <Download className="size-3.5 mr-1.5" /> Download Official
-                  Form 2316 (.txt)
+                  <Download className="size-3.5 mr-1.5" /> Download demo
+                  worksheet (.txt)
                 </Button>
 
                 <Button

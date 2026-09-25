@@ -35,6 +35,7 @@ const basePayslip = {
   nonTaxableAllowancesCents: 100000n,
   deMinimisExcessCents: 0n,
   sssEmployeeCents: 100000n,
+  sssWispEmployeeCents: 0n,
   philhealthEmployeeCents: 30000n,
   pagibigEmployeeCents: 20000n,
   withholdingTaxCents: 15000n,
@@ -127,6 +128,150 @@ describe('ComplianceService exports', () => {
     expect(certificate.partIVB.deMinimisBenefitsCents).toBe(100000n);
     expect(certificate.partIVC.otherTaxableAllowancesCents).toBe(25000n);
     expect(certificate.partIVA.totalTaxWithheldCents).toBe(15000n);
+  });
+
+  it('reconciles a year of disbursed regular pay plus taxable 13th-month excess without claiming settlement', async () => {
+    const regular = {
+      ...basePayslip,
+      basicPayCents: 5000000n,
+      grossPayCents: 5000000n,
+      tardinessDeductionCents: 0n,
+      overtimePayCents: 0n,
+      taxableAllowancesCents: 0n,
+      nonTaxableAllowancesCents: 0n,
+      sssEmployeeCents: 0n,
+      philhealthEmployeeCents: 0n,
+      pagibigEmployeeCents: 0n,
+      withholdingTaxCents: 500000n,
+    };
+    mockEmployeePayslips([
+      ...Array.from({ length: 12 }, () => ({ ...regular })),
+      {
+        ...regular,
+        basicPayCents: 0n,
+        grossPayCents: 12000000n,
+        taxableAllowancesCents: 3000000n,
+        nonTaxableAllowancesCents: 9000000n,
+        bonusPaidCents: 12000000n,
+        withholdingTaxCents: 100000n,
+      },
+    ]);
+    const result = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    // RR 11-2018 annual 2023+ table: 630,000 taxable =>
+    // 22,500 + 20% x (630,000 - 400,000) = 68,500.
+    expect(result.certificate.partIVA.grossCompensationIncomeCents).toBe(
+      72000000n,
+    );
+    expect(result.certificate.partIVB.thirteenthMonthExemptCents).toBe(
+      9000000n,
+    );
+    expect(result.certificate.partIVC.thirteenthMonthExcessTaxableCents).toBe(
+      3000000n,
+    );
+    expect(result.certificate.partIVA.totalTaxableCompensationCents).toBe(
+      63000000n,
+    );
+    expect(result.certificate.partIVA.taxDueAnnualCents).toBe(6850000n);
+    expect(result.certificate.partIVA.totalTaxWithheldCents).toBe(6100000n);
+    expect(result.certificate.partIVA.taxAdjustmentCents).toBe(750000n);
+    expect(result.reconciliationStatus).toBe('DEFICIENCY_REVIEW');
+    expect(result.formattedDocument).toContain('NOT BIR FORM 2316');
+    expect(result.formattedDocument).not.toContain('Line 30:');
+    expect(result.formattedDocument).not.toContain(
+      'Employer Authorized Representative:',
+    );
+  });
+
+  it.each([
+    [6250000n, 'BALANCED', 0n],
+    [6600000n, 'REFUND_REVIEW', -350000n],
+  ] as const)(
+    'flags recorded annual withholding of %s for review',
+    async (withheld, status, difference) => {
+      const regular = {
+        ...basePayslip,
+        basicPayCents: 5000000n,
+        grossPayCents: 5000000n,
+        tardinessDeductionCents: 0n,
+        overtimePayCents: 0n,
+        taxableAllowancesCents: 0n,
+        nonTaxableAllowancesCents: 0n,
+        sssEmployeeCents: 0n,
+        philhealthEmployeeCents: 0n,
+        pagibigEmployeeCents: 0n,
+        withholdingTaxCents: 0n,
+      };
+      mockEmployeePayslips([
+        ...Array.from({ length: 11 }, () => ({ ...regular })),
+        { ...regular, withholdingTaxCents: withheld },
+      ]);
+      const result = await new ComplianceService().generateBir2316(
+        'employee-1',
+        'org-1',
+        2026,
+      );
+      // 600,000 taxable => 22,500 + 20% x 200,000 = 62,500.
+      expect(result.certificate.partIVA.taxDueAnnualCents).toBe(6250000n);
+      expect(result.reconciliationStatus).toBe(status);
+      expect(result.certificate.partIVA.taxAdjustmentCents).toBe(difference);
+    },
+  );
+
+  it('flags partial-year overwithholding rather than claiming a refund has been paid', async () => {
+    mockEmployeePayslips([
+      {
+        ...basePayslip,
+        basicPayCents: 20000000n,
+        grossPayCents: 20000000n,
+        tardinessDeductionCents: 0n,
+        overtimePayCents: 0n,
+        taxableAllowancesCents: 0n,
+        nonTaxableAllowancesCents: 0n,
+        sssEmployeeCents: 0n,
+        philhealthEmployeeCents: 0n,
+        pagibigEmployeeCents: 0n,
+        withholdingTaxCents: 12000n,
+      },
+    ]);
+    const result = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(result.certificate.partIVA.taxDueAnnualCents).toBe(0n);
+    expect(result.certificate.partIVA.taxAdjustmentCents).toBe(-12000n);
+    expect(result.reconciliationStatus).toBe('REFUND_REVIEW');
+    expect(result.formattedDocument).toContain('NOT EVIDENCE OF PAYMENT');
+  });
+
+  it('does not double-count the WISP subset of SSS in the 2316 and 1601-C projections', async () => {
+    mockEmployeePayslips([{ ...basePayslip, sssWispEmployeeCents: 10000n }]);
+    const { certificate } = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(certificate.partIVB.statutoryContributionsCents).toBe(150000n);
+    expect(certificate.partIVA.totalTaxableCompensationCents).toBe(1295000n);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        ...basePayslip,
+        employeeId: 'employee-1',
+        sssWispEmployeeCents: 10000n,
+        employee,
+      },
+    ] as never);
+    const summary = await new ComplianceService().getBir1601CSummary(
+      9,
+      2026,
+      'org-1',
+    );
+    expect(summary.nonTaxableCompensationPesos).toBe(2500);
+    expect(summary.taxableCompensationPesos).toBe(12950);
   });
 
   it('refuses to misclassify de minimis excess without a persisted split', async () => {

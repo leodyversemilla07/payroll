@@ -1,6 +1,7 @@
 /**
- * BIR Form 2316: Certificate of Compensation Payment / Tax Withheld
- * Compliant with Republic Act No. 10963 (TRAIN Law) & BIR Revenue Regulations No. 11-2018
+ * Internal BIR 2316 reconciliation worksheet, NOT a BIR Form 2316.
+ * The official form has different fields/line numbers; this projection must
+ * not be signed, filed or sent to an employee as a substitute for the form.
  */
 
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
@@ -51,37 +52,37 @@ export interface Bir2316CertificateData {
 
   // Part IV-B: Non-Taxable / Exempt Compensation Income
   partIVB: {
-    basicMweCents: bigint; // Line 33
-    holidayPayMweCents: bigint; // Line 34
-    overtimePayMweCents: bigint; // Line 35
-    nightDiffMweCents: bigint; // Line 36
-    hazardPayMweCents: bigint; // Line 37
-    thirteenthMonthExemptCents: bigint; // Line 38 (Up to 90,000 PHP)
-    deMinimisBenefitsCents: bigint; // Line 39
-    statutoryContributionsCents: bigint; // Line 40 (SSS + PhilHealth + Pag-IBIG)
-    otherNonTaxableCents: bigint; // Line 41
-    totalNonTaxableCompensationCents: bigint; // Line 42
+    basicMweCents: bigint;
+    holidayPayMweCents: bigint;
+    overtimePayMweCents: bigint;
+    nightDiffMweCents: bigint;
+    hazardPayMweCents: bigint;
+    thirteenthMonthExemptCents: bigint; // Up to 90,000 PHP
+    deMinimisBenefitsCents: bigint;
+    statutoryContributionsCents: bigint; // SSS (including WISP) + PhilHealth + Pag-IBIG
+    otherNonTaxableCents: bigint;
+    totalNonTaxableCompensationCents: bigint;
   };
 
   // Part IV-C: Taxable Compensation Income
   partIVC: {
-    basicSalaryRegularCents: bigint; // Line 43
-    overtimePayTaxableCents: bigint; // Line 44
-    holidayPayTaxableCents: bigint; // Line 45
-    nightDiffTaxableCents: bigint; // Line 46
-    otherTaxableAllowancesCents: bigint; // Line 47
-    thirteenthMonthExcessTaxableCents: bigint; // Line 48 (Over 90,000 PHP)
-    totalTaxableCompensationCents: bigint; // Line 49
+    basicSalaryRegularCents: bigint;
+    overtimePayTaxableCents: bigint;
+    holidayPayTaxableCents: bigint;
+    nightDiffTaxableCents: bigint;
+    otherTaxableAllowancesCents: bigint;
+    thirteenthMonthExcessTaxableCents: bigint; // Over 90,000 PHP
+    totalTaxableCompensationCents: bigint;
   };
 
   // Part IV-A: Summary
   partIVA: {
-    grossCompensationIncomeCents: bigint; // Line 25
-    totalNonTaxableCompensationCents: bigint; // Line 26
-    totalTaxableCompensationCents: bigint; // Line 27
-    taxDueAnnualCents: bigint; // Line 30
-    totalTaxWithheldCents: bigint; // Line 31
-    taxAdjustmentCents: bigint; // Line 32 (Negative = Refund; Positive = Deficiency)
+    grossCompensationIncomeCents: bigint;
+    totalNonTaxableCompensationCents: bigint;
+    totalTaxableCompensationCents: bigint;
+    taxDueAnnualCents: bigint;
+    totalTaxWithheldCents: bigint;
+    taxAdjustmentCents: bigint; // Negative = refund to review; positive = deficiency to review
     refundDueEmployeeCents: bigint;
     taxPayableByEmployeeCents: bigint;
   };
@@ -91,7 +92,8 @@ export interface Bir2316CertificateData {
 }
 
 /**
- * Computes official BIR Form 2316 Certificate data with exact centavo breakdown.
+ * Computes a Form 2316-inspired internal breakdown with centavo totals.
+ * It omits prior employer income/tax and is not a substitute for the BIR form.
  */
 export function generateBir2316Certificate(
   taxYear: number,
@@ -118,6 +120,16 @@ export function generateBir2316Certificate(
       ? income.totalThirteenthMonthAndBonusesCents -
         TAX_EXEMPT_BONUS_CEILING_CENTS
       : 0n;
+  // MWE statutory wages are exempt, but other taxable benefits are not.
+  // Without separate benefit classification this worksheet must not discard
+  // taxable compensation by treating the entire person as exempt.
+  if (
+    isMwe &&
+    (income.totalOtherTaxableAllowancesCents > 0n ||
+      thirteenthMonthExcessTaxableCents > 0n)
+  ) {
+    throw new RangeError("MWE taxable benefits require manual tax review");
+  }
 
   // 3. Evaluate Part IV-B (Non-Taxable) and Part IV-C (Taxable)
   let basicMweCents = 0n;
@@ -187,7 +199,7 @@ export function generateBir2316Certificate(
     otherNonTaxableCents;
 
   const totalTaxableCompensationCents = isMwe
-    ? 0n // MWE is 100% tax-exempt
+    ? 0n // Supported MWE inputs here contain only exempt compensation
     : basicSalaryRegularCents +
       overtimePayTaxableCents +
       holidayPayTaxableCents +
@@ -252,7 +264,7 @@ export function generateBir2316Certificate(
 }
 
 /**
- * Formats a clean, text-based official BIR Form 2316 Certificate string.
+ * Formats a review-only worksheet. No official form numbers or certification.
  */
 export function formatBir2316TextDocument(
   cert: Bir2316CertificateData,
@@ -262,8 +274,8 @@ export function formatBir2316TextDocument(
 
   return [
     "==========================================================================================",
-    "              BUREAU OF INTERNAL REVENUE - CERTIFICATE OF COMPENSATION PAYMENT            ",
-    "                               TAX WITHHELD (BIR FORM 2316)                              ",
+    "                    INTERNAL TAX RECONCILIATION WORKSHEET (NOT BIR FORM 2316)             ",
+    "                 DO NOT FILE, SIGN, OR ISSUE AS AN OFFICIAL CERTIFICATE                 ",
     `                                    TAXABLE YEAR: ${cert.taxYear}                         `,
     "==========================================================================================",
     "PART I: EMPLOYEE INFORMATION",
@@ -277,43 +289,39 @@ export function formatBir2316TextDocument(
     `  Employer TIN: ${cert.employer.tin} | RDO Code: ${cert.employer.rdoCode}`,
     `  Registered Address: ${cert.employer.registeredAddress}`,
     "==========================================================================================",
-    "PART IV-A: SUMMARY OF COMPENSATION & TAX",
-    `  Line 25: Gross Compensation Income ................................. PHP ${f(cert.partIVA.grossCompensationIncomeCents).padStart(14)}`,
-    `  Line 26: Total Non-Taxable/Exempt Compensation (Part IV-B) ......... PHP ${f(cert.partIVA.totalNonTaxableCompensationCents).padStart(14)}`,
-    `  Line 27: Total Taxable Compensation Income (Part IV-C) ............. PHP ${f(cert.partIVA.totalTaxableCompensationCents).padStart(14)}`,
-    `  Line 30: Annual Tax Due (TRAIN Law Graduated Rates) ................ PHP ${f(cert.partIVA.taxDueAnnualCents).padStart(14)}`,
-    `  Line 31: Total Amount of Taxes Withheld from Present Employer ...... PHP ${f(cert.partIVA.totalTaxWithheldCents).padStart(14)}`,
-    `  Line 32: Year-End Tax Adjustment:`,
+    "SUMMARY OF COMPENSATION & TAX (INTERNAL, NOT OFFICIAL FORM LINE NUMBERS)",
+    `  Gross Compensation Income ................................. PHP ${f(cert.partIVA.grossCompensationIncomeCents).padStart(14)}`,
+    `  Total Non-Taxable/Exempt Compensation ......... PHP ${f(cert.partIVA.totalNonTaxableCompensationCents).padStart(14)}`,
+    `  Total Taxable Compensation Income ............. PHP ${f(cert.partIVA.totalTaxableCompensationCents).padStart(14)}`,
+    `  Calculated Annual Tax Due ................ PHP ${f(cert.partIVA.taxDueAnnualCents).padStart(14)}`,
+    `  Recorded Payslip Tax Withheld (not independently remittance-verified) ...... PHP ${f(cert.partIVA.totalTaxWithheldCents).padStart(14)}`,
+    `  Unsettled Difference (annual due minus recorded withholding):`,
     cert.partIVA.refundDueEmployeeCents > 0n
-      ? `           OVERWITHHELD TAX DUE FOR REFUND ........................ PHP ${f(cert.partIVA.refundDueEmployeeCents).padStart(14)}`
+      ? `           REFUND TO REVIEW (NOT EVIDENCE OF PAYMENT) ........................ PHP ${f(cert.partIVA.refundDueEmployeeCents).padStart(14)}`
       : cert.partIVA.taxPayableByEmployeeCents > 0n
-        ? `           AMOUNT OF TAX STILL PAYABLE BY EMPLOYEE ................... PHP ${f(cert.partIVA.taxPayableByEmployeeCents).padStart(14)}`
+        ? `           DEFICIENCY TO REVIEW (NOT YET COLLECTED) ................... PHP ${f(cert.partIVA.taxPayableByEmployeeCents).padStart(14)}`
         : `           TAX BALANCE EQUALIZED (PHP 0.00 ADJUSTMENT)`,
     "------------------------------------------------------------------------------------------",
-    "PART IV-B: DETAILS OF NON-TAXABLE / EXEMPT COMPENSATION INCOME",
-    `  Line 33: Basic Pay (Minimum Wage Earner) ........................... PHP ${f(cert.partIVB.basicMweCents).padStart(14)}`,
-    `  Line 34: Holiday Pay (MWE) ......................................... PHP ${f(cert.partIVB.holidayPayMweCents).padStart(14)}`,
-    `  Line 35: Overtime Pay (MWE) ........................................ PHP ${f(cert.partIVB.overtimePayMweCents).padStart(14)}`,
-    `  Line 36: Night Shift Differential (MWE) ............................ PHP ${f(cert.partIVB.nightDiffMweCents).padStart(14)}`,
-    `  Line 38: 13th Month Pay & Other Benefits (Max ₱90,000) ............. PHP ${f(cert.partIVB.thirteenthMonthExemptCents).padStart(14)}`,
-    `  Line 39: De Minimis Benefits ....................................... PHP ${f(cert.partIVB.deMinimisBenefitsCents).padStart(14)}`,
-    `  Line 40: SSS, PhilHealth, & Pag-IBIG Contributions (EE Share) ...... PHP ${f(cert.partIVB.statutoryContributionsCents).padStart(14)}`,
-    `  Line 42: TOTAL NON-TAXABLE / EXEMPT COMPENSATION ................... PHP ${f(cert.partIVB.totalNonTaxableCompensationCents).padStart(14)}`,
+    "NON-TAXABLE / EXEMPT COMPENSATION BREAKDOWN",
+    `  Basic Pay (Minimum Wage Earner) ........................... PHP ${f(cert.partIVB.basicMweCents).padStart(14)}`,
+    `  Holiday Pay (MWE) ......................................... PHP ${f(cert.partIVB.holidayPayMweCents).padStart(14)}`,
+    `  Overtime Pay (MWE) ........................................ PHP ${f(cert.partIVB.overtimePayMweCents).padStart(14)}`,
+    `  Night Shift Differential (MWE) ............................ PHP ${f(cert.partIVB.nightDiffMweCents).padStart(14)}`,
+    `  13th Month Pay & Other Benefits (Max ₱90,000) ............. PHP ${f(cert.partIVB.thirteenthMonthExemptCents).padStart(14)}`,
+    `  De Minimis Benefits ....................................... PHP ${f(cert.partIVB.deMinimisBenefitsCents).padStart(14)}`,
+    `  SSS, PhilHealth, & Pag-IBIG Contributions (EE Share) ...... PHP ${f(cert.partIVB.statutoryContributionsCents).padStart(14)}`,
+    `  TOTAL NON-TAXABLE / EXEMPT COMPENSATION ................... PHP ${f(cert.partIVB.totalNonTaxableCompensationCents).padStart(14)}`,
     "------------------------------------------------------------------------------------------",
-    "PART IV-C: DETAILS OF TAXABLE COMPENSATION INCOME",
-    `  Line 43: Basic Salary (Regular Employees) .......................... PHP ${f(cert.partIVC.basicSalaryRegularCents).padStart(14)}`,
-    `  Line 44: Overtime Pay (Taxable) .................................... PHP ${f(cert.partIVC.overtimePayTaxableCents).padStart(14)}`,
-    `  Line 45: Holiday Pay (Taxable) ..................................... PHP ${f(cert.partIVC.holidayPayTaxableCents).padStart(14)}`,
-    `  Line 46: Night Shift Differential (Taxable) ........................ PHP ${f(cert.partIVC.nightDiffTaxableCents).padStart(14)}`,
-    `  Line 47: Other Taxable Allowances / Benefits ....................... PHP ${f(cert.partIVC.otherTaxableAllowancesCents).padStart(14)}`,
-    `  Line 48: 13th Month Pay & Other Benefits in Excess of ₱90k ......... PHP ${f(cert.partIVC.thirteenthMonthExcessTaxableCents).padStart(14)}`,
-    `  Line 49: TOTAL TAXABLE COMPENSATION INCOME ......................... PHP ${f(cert.partIVC.totalTaxableCompensationCents).padStart(14)}`,
+    "TAXABLE COMPENSATION BREAKDOWN",
+    `  Basic Salary (Regular Employees) .......................... PHP ${f(cert.partIVC.basicSalaryRegularCents).padStart(14)}`,
+    `  Overtime Pay (Taxable) .................................... PHP ${f(cert.partIVC.overtimePayTaxableCents).padStart(14)}`,
+    `  Holiday Pay (Taxable) ..................................... PHP ${f(cert.partIVC.holidayPayTaxableCents).padStart(14)}`,
+    `  Night Shift Differential (Taxable) ........................ PHP ${f(cert.partIVC.nightDiffTaxableCents).padStart(14)}`,
+    `  Other Taxable Allowances / Benefits ....................... PHP ${f(cert.partIVC.otherTaxableAllowancesCents).padStart(14)}`,
+    `  13th Month Pay & Other Benefits in Excess of ₱90k ......... PHP ${f(cert.partIVC.thirteenthMonthExcessTaxableCents).padStart(14)}`,
+    `  TOTAL TAXABLE COMPENSATION INCOME ......................... PHP ${f(cert.partIVC.totalTaxableCompensationCents).padStart(14)}`,
     "==========================================================================================",
-    "CONFORME & CERTIFICATION:",
-    "I declare under the penalties of perjury that this certificate has been made in good",
-    "faith, verified by me, and to the best of my knowledge and belief, is true and correct.",
-    "",
-    "Employer Authorized Representative: _______________________ Date: ________________",
-    "Employee Signature:                _______________________ Date: ________________",
+    "REVIEW REQUIRED: reconcile prior employers, monthly remittances, year-end settlement,",
+    "benefit classifications and BIR's current 2316 layout before any official issuance.",
   ].join("\r\n");
 }
