@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { prisma } from '@workspace/db';
 
 export interface RegisterEmployeeInput {
@@ -177,6 +182,19 @@ export class EmployeesService {
     const { calculateFinalPay, SeparationType } = await import(
       '@workspace/payroll-engine'
     );
+    const exitDate = input.exitDate || new Date();
+    if (Number.isNaN(exitDate.getTime())) {
+      throw new BadRequestException('Exit date must be valid');
+    }
+    const taxYear = exitDate.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(taxYear, 0, 1));
+    const nextDay = new Date(
+      Date.UTC(
+        exitDate.getUTCFullYear(),
+        exitDate.getUTCMonth(),
+        exitDate.getUTCDate() + 1,
+      ),
+    );
 
     const employee = await prisma.employee.findFirst({
       where: {
@@ -186,22 +204,82 @@ export class EmployeesService {
       include: {
         compensation: true,
         loans: { where: { isActive: true } },
-        leaveBalances: { where: { year: new Date().getFullYear() } },
+        leaveBalances: { where: { year: taxYear } },
       },
     });
 
     if (!employee?.compensation) {
-      throw new Error(
-        `Employee ${input.employeeId} or active compensation record not found`,
+      throw new NotFoundException('Employee or compensation record not found');
+    }
+
+    // Annual tax follows payment date; 13th-month entitlement follows the
+    // service year of regular earnings. Never infer either from today's rate.
+    const payslips = await prisma.payslip.findMany({
+      where: {
+        employeeId: employee.id,
+        payrollRun: {
+          organizationId: input.organizationId,
+          status: 'DISBURSED',
+          paymentDate: { gte: yearStart, lt: nextDay },
+        },
+      },
+      include: {
+        payrollRun: { select: { cutoffSequence: true, cutoffEndDate: true } },
+      },
+    });
+    const regularPayslips = payslips.filter(
+      (slip) =>
+        slip.payrollRun.cutoffSequence !== 'SPECIAL_RUN' &&
+        slip.payrollRun.cutoffEndDate >= yearStart &&
+        slip.payrollRun.cutoffEndDate <= exitDate,
+    );
+    if (regularPayslips.length === 0) {
+      throw new UnprocessableEntityException(
+        'Final pay requires disbursed regular payslips in the exit year; reconcile payroll before calculating',
       );
     }
+    const totalYtdBasicEarnedCents = regularPayslips.reduce((sum, slip) => {
+      const deductions =
+        slip.tardinessDeductionCents +
+        slip.undertimeDeductionCents +
+        slip.absenceDeductionCents;
+      return (
+        sum +
+        (slip.basicPayCents > deductions ? slip.basicPayCents - deductions : 0n)
+      );
+    }, 0n);
+    const ytdTaxableCompensationCents = payslips.reduce((sum, slip) => {
+      const taxable =
+        slip.grossPayCents -
+        slip.nonTaxableAllowancesCents -
+        slip.sssEmployeeCents -
+        slip.philhealthEmployeeCents -
+        slip.pagibigEmployeeCents;
+      return sum + (taxable > 0n ? taxable : 0n);
+    }, 0n);
+    const totalYtdTaxWithheldCents = payslips.reduce(
+      (sum, slip) => sum + slip.withholdingTaxCents,
+      0n,
+    );
+    const thirteenthMonthAlreadyPaidCents = payslips.reduce(
+      (sum, slip) =>
+        sum +
+        (slip.payrollRun.cutoffSequence === 'SPECIAL_RUN' &&
+        slip.payrollRun.cutoffEndDate >= yearStart &&
+        slip.payrollRun.cutoffEndDate <= exitDate
+          ? slip.bonusPaidCents
+          : 0n),
+      0n,
+    );
+    const ytdOtherBenefitsCents = payslips.reduce(
+      (sum, slip) => sum + slip.bonusPaidCents + slip.deMinimisExcessCents,
+      0n,
+    );
 
     const monthlyBasicRateCents = employee.compensation.basicRateMonthlyCents;
     const dailyRateCents = employee.compensation.basicRateDailyCents;
 
-    const exitDate = input.exitDate || new Date();
-    const hireDate =
-      employee.hireDate || new Date(Date.now() - 365 * 24 * 3600 * 1000);
+    const hireDate = employee.hireDate;
     const serviceYears =
       input.yearsOfService !== undefined
         ? input.yearsOfService
@@ -237,11 +315,6 @@ export class EmployeesService {
           )
         : undefined;
 
-    const monthIndex = exitDate.getMonth() + 1;
-    const totalYtdBasicEarnedCents = monthlyBasicRateCents * BigInt(monthIndex);
-    const ytdTaxableCompensationCents = totalYtdBasicEarnedCents;
-    const totalYtdTaxWithheldCents = (ytdTaxableCompensationCents * 10n) / 100n;
-
     const settlement = calculateFinalPay({
       separationType: SeparationType[input.separationType],
       monthlyBasicRateCents,
@@ -253,6 +326,9 @@ export class EmployeesService {
       unusedLeaveDays,
       ytdTaxableCompensationCents,
       totalYtdTaxWithheldCents,
+      thirteenthMonthAlreadyPaidCents,
+      ytdOtherBenefitsCents,
+      isMinimumWageEarner: employee.compensation.isTaxExempt,
       outstandingLoanBalanceCents,
     });
 

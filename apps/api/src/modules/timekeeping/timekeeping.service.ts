@@ -50,7 +50,10 @@ export class TimekeepingService {
     organizationId: string,
     startDate: Date,
     endDate: Date,
-    database: Pick<Prisma.TransactionClient, 'dailyTimeRecord'> = prisma,
+    database: Pick<
+      Prisma.TransactionClient,
+      'dailyTimeRecord' | 'leaveRequest'
+    > = prisma,
   ): Promise<AttendanceSummary> {
     const records = await database.dailyTimeRecord.findMany({
       where: {
@@ -62,6 +65,44 @@ export class TimekeepingService {
         },
       },
     });
+
+    const paidLeaves = await database.leaveRequest.findMany({
+      where: {
+        employeeId,
+        employee: { organizationId },
+        status: 'APPROVED',
+        isPaid: true,
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+      },
+      include: { employee: { select: { payBasis: true } } },
+    });
+    if (paidLeaves.length > 0) {
+      // Paid leave must not also incur absence or timekeeping deductions. Daily
+      // and hourly staff need explicit paid-leave earnings, which the current
+      // payslip engine does not represent; reject rather than underpay them.
+      if (paidLeaves.some((leave) => leave.employee.payBasis !== 'MONTHLY')) {
+        throw new UnprocessableEntityException(
+          'Paid leave for daily/hourly employees requires an explicit payroll credit before processing',
+        );
+      }
+      if (
+        records.some(
+          (record) =>
+            (record.isAbsent ||
+              record.tardinessMinutes > 0 ||
+              record.undertimeMinutes > 0) &&
+            paidLeaves.some(
+              (leave) =>
+                record.date >= leave.startDate && record.date <= leave.endDate,
+            ),
+        )
+      ) {
+        throw new UnprocessableEntityException(
+          'Approved paid leave overlaps attendance deductions; reconcile the DTR before payroll',
+        );
+      }
+    }
 
     return summarizeAttendanceRecords(records);
   }

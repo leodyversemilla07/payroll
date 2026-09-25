@@ -1,8 +1,11 @@
-import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
-import { Prisma, prisma } from '@workspace/db';
 import {
-  calculateWithholdingTax,
+  ConflictException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { prisma } from '@workspace/db';
+import {
   type AttendanceSummary,
+  calculateWithholdingTax,
 } from '@workspace/payroll-engine';
 import { PayrollService } from './payroll.service';
 
@@ -42,7 +45,9 @@ const run = {
   cutoffSequence: 'SECOND_CUTOFF' as const,
 };
 
-function mockTransaction(priorPayslips: Array<Record<string, bigint | string>>) {
+function mockTransaction(
+  priorPayslips: Array<Record<string, bigint | string>>,
+) {
   const transaction = {
     payrollRun: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -79,9 +84,11 @@ function mockTransaction(priorPayslips: Array<Record<string, bigint | string>>) 
       create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
     },
   };
-  jest.mocked(prisma.$transaction).mockImplementation(async (callback: unknown) =>
-    (callback as (tx: typeof transaction) => Promise<unknown>)(transaction),
-  );
+  jest
+    .mocked(prisma.$transaction)
+    .mockImplementation(async (callback: unknown) =>
+      (callback as (tx: typeof transaction) => Promise<unknown>)(transaction),
+    );
   return transaction;
 }
 

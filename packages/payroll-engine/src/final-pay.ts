@@ -3,8 +3,8 @@
  * Compliant with DOLE Labor Advisory No. 06, Series of 2020 & Labor Code Articles 298-299
  */
 
+import { allocateNinetiethBucket } from "./other-benefits";
 import { calculateSilCashConversion } from "./sil-conversion";
-import { calculateThirteenthMonthPayout } from "./thirteenth-month";
 import { annualizeTax } from "./withholding-tax";
 
 export enum SeparationType {
@@ -26,6 +26,9 @@ export interface FinalPayCalculationInput {
   unusedLeaveDays: number; // SIL / VL balance
   ytdTaxableCompensationCents: bigint;
   totalYtdTaxWithheldCents: bigint;
+  thirteenthMonthAlreadyPaidCents?: bigint;
+  ytdOtherBenefitsCents?: bigint; // Previous bonus and de minimis excess for the PHP 90k cap
+  isMinimumWageEarner?: boolean;
   outstandingLoanBalanceCents: bigint; // Company cash advances / loans
   retireeAge?: number; // Age at separation; gates the RA 7641 tax exemption
   isRepeatRetirementClaim?: boolean; // RA 7641 exemption may be availed only once
@@ -121,12 +124,19 @@ export function calculateFinalPay(
   );
   const unpaidSalaryCents = (input.dailyRateCents * daysWorkedScaled) / 100n;
 
-  // 2. Pro-rated 13th Month Pay (Total YTD Basic / 12)
-  const thirteenthMonth = calculateThirteenthMonthPayout(
-    input.totalYtdBasicEarnedCents,
-    0n,
-  );
-  const proratedThirteenthMonthCents = thirteenthMonth.thirteenthMonthPayCents;
+  // 2. 13th-month balance due: include final unpaid salary and credit any
+  // bonus already disbursed. Never repay an earlier annual release.
+  const earnedBasicCents = input.totalYtdBasicEarnedCents + unpaidSalaryCents;
+  const entitlementCents = earnedBasicCents / 12n;
+  const alreadyPaidCents = input.thirteenthMonthAlreadyPaidCents ?? 0n;
+  const proratedThirteenthMonthCents =
+    entitlementCents > alreadyPaidCents
+      ? entitlementCents - alreadyPaidCents
+      : 0n;
+  const thirteenthMonthBucket = allocateNinetiethBucket({
+    ytdUsedCents: input.ytdOtherBenefitsCents ?? alreadyPaidCents,
+    periodBonusesCents: proratedThirteenthMonthCents,
+  });
 
   // 3. Unused Leave Monetization (SIL / VL)
   const leaveCalc = calculateSilCashConversion({
@@ -151,11 +161,12 @@ export function calculateFinalPay(
     input.ytdTaxableCompensationCents +
     unpaidSalaryCents +
     leaveCalc.taxablePortionCents +
-    thirteenthMonth.taxablePortionCents;
+    thirteenthMonthBucket.taxableCents;
 
   const annualization = annualizeTax(
     adjustedYtdTaxableCents,
     input.totalYtdTaxWithheldCents,
+    input.isMinimumWageEarner ?? false,
   );
   const taxAdjustmentCents = annualization.taxAdjustmentCents; // Negative = Refund due to employee
 

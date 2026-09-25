@@ -13,6 +13,9 @@ export interface ThirteenthMonthEmployeeInput {
   hireDate: string; // YYYY-MM-DD
   monthsWorkedInYear: number; // 1 to 12
   unpaidAbsenceDays: number; // Leave Without Pay (LWOP) or absences
+  // When available, use recorded regular-payroll basic earnings (already net
+  // of unpaid absences) instead of projecting from today's salary and tenure.
+  actualBasicEarnedCents?: bigint;
   otherTaxableBonusesCents?: bigint; // Performance bonuses, commissions
 }
 
@@ -93,17 +96,22 @@ export function calculateEmployee13thMonth(
     };
   }
 
-  // 1. Calculate base basic salary earned
+  // 1. Prefer actual salary earned over a projection. Actual payslip basic
+  // pay has already been reduced for LWOP, so do not subtract it again.
   const months = Math.min(12, Math.max(1, emp.monthsWorkedInYear));
+  if (
+    emp.actualBasicEarnedCents !== undefined &&
+    emp.actualBasicEarnedCents < 0n
+  ) {
+    throw new RangeError("Actual basic earnings cannot be negative");
+  }
   const baseEarned = emp.monthlyBasicRateCents * BigInt(months);
-
-  // 2. Deduct unpaid absences / LWOP
-  // If daily rate is not provided, estimate from monthly / 21.75
   const daily = dailyRateCents ?? (emp.monthlyBasicRateCents * 12n) / 261n;
   const absenceDeduction =
     (daily * BigInt(Math.round(emp.unpaidAbsenceDays * 100))) / 100n;
-  const netBasicEarned =
+  const projectedBasicEarned =
     baseEarned > absenceDeduction ? baseEarned - absenceDeduction : 0n;
+  const netBasicEarned = emp.actualBasicEarnedCents ?? projectedBasicEarned;
 
   // 3. 13th Month Pay = Net Basic Earned / 12
   const thirteenthMonthPayCents = netBasicEarned / 12n;
@@ -134,7 +142,7 @@ export function calculateEmployee13thMonth(
     thirteenthMonthPayCents,
     taxExemptPortionCents,
     taxableExcessCents,
-    isProrated: months < 12 || emp.unpaidAbsenceDays > 0,
+    isProrated: months < 12 || netBasicEarned < emp.monthlyBasicRateCents * 12n,
     monthsWorked: months,
   };
 }

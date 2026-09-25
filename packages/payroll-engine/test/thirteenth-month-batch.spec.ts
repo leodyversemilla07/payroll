@@ -25,6 +25,38 @@ describe("DOLE 13th Month Pay Batch & Compliance Engine", () => {
     expect(result.isProrated).toBe(false);
   });
 
+  it("uses recorded basic earnings instead of projecting from the current monthly rate or deducting absences again", () => {
+    const result = calculateEmployee13thMonth({
+      employeeId: "emp-rate-change",
+      employeeNumber: "EMP-2026-004",
+      fullName: "Rate Change",
+      monthlyBasicRateCents: 5000000n,
+      hireDate: "2025-01-01",
+      monthsWorkedInYear: 12,
+      unpaidAbsenceDays: 5,
+      actualBasicEarnedCents: 36000000n,
+    });
+
+    expect(result.totalBasicEarnedCents).toBe(36000000n);
+    expect(result.thirteenthMonthPayCents).toBe(3000000n);
+    expect(result.isProrated).toBe(true);
+  });
+
+  it("rejects negative actual basic earnings", () => {
+    expect(() =>
+      calculateEmployee13thMonth({
+        employeeId: "emp-invalid",
+        employeeNumber: "EMP-INVALID",
+        fullName: "Invalid",
+        monthlyBasicRateCents: 3000000n,
+        hireDate: "2025-01-01",
+        monthsWorkedInYear: 12,
+        unpaidAbsenceDays: 0,
+        actualBasicEarnedCents: -1n,
+      }),
+    ).toThrow(RangeError);
+  });
+
   it("Scenario 2: Mid-year hire (worked 6 months) receives exact pro-rated 13th month", () => {
     const result = calculateEmployee13thMonth({
       employeeId: "emp-2",

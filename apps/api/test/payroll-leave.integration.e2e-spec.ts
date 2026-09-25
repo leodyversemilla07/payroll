@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Request, Response } from 'express';
 import { Prisma, prisma, Role } from '@workspace/db';
+import type { Request, Response } from 'express';
 import { AuditService } from '../src/audit/audit.service';
 import { AuthService } from '../src/auth/auth.service';
 import { ComplianceService } from '../src/modules/compliance/compliance.service';
@@ -158,7 +158,12 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       Role.PAYROLL_SPECIALIST,
       'Payroll Specialist',
     );
-    staff = await createUser(organizationId, Role.EMPLOYEE, 'Staff', employeeId);
+    staff = await createUser(
+      organizationId,
+      Role.EMPLOYEE,
+      'Staff',
+      employeeId,
+    );
     foreignHr = await createUser(
       otherOrganization.id,
       Role.HR_ADMIN,
@@ -331,9 +336,9 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
         cutoffSequence: 'FIRST_CUTOFF',
       }),
     ).rejects.toThrow();
-    expect(
-      await prisma.payrollRun.count({ where: { organizationId } }),
-    ).toBe(1);
+    expect(await prisma.payrollRun.count({ where: { organizationId } })).toBe(
+      1,
+    );
     const slip = await prisma.payslip.findFirstOrThrow({
       where: { payrollRunId: run.id, employeeId },
     });
@@ -360,9 +365,9 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       (await prisma.employeeLoan.findUniqueOrThrow({ where: { id: loan.id } }))
         .balanceCents,
     ).toBe(2000000n);
-    expect(
-      await prisma.loanPayment.count({ where: { loanId: loan.id } }),
-    ).toBe(0);
+    expect(await prisma.loanPayment.count({ where: { loanId: loan.id } })).toBe(
+      0,
+    );
     expect(
       await prisma.payslip.count({ where: { payrollRunId: run.id } }),
     ).toBe(0);

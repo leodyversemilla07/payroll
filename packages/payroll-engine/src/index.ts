@@ -216,7 +216,10 @@ export function calculatePhilippinePayroll(
   // mandatory deductions before collecting any loan amortization. If those
   // cannot be covered, abort instead of issuing an internally inconsistent
   // payslip or recording a loan payment the employee did not make.
-  if (otherDeductionsCents < 0n || loans.some((loan) => loan.amountCents < 0n)) {
+  if (
+    otherDeductionsCents < 0n ||
+    loans.some((loan) => loan.amountCents < 0n)
+  ) {
     throw new RangeError("Deductions cannot be negative");
   }
   const mandatoryDeductionsCents =

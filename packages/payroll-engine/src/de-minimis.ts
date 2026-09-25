@@ -57,6 +57,9 @@ export function evaluateAllowances(
   let taxableAllowancesCents = 0n;
   let nonTaxableAllowancesCents = 0n;
   let deMinimisExcessTaxableCents = 0n;
+  // A category has one ceiling per period, even when configured as multiple
+  // separate employee allowances.
+  const exemptByCategory = new Map<DeMinimisCategory, Centavos>();
 
   for (const allowance of allowances) {
     if (allowance.isTaxable) {
@@ -65,17 +68,20 @@ export function evaluateAllowances(
       const monthlyLimit =
         MONTHLY_DE_MINIMIS_LIMITS[allowance.deMinimisCategory] || 0n;
       const periodLimit = isSemiMonthly ? monthlyLimit / 2n : monthlyLimit;
-
-      if (allowance.amountCents <= periodLimit) {
-        nonTaxableAllowancesCents += allowance.amountCents;
-      } else {
-        // Amount within limit is non-taxable; excess is taxable
-        const exemptPart = periodLimit;
-        const excessPart = allowance.amountCents - periodLimit;
-        nonTaxableAllowancesCents += exemptPart;
-        deMinimisExcessTaxableCents += excessPart;
-        taxableAllowancesCents += excessPart;
-      }
+      const remainingExempt =
+        periodLimit - (exemptByCategory.get(allowance.deMinimisCategory) ?? 0n);
+      const exemptPart =
+        allowance.amountCents < remainingExempt
+          ? allowance.amountCents
+          : remainingExempt;
+      const excessPart = allowance.amountCents - exemptPart;
+      exemptByCategory.set(
+        allowance.deMinimisCategory,
+        periodLimit - remainingExempt + exemptPart,
+      );
+      nonTaxableAllowancesCents += exemptPart;
+      deMinimisExcessTaxableCents += excessPart;
+      taxableAllowancesCents += excessPart;
     } else {
       // General non-taxable fixed allowance
       nonTaxableAllowancesCents += allowance.amountCents;

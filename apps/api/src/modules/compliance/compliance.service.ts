@@ -405,10 +405,8 @@ export class ComplianceService {
     details: DoleReportDetails,
     taxYear = new Date().getFullYear(),
   ) {
-    const {
-      calculateMonthsWorkedInYear,
-      formatDole13thMonthComplianceReport,
-    } = await import('@workspace/payroll-engine');
+    const { calculateMonthsWorkedInYear, formatDole13thMonthComplianceReport } =
+      await import('@workspace/payroll-engine');
     const yearStart = new Date(Date.UTC(taxYear, 0, 1));
     const yearEnd = new Date(Date.UTC(taxYear + 1, 0, 1));
 
@@ -451,9 +449,7 @@ export class ComplianceService {
 
     const employeeResults: ThirteenthMonthEmployeeResult[] = [];
     for (const employee of employees) {
-      const specials = employee.payslips.filter(
-        (p) => p.bonusPaidCents > 0n,
-      );
+      const specials = employee.payslips.filter((p) => p.bonusPaidCents > 0n);
       if (
         employee.employmentStatus === 'ACTIVE' &&
         employee.hireDate < yearEnd &&

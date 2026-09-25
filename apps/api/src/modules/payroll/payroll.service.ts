@@ -24,10 +24,7 @@ import {
   PayBasis,
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
-import {
-  countUnpaidAbsenceDays,
-  TimekeepingService,
-} from '../timekeeping/timekeeping.service';
+import { TimekeepingService } from '../timekeeping/timekeeping.service';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
 
@@ -624,10 +621,10 @@ export class PayrollService {
    * amortization. Each payout is priced against the PHP 90,000 annual
    * bucket together with year-to-date bonuses and de minimis excess, and
    * the bucket-taxable remainder is withheld using the monthly TRAIN
-   * table; year-end annualization trues up any difference. All active
-   * employees are disbursed (managers included by company policy); the
-   * DOLE compliance report separately limits statutory coverage to
-   * rank-and-file staff.
+   * table; year-end annualization trues up any difference. Active employees
+   * with disbursed basic earnings receive a payout (managers included by
+   * company policy); the DOLE compliance report separately limits statutory
+   * coverage to rank-and-file staff.
    */
   async executeThirteenthMonthRun(params: ExecuteThirteenthMonthRunParams) {
     const normalized = {
@@ -706,6 +703,26 @@ export class PayrollService {
 
     if (existing) return this.assertIdempotentMatch(existing, runKey);
 
+    // The cutoff-key constraint permits distinct SPECIAL_RUN dates in the
+    // same year. Read this predicate in the serializable transaction so a
+    // concurrent second payout conflicts and retries against the first.
+    const yearStart = new Date(Date.UTC(params.taxYear, 0, 1));
+    const yearEnd = new Date(Date.UTC(params.taxYear + 1, 0, 1));
+    const priorAnnualRun = await transaction.payrollRun.findFirst({
+      where: {
+        organizationId: params.organizationId,
+        cutoffSequence: 'SPECIAL_RUN',
+        cutoffEndDate: { gte: yearStart, lt: yearEnd },
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+    });
+    if (priorAnnualRun) {
+      throw new ConflictException(
+        'A 13th-month run already exists for this year; cancel it before recalculating',
+      );
+    }
+
     const payrollRun = await transaction.payrollRun.create({
       data: {
         organizationId: params.organizationId,
@@ -732,9 +749,6 @@ export class PayrollService {
       );
     }
 
-    const yearStart = new Date(Date.UTC(params.taxYear, 0, 1));
-    const yearEnd = new Date(Date.UTC(params.taxYear + 1, 0, 1));
-
     let runTotalGross = 0n;
     let runTotalDeductions = 0n;
     let runTotalNet = 0n;
@@ -758,14 +772,39 @@ export class PayrollService {
         employee.hireDate,
         params.taxYear,
       );
-      const dtrRows = await transaction.dailyTimeRecord.findMany({
+      // Only regular, disbursed pay earned up to this payout's cutoff counts.
+      // This handles rate changes, partial service and daily/hourly workers,
+      // and avoids subtracting LWOP a second time from recorded basic pay.
+      const regularPayslips = await transaction.payslip.findMany({
         where: {
           employeeId: employee.id,
-          date: { gte: yearStart, lt: yearEnd },
+          payrollRun: {
+            organizationId: params.organizationId,
+            cutoffSequence: { in: ['FIRST_CUTOFF', 'SECOND_CUTOFF'] },
+            status: 'DISBURSED',
+            cutoffEndDate: { gte: yearStart, lte: params.cutoffEndDate },
+          },
         },
-        select: { date: true, dayType: true, isAbsent: true },
+        select: {
+          basicPayCents: true,
+          tardinessDeductionCents: true,
+          undertimeDeductionCents: true,
+          absenceDeductionCents: true,
+        },
       });
-      const unpaidAbsenceDays = countUnpaidAbsenceDays(dtrRows, params.taxYear);
+      const actualBasicEarnedCents = regularPayslips.reduce((sum, slip) => {
+        const deductions =
+          slip.tardinessDeductionCents +
+          slip.undertimeDeductionCents +
+          slip.absenceDeductionCents;
+        return (
+          sum +
+          (slip.basicPayCents > deductions
+            ? slip.basicPayCents - deductions
+            : 0n)
+        );
+      }, 0n);
+      if (actualBasicEarnedCents === 0n) continue;
 
       const ytdBucket = await transaction.payslip.aggregate({
         _sum: { deMinimisExcessCents: true, bonusPaidCents: true },
@@ -788,7 +827,8 @@ export class PayrollService {
           monthlyBasicRateCents: compensation.basicRateMonthlyCents,
           hireDate: employee.hireDate.toISOString().slice(0, 10),
           monthsWorkedInYear: monthsWorked,
-          unpaidAbsenceDays,
+          unpaidAbsenceDays: 0,
+          actualBasicEarnedCents,
           // Bucket pricing below owns the PHP 90,000 split against live
           // YTD usage (including de minimis excess), so no prior offset here.
           otherTaxableBonusesCents: 0n,
@@ -827,6 +867,12 @@ export class PayrollService {
       runTotalGross += payout.thirteenthMonthPayCents;
       runTotalDeductions += withholdingTaxCents;
       runTotalNet += netPayCents;
+    }
+
+    if (runTotalGross === 0n) {
+      throw new UnprocessableEntityException(
+        'No disbursed regular-payroll basic earnings exist for this year and cutoff',
+      );
     }
 
     return transaction.payrollRun.update({

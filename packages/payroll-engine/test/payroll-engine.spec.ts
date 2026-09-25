@@ -182,6 +182,47 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
     });
   });
 
+  describe("De minimis category ceilings", () => {
+    it("shares one cutoff cap across multiple allowances in the same category", () => {
+      const result = evaluateAllowances(
+        ["Rice A", "Rice B"].map((name) => ({
+          name,
+          amountCents: 125000n,
+          isTaxable: false,
+          deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
+        })),
+        true,
+      );
+
+      expect(result.nonTaxableAllowancesCents).toBe(125000n);
+      expect(result.taxableAllowancesCents).toBe(125000n);
+      expect(result.deMinimisExcessTaxableCents).toBe(125000n);
+    });
+
+    it("keeps distinct category ceilings separate", () => {
+      const result = evaluateAllowances(
+        [
+          {
+            name: "Rice",
+            amountCents: 250000n,
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.RICE_SUBSIDY,
+          },
+          {
+            name: "Laundry",
+            amountCents: 40000n,
+            isTaxable: false,
+            deMinimisCategory: DeMinimisCategory.LAUNDRY_ALLOWANCE,
+          },
+        ],
+        false,
+      );
+
+      expect(result.nonTaxableAllowancesCents).toBe(290000n);
+      expect(result.deMinimisExcessTaxableCents).toBe(0n);
+    });
+  });
+
   describe("3. SSS & WISP Contributions", () => {
     it("should calculate SSS for salary below MSC ceiling (PHP 20,000)", () => {
       const sss = calculateSssContribution(2000000n); // PHP 20,000

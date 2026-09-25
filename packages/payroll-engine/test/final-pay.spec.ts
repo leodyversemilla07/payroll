@@ -28,8 +28,8 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
     // 2. Unpaid salary: 5 days * 2,298.85 = PHP 11,494.25
     expect(result.unpaidSalaryCents).toBe(1149425n);
 
-    // 3. Pro-rated 13th month: 400,000 / 12 = PHP 33,333.33
-    expect(result.proratedThirteenthMonthCents).toBe(3333333n);
+    // 3. Pro-rated 13th month includes unpaid final salary: (400,000 + 11,494.25) / 12
+    expect(result.proratedThirteenthMonthCents).toBe(3429118n);
 
     // 4. Monetized leave: 6 days * 2,298.85 = PHP 13,793.10 (100% tax-exempt under 12-day cap)
     expect(result.monetizedLeaveCents).toBe(1379310n);
@@ -46,6 +46,44 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
         result.monetizedLeaveCents,
     );
     expect(result.netFinalPayCents).toBeGreaterThan(0n);
+  });
+
+  it("credits earlier 13th-month payments and shares the benefit exemption cap", () => {
+    const result = calculateFinalPay({
+      separationType: SeparationType.RESIGNATION,
+      monthlyBasicRateCents: 12000000n,
+      dailyRateCents: 551724n,
+      yearsOfService: 2,
+      unpaidDaysWorkedInLastPeriod: 0,
+      totalYtdBasicEarnedCents: 144000000n,
+      unusedLeaveDays: 0,
+      ytdTaxableCompensationCents: 144000000n,
+      totalYtdTaxWithheldCents: 0n,
+      thirteenthMonthAlreadyPaidCents: 8000000n,
+      ytdOtherBenefitsCents: 8500000n,
+      outstandingLoanBalanceCents: 0n,
+    });
+
+    expect(result.proratedThirteenthMonthCents).toBe(4000000n);
+    // Only PHP 5,000 of the additional PHP 40,000 fits in the PHP 90k cap.
+    expect(result.taxAdjustmentCents).toBe(27125000n);
+  });
+
+  it("does not pay the 13th month a second time when already fully disbursed", () => {
+    const result = calculateFinalPay({
+      separationType: SeparationType.RESIGNATION,
+      monthlyBasicRateCents: 3000000n,
+      dailyRateCents: 137931n,
+      yearsOfService: 1,
+      unpaidDaysWorkedInLastPeriod: 0,
+      totalYtdBasicEarnedCents: 36000000n,
+      unusedLeaveDays: 0,
+      ytdTaxableCompensationCents: 30000000n,
+      totalYtdTaxWithheldCents: 0n,
+      thirteenthMonthAlreadyPaidCents: 3000000n,
+      outstandingLoanBalanceCents: 0n,
+    });
+    expect(result.proratedThirteenthMonthCents).toBe(0n);
   });
 
   it("Scenario 2: Involuntary Separation due to Redundancy (1 month per year of service)", () => {

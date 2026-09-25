@@ -118,7 +118,9 @@ describe('ComplianceService exports', () => {
       },
     ]);
     const { certificate } = await new ComplianceService().generateBir2316(
-      'employee-1', 'org-1', 2026,
+      'employee-1',
+      'org-1',
+      2026,
     );
     expect(certificate.partIVC.basicSalaryRegularCents).toBe(1250000n);
     expect(certificate.partIVB.thirteenthMonthExemptCents).toBe(120000n);
@@ -175,7 +177,9 @@ describe('ComplianceService exports', () => {
     ] as never);
 
     const report = await new ComplianceService().generateDole13thMonthReport(
-      'org-1', details, 2026,
+      'org-1',
+      details,
+      2026,
     );
     expect(report.batchResult.totalThirteenthMonthPayCents).toBe(120000n);
     expect(report.batchResult.totalTaxExemptCents).toBe(100000n);
@@ -212,9 +216,9 @@ describe('ComplianceService exports', () => {
       .mocked(prisma.organization.findUnique)
       .mockResolvedValue(organization as never);
     jest.mocked(prisma.employee.count).mockResolvedValue(0);
-    jest.mocked(prisma.employee.findMany).mockResolvedValue([
-      { ...employee, payslips: [] },
-    ] as never);
+    jest
+      .mocked(prisma.employee.findMany)
+      .mockResolvedValue([{ ...employee, payslips: [] }] as never);
     await expect(
       new ComplianceService().generateDole13thMonthReport(
         'org-1',
@@ -240,7 +244,9 @@ describe('ComplianceService exports', () => {
       },
     ] as never);
     const summary = await new ComplianceService().getBir1601CSummary(
-      12, 2026, 'org-1',
+      12,
+      2026,
+      'org-1',
     );
     expect(summary.totalEmployees).toBe(1);
     expect(prisma.payslip.findMany).toHaveBeenCalledWith(
