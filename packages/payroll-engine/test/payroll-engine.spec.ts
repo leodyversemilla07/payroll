@@ -126,6 +126,81 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
       expect(result.absenceDeductionCents).toBe(0n);
     });
 
+    it("credits daily employees for paid leave without counting it as worked time", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.DAILY,
+          monthlyBasicRateCents: 2200000n,
+          dailyRateCents: 100000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: true,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 2 },
+        allowances: [],
+        loans: [],
+      });
+
+      expect(result.paidLeavePayCents).toBe(200000n);
+      expect(result.basicPayForPeriodCents).toBe(200000n);
+      expect(result.grossPayCents).toBe(200000n);
+      expect(result.thirteenthMonthAccrualCents).toBe(16666n);
+    });
+
+    it("keeps paid leave within fixed monthly basic pay without adding it twice", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        schedule: {
+          deductSssIn: "FIRST_CUTOFF",
+          deductPhilhealthIn: "FIRST_CUTOFF",
+          deductPagibigIn: "FIRST_CUTOFF",
+          deductTaxIn: "FIRST_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.MONTHLY,
+          monthlyBasicRateCents: 3000000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 1 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.basicPayForPeriodCents).toBe(1500000n);
+      expect(result.paidLeavePayCents).toBe(0n);
+      expect(result.absenceDeductionCents).toBe(0n);
+    });
+
+    it("credits hourly leave at eight scheduled hours without OT premiums", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.HOURLY,
+          monthlyBasicRateCents: 3000000n,
+          hourlyRateCents: 20000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 1 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.paidLeavePayCents).toBe(160000n);
+      expect(result.totalPremiumPayCents).toBe(0n);
+    });
+
     it("pays hourly employees for fractional approved hours worked", () => {
       const result = calculatePhilippinePayroll({
         cutoffType: CutoffType.FIRST_CUTOFF,

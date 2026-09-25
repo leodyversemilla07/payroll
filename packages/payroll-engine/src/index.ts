@@ -63,16 +63,26 @@ export function calculatePhilippinePayroll(
     deriveRates(compensation);
 
   // 2. Base Period Pay
-  // Monthly employees receive their fixed period salary and explicit
-  // timekeeping deductions. Daily/hourly employees are paid only for approved
-  // regular minutes worked, so applying those deductions again would double
-  // deduct tardiness, undertime, and absences.
+  // Monthly employees receive their fixed period salary; their leave is
+  // already included in it. Daily/hourly employees receive a separate
+  // full-day leave credit on top of approved worked minutes, without counting
+  // leave as worked time (which would also attract premiums).
   const isMonthly = compensation.payBasis === PayBasis.MONTHLY;
+  const paidLeaveDays = attendance.paidLeaveDays ?? 0;
+  if (!Number.isSafeInteger(paidLeaveDays) || paidLeaveDays < 0) {
+    throw new RangeError("Paid leave days must be a non-negative whole number");
+  }
+  const paidLeavePayCents = isMonthly
+    ? 0n
+    : (compensation.payBasis === PayBasis.DAILY
+        ? dailyRateCents
+        : hourlyRateCents * 8n) * BigInt(paidLeaveDays);
   const basicPayForPeriodCents = isMonthly
     ? isSemiMonthly
       ? compensation.monthlyBasicRateCents / 2n
       : compensation.monthlyBasicRateCents
-    : calculateWorkedPay(hourlyRateCents, attendance.regularHoursWorked);
+    : calculateWorkedPay(hourlyRateCents, attendance.regularHoursWorked) +
+      paidLeavePayCents;
 
   // 3. Timekeeping Deductions
   const tardinessDeductionCents = isMonthly
@@ -258,6 +268,7 @@ export function calculatePhilippinePayroll(
     hourlyRateCents,
     minuteRateCents,
     basicPayForPeriodCents,
+    paidLeavePayCents,
     tardinessDeductionCents,
     undertimeDeductionCents,
     absenceDeductionCents,

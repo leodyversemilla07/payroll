@@ -47,6 +47,8 @@ export interface AttendanceSummary {
   tardinessMinutes: number;
   undertimeMinutes: number;
   absentDays: number;
+  /** Approved full workdays of paid leave, separate from actual hours worked. */
+  paidLeaveDays?: number;
 
   // Overtime Hours
   regularOvertimeHours: number;
@@ -171,6 +173,8 @@ export interface PayrollCalculationResult {
 
   // Basic Pay & Time Adjustments
   basicPayForPeriodCents: Centavos;
+  /** Included in basicPayForPeriodCents; never add twice to gross. */
+  paidLeavePayCents: Centavos;
   tardinessDeductionCents: Centavos;
   undertimeDeductionCents: Centavos;
   absenceDeductionCents: Centavos;

@@ -60,6 +60,19 @@ tenant fixtures. CI provides PostgreSQL 16 and applies migrations before testing
 Browser tests are not configured yet; the web dashboard remains an in-memory
 demo rather than an API-backed flow.
 
+## Paid-leave payroll rules
+
+Approved paid leave is credited as **whole Monday–Friday workdays** when the
+request's `daysCount` matches the scheduled weekdays in its date range.
+Monthly staff retain their fixed basic salary; daily staff receive their daily
+rate per leave day, and hourly staff receive eight hourly rates per leave day.
+The daily/hourly credit is included in `Payslip.basicPayCents` and separately
+recorded in `Payslip.paidLeavePayCents` (do not add the latter to gross again).
+Leave days are not counted as hours worked. Overlapping requests and worked or
+holiday DTRs on a paid-leave day block payroll for manual reconciliation.
+Partial-day leave and nonstandard workweeks/shifts are not yet supported by
+this payroll path; do not process them as ordinary full-day leave.
+
 ## Database commands
 
 ```bash

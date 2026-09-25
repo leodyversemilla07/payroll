@@ -75,36 +75,83 @@ export class TimekeepingService {
         startDate: { lte: endDate },
         endDate: { gte: startDate },
       },
-      include: { employee: { select: { payBasis: true } } },
     });
-    if (paidLeaves.length > 0) {
-      // Paid leave must not also incur absence or timekeeping deductions. Daily
-      // and hourly staff need explicit paid-leave earnings, which the current
-      // payslip engine does not represent; reject rather than underpay them.
-      if (paidLeaves.some((leave) => leave.employee.payBasis !== 'MONTHLY')) {
+
+    // A full paid-leave day replaces the DTR for that date; it is not worked
+    // time, but it must not create an unpaid absence either. Without a shift
+    // calendar we support only whole Mon–Fri days whose count matches the
+    // approved request. Fail closed for fractional, overlapping or ambiguous
+    // schedules rather than silently overpaying.
+    const paidLeaveDates = new Set<number>();
+    for (const leave of paidLeaves) {
+      const start = leave.startDate.getTime();
+      const end = leave.endDate.getTime();
+      if (start > end || end - start > 366 * 86_400_000) {
         throw new UnprocessableEntityException(
-          'Paid leave for daily/hourly employees requires an explicit payroll credit before processing',
+          'Paid leave date range requires manual reconciliation',
         );
       }
-      if (
-        records.some(
-          (record) =>
-            (record.isAbsent ||
-              record.tardinessMinutes > 0 ||
-              record.undertimeMinutes > 0) &&
-            paidLeaves.some(
-              (leave) =>
-                record.date >= leave.startDate && record.date <= leave.endDate,
-            ),
-        )
-      ) {
+      let workingDays = 0;
+      for (let day = start; day <= end; day += 86_400_000) {
+        const weekday = new Date(day).getUTCDay();
+        if (weekday === 0 || weekday === 6) continue;
+        workingDays += 1;
+        if (day < startDate.getTime() || day > endDate.getTime()) continue;
+        if (paidLeaveDates.has(day)) {
+          throw new UnprocessableEntityException(
+            'Overlapping paid leave requests cannot be processed twice',
+          );
+        }
+        paidLeaveDates.add(day);
+      }
+      if (workingDays === 0 || Number(leave.daysCount) !== workingDays) {
         throw new UnprocessableEntityException(
-          'Approved paid leave overlaps attendance deductions; reconcile the DTR before payroll',
+          'Paid leave credits must match full scheduled workdays; reconcile partial days manually',
         );
       }
     }
 
-    return summarizeAttendanceRecords(records);
+    const recordsByDate = new Map(
+      records.map((record) => [record.date.getTime(), record]),
+    );
+    for (const day of paidLeaveDates) {
+      const record = recordsByDate.get(day);
+      if (!record) continue;
+      if (
+        (record.dayType !== 'REGULAR_WORKDAY' &&
+          record.dayType !== 'SPECIAL_WORKING_HOLIDAY') ||
+        record.actualWorkedMinutes !== 0 ||
+        record.overtimeMinutes !== 0 ||
+        record.nightDiffMinutes !== 0 ||
+        record.restDayOTMinutes !== 0 ||
+        record.specialHolidayMinutes !== 0 ||
+        record.regularHolidayMinutes !== 0 ||
+        record.timeIn !== null ||
+        record.timeOut !== null
+      ) {
+        throw new UnprocessableEntityException(
+          'Paid leave conflicts with worked time or a holiday DTR; reconcile attendance before payroll',
+        );
+      }
+    }
+
+    const effectiveRecords = [
+      ...records.filter((record) => !paidLeaveDates.has(record.date.getTime())),
+      ...[...paidLeaveDates].map(() => ({
+        dayType: 'REGULAR_WORKDAY' as const,
+        actualWorkedMinutes: 0,
+        tardinessMinutes: 0,
+        undertimeMinutes: 0,
+        overtimeMinutes: 0,
+        nightDiffMinutes: 0,
+        isApproved: true,
+        isAbsent: false,
+      })),
+    ];
+    const summary = summarizeAttendanceRecords(effectiveRecords);
+    return paidLeaveDates.size > 0
+      ? { ...summary, paidLeaveDays: paidLeaveDates.size }
+      : summary;
   }
 
   async recordPunch(

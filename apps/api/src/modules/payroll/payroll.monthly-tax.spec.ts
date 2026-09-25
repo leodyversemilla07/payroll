@@ -188,6 +188,34 @@ describe('PayrollService monthly tax reconciliation', () => {
     });
   });
 
+  it('persists the full-day paid-leave credit within daily basic pay', async () => {
+    const transaction = mockTransaction([]);
+    const employee = (await transaction.employee.findMany())?.[0];
+    employee.payBasis = 'DAILY';
+    employee.compensation.basicRateDailyCents = 100000n;
+    const service = new PayrollService({
+      getCutoffAttendanceSummary: jest.fn().mockResolvedValue({
+        ...attendance,
+        regularHoursWorked: 0,
+        paidLeaveDays: 10,
+      }),
+    } as never);
+
+    await service.executePayrollRun({
+      ...run,
+      cutoffSequence: 'FIRST_CUTOFF',
+      cutoffStartDate: new Date('2026-09-01'),
+      cutoffEndDate: new Date('2026-09-15'),
+      paymentDate: new Date('2026-09-16'),
+    });
+
+    const data = transaction.payslip.create.mock.calls[0]?.[0].data;
+    expect(data.basicPayCents).toBe(1000000n);
+    expect(data.paidLeavePayCents).toBe(1000000n);
+    expect(data.absenceDeductionCents).toBe(0n);
+    expect(data.thirteenthMonthAccrualCents).toBe(83333n);
+  });
+
   it('aborts the entire run if earnings cannot cover statutory deductions', async () => {
     const transaction = mockTransaction([]);
     const service = new PayrollService({

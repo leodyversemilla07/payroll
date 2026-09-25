@@ -372,4 +372,52 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       await prisma.payslip.count({ where: { payrollRunId: run.id } }),
     ).toBe(0);
   });
+
+  it('credits approved full-day leave to a daily-paid employee without treating it as worked time', async () => {
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: { payBasis: 'DAILY' },
+    });
+    await prisma.dailyTimeRecord.createMany({
+      data: [
+        {
+          employeeId,
+          date: new Date('2026-11-09'),
+          actualWorkedMinutes: 480,
+          isApproved: true,
+        },
+        {
+          employeeId,
+          date: new Date('2026-11-10'),
+          actualWorkedMinutes: 0,
+          isAbsent: true,
+          isApproved: false,
+        },
+      ],
+    });
+    const leave = await callerFor(staff).leaves.request({
+      employeeId,
+      leaveType: 'SIL',
+      startDate: '2026-11-10',
+      endDate: '2026-11-10',
+      daysCount: 1,
+      isPaid: true,
+      reason: 'Approved paid day off',
+    });
+    await callerFor(hr).leaves.approve({ requestId: leave.id });
+
+    const run = await callerFor(specialist).payroll.triggerRun({
+      cutoffStartDate: '2026-11-01',
+      cutoffEndDate: '2026-11-15',
+      paymentDate: '2026-11-16',
+      cutoffSequence: 'FIRST_CUTOFF',
+    });
+    const slip = await prisma.payslip.findFirstOrThrow({
+      where: { payrollRunId: run.id, employeeId },
+    });
+    expect(slip.paidLeavePayCents).toBe(137931n);
+    expect(slip.basicPayCents).toBe(275859n);
+    expect(slip.absenceDeductionCents).toBe(0n);
+    expect(slip.thirteenthMonthAccrualCents).toBe(22988n);
+  });
 });

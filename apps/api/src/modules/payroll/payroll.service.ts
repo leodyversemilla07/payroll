@@ -526,6 +526,7 @@ export class PayrollService {
           payrollRunId: payrollRun.id,
           employeeId: employee.id,
           basicPayCents: result.basicPayForPeriodCents,
+          paidLeavePayCents: result.paidLeavePayCents,
           overtimePayCents: result.overtimePayCents,
           nightDiffPayCents: result.nightDiffPayCents,
           holidayPayCents: result.holidayPayCents,

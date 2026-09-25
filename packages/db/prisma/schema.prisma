@@ -444,6 +444,7 @@ model Payslip {
   
   // Earnings (Centavos)
   basicPayCents         BigInt
+  paidLeavePayCents     BigInt        @default(0) // Included in basicPayCents for daily/hourly staff
   overtimePayCents      BigInt        @default(0)
   nightDiffPayCents     BigInt        @default(0)
   holidayPayCents       BigInt        @default(0)
