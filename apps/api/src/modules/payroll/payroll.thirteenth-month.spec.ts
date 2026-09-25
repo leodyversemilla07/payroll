@@ -23,6 +23,7 @@ function mockTransaction() {
     payrollRun: {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockResolvedValue({ id: 'special-1' }),
       update: jest
         .fn()
@@ -100,29 +101,50 @@ describe('PayrollService 13th-month runs', () => {
     expect(payout.grossPayCents).toBe(payout.bonusPaidCents);
   });
 
-  it('rejects a second annual run with different cutoff dates', async () => {
+  it('releases only the unpaid balance after an earlier disbursed 13th-month run', async () => {
     const tx = mockTransaction();
-    tx.payrollRun.findFirst.mockResolvedValue({ id: 'prior-special' });
+    tx.payrollRun.findMany.mockResolvedValue([
+      { status: 'DISBURSED', cutoffEndDate: new Date('2026-11-30') },
+    ]);
+    tx.payslip.aggregate.mockResolvedValue({
+      _sum: { bonusPaidCents: 1000000n, deMinimisExcessCents: 0n },
+    });
 
+    await new PayrollService({} as never).executeThirteenthMonthRun(run);
+    const payout = tx.payslip.create.mock.calls[0]?.[0].data;
+    expect(payout.bonusPaidCents).toBe(1991666n);
+    expect(payout.grossPayCents).toBe(1991666n);
+  });
+
+  it('rejects an undistributed or out-of-order special run', async () => {
+    const tx = mockTransaction();
+    tx.payrollRun.findMany.mockResolvedValue([
+      { status: 'AUDITED', cutoffEndDate: new Date('2026-11-30') },
+    ]);
     await expect(
-      new PayrollService({} as never).executeThirteenthMonthRun({
-        ...run,
-        cutoffStartDate: new Date('2026-12-15'),
-      }),
+      new PayrollService({} as never).executeThirteenthMonthRun(run),
+    ).rejects.toThrow(ConflictException);
+    tx.payrollRun.findMany.mockResolvedValue([
+      { status: 'DISBURSED', cutoffEndDate: new Date('2026-12-20') },
+    ]);
+    await expect(
+      new PayrollService({} as never).executeThirteenthMonthRun(run),
     ).rejects.toThrow(ConflictException);
     expect(tx.payrollRun.create).not.toHaveBeenCalled();
-    expect(tx.payrollRun.findFirst).toHaveBeenCalledWith({
-      where: {
-        organizationId: 'org-1',
-        cutoffSequence: 'SPECIAL_RUN',
-        cutoffEndDate: {
-          gte: new Date('2026-01-01'),
-          lt: new Date('2027-01-01'),
-        },
-        status: { not: 'CANCELLED' },
-      },
-      select: { id: true },
+  });
+
+  it('rejects a duplicate special run without any newly earned pay', async () => {
+    const tx = mockTransaction();
+    tx.payrollRun.findMany.mockResolvedValue([
+      { status: 'DISBURSED', cutoffEndDate: new Date('2026-11-30') },
+    ]);
+    tx.payslip.aggregate.mockResolvedValue({
+      _sum: { bonusPaidCents: 2991666n, deMinimisExcessCents: 0n },
     });
+    await expect(
+      new PayrollService({} as never).executeThirteenthMonthRun(run),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(tx.payslip.create).not.toHaveBeenCalled();
   });
 
   it('does not issue a projected payout without disbursed regular earnings', async () => {

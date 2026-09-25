@@ -238,6 +238,58 @@ describe('PayrollService monthly tax reconciliation', () => {
     expect(transaction.loanPayment.create).not.toHaveBeenCalled();
   });
 
+  it('rejects a duplicate cutoff in the same month even with different dates', async () => {
+    const tx = mockTransaction([]);
+    tx.payrollRun.findFirst.mockResolvedValue({ id: 'prior-run' });
+
+    await expect(
+      new PayrollService({} as never).executePayrollRun({
+        ...run,
+        cutoffStartDate: new Date('2026-09-17'),
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(tx.payrollRun.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: run.organizationId,
+        cutoffSequence: 'SECOND_CUTOFF',
+        cutoffEndDate: {
+          gte: new Date('2026-09-01'),
+          lt: new Date('2026-10-01'),
+        },
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+    });
+    expect(tx.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects overlapping first and second cutoffs in a month', async () => {
+    const tx = mockTransaction([]);
+    tx.payrollRun.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'overlapping-first' });
+    await expect(
+      new PayrollService({} as never).executePayrollRun({
+        ...run,
+        cutoffStartDate: new Date('2026-09-14'),
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(tx.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a regular cutoff spanning two calendar months', async () => {
+    const tx = mockTransaction([]);
+    await expect(
+      new PayrollService({} as never).executePayrollRun({
+        ...run,
+        cutoffStartDate: new Date('2026-08-31'),
+      }),
+    ).rejects.toThrow(
+      'Regular payroll cutoffs must stay within one calendar month',
+    );
+    expect(tx.payrollRun.findFirst).not.toHaveBeenCalled();
+  });
+
   it('rejects a late first cutoff after the second cutoff was posted', async () => {
     const transaction = mockTransaction([]);
     transaction.payrollRun.findFirst.mockResolvedValue({ id: 'run-2' });

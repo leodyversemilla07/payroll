@@ -162,75 +162,108 @@ export class PayrollService {
    * here before the run row is removed.)
    */
   async cancelPayrollRun(params: { runId: string; organizationId: string }) {
-    return prisma.$transaction(async (transaction) => {
-      const run = await transaction.payrollRun.findFirst({
-        where: { id: params.runId, organizationId: params.organizationId },
-      });
-      if (!run) {
-        throw new NotFoundException('Payroll run not found');
-      }
-      assertValidPayrollTransition(run.status, 'CANCEL');
+    for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
+      try {
+        return await prisma.$transaction(
+          async (transaction) => {
+            const run = await transaction.payrollRun.findFirst({
+              where: {
+                id: params.runId,
+                organizationId: params.organizationId,
+              },
+            });
+            if (!run) {
+              throw new NotFoundException('Payroll run not found');
+            }
+            assertValidPayrollTransition(run.status, 'CANCEL');
 
-      // Direction matters: cancelling a regular run only over-withholds
-      // later specials (safe, refunded at annualization), but cancelling a
-      // special run would leave later regular runs under-withheld. Hence
-      // regular cancels ignore later specials, while special cancels are
-      // blocked by any later same-year run.
-      const isSpecialRun = run.cutoffSequence === 'SPECIAL_RUN';
-      const runYear = run.cutoffEndDate.getUTCFullYear();
-      const laterRun = await transaction.payrollRun.findFirst({
-        where: {
-          organizationId: params.organizationId,
-          id: { not: run.id },
-          status: { not: 'CANCELLED' },
-          ...(isSpecialRun
-            ? {
-                cutoffEndDate: {
-                  gt: run.cutoffEndDate,
-                  lt: new Date(Date.UTC(runYear + 1, 0, 1)),
+            // Later regular runs depend on earlier monthly withholding. A special
+            // payout also depends on all earlier basic earnings and bucket usage:
+            // cancelling its source regular run would leave an overpaid 13th month.
+            // Cancel dependent (not yet disbursed) runs in reverse order first.
+            const isSpecialRun = run.cutoffSequence === 'SPECIAL_RUN';
+            const runYear = run.cutoffEndDate.getUTCFullYear();
+            const laterRun = await transaction.payrollRun.findFirst({
+              where: {
+                organizationId: params.organizationId,
+                id: { not: run.id },
+                status: { not: 'CANCELLED' },
+                OR: isSpecialRun
+                  ? [
+                      {
+                        cutoffEndDate: {
+                          gt: run.cutoffEndDate,
+                          lt: new Date(Date.UTC(runYear + 1, 0, 1)),
+                        },
+                      },
+                    ]
+                  : [
+                      {
+                        cutoffSequence: { not: 'SPECIAL_RUN' },
+                        cutoffEndDate: { gt: run.cutoffEndDate },
+                      },
+                      {
+                        cutoffSequence: 'SPECIAL_RUN',
+                        cutoffEndDate: {
+                          gte: run.cutoffEndDate,
+                          lt: new Date(Date.UTC(runYear + 1, 0, 1)),
+                        },
+                      },
+                    ],
+              },
+              select: { id: true },
+            });
+            if (laterRun) {
+              throw new ConflictException(
+                'A later payroll run already builds on this run; cancel the later run first',
+              );
+            }
+
+            const loanPayments = await transaction.loanPayment.findMany({
+              where: { payslip: { payrollRunId: run.id } },
+              select: { loanId: true, amountPaidCents: true },
+            });
+            for (const payment of loanPayments) {
+              const restored = await transaction.employeeLoan.updateMany({
+                where: { id: payment.loanId },
+                data: {
+                  balanceCents: { increment: payment.amountPaidCents },
+                  isActive: true,
                 },
+              });
+              if (restored.count !== 1) {
+                throw new ConflictException(
+                  `Loan ${payment.loanId} changed while the run was being cancelled`,
+                );
               }
-            : {
-                cutoffEndDate: { gt: run.cutoffEndDate },
-                cutoffSequence: { not: 'SPECIAL_RUN' },
-              }),
-        },
-        select: { id: true },
-      });
-      if (laterRun) {
-        throw new ConflictException(
-          'A later payroll run already builds on this run; cancel the later run first',
-        );
-      }
+            }
+            await transaction.loanPayment.deleteMany({
+              where: { payslip: { payrollRunId: run.id } },
+            });
+            await transaction.payslip.deleteMany({
+              where: { payrollRunId: run.id },
+            });
+            await transaction.payrollRun.delete({ where: { id: run.id } });
 
-      const loanPayments = await transaction.loanPayment.findMany({
-        where: { payslip: { payrollRunId: run.id } },
-        select: { loanId: true, amountPaidCents: true },
-      });
-      for (const payment of loanPayments) {
-        const restored = await transaction.employeeLoan.updateMany({
-          where: { id: payment.loanId },
-          data: {
-            balanceCents: { increment: payment.amountPaidCents },
-            isActive: true,
+            return { success: true, runId: run.id };
           },
-        });
-        if (restored.count !== 1) {
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 10_000,
+            timeout: 120_000,
+          },
+        );
+      } catch (error) {
+        if (isPrismaError(error, 'P2034')) {
+          if (attempt < PAYROLL_TRANSACTION_RETRIES) continue;
           throw new ConflictException(
-            `Loan ${payment.loanId} changed while the run was being cancelled`,
+            'Payroll data changed concurrently; retry cancellation',
           );
         }
+        throw error;
       }
-      await transaction.loanPayment.deleteMany({
-        where: { payslip: { payrollRunId: run.id } },
-      });
-      await transaction.payslip.deleteMany({
-        where: { payrollRunId: run.id },
-      });
-      await transaction.payrollRun.delete({ where: { id: run.id } });
-
-      return { success: true, runId: run.id };
-    });
+    }
+    throw new ConflictException('Payroll run could not be cancelled');
   }
 
   async executePayrollRun(params: ExecutePayrollRunParams) {
@@ -290,6 +323,24 @@ export class PayrollService {
         1,
       ),
     );
+    // The exact-date unique key handles idempotency, while this predicate
+    // prevents a second regular run for the same calendar month with slightly
+    // different dates. Serializable isolation makes concurrent checks safe.
+    const duplicateMonthlyRun = await transaction.payrollRun.findFirst({
+      where: {
+        organizationId: params.organizationId,
+        cutoffSequence: params.cutoffSequence,
+        cutoffEndDate: { gte: monthStart, lt: nextMonth },
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+    });
+    if (duplicateMonthlyRun) {
+      throw new ConflictException(
+        'A payroll run already exists for this monthly cutoff; cancel it before recalculating',
+      );
+    }
+
     if (params.cutoffSequence === 'FIRST_CUTOFF') {
       // A later first cutoff would invalidate the already-posted monthly tax
       // reconciliation on a second cutoff. A new hire can still have only a
@@ -306,6 +357,26 @@ export class PayrollService {
       if (secondRun) {
         throw new ConflictException(
           'The second cutoff for this month has already been processed; cancel it before processing the first cutoff',
+        );
+      }
+    }
+
+    if (params.cutoffSequence === 'SECOND_CUTOFF') {
+      const overlappingFirstRun = await transaction.payrollRun.findFirst({
+        where: {
+          organizationId: params.organizationId,
+          cutoffSequence: 'FIRST_CUTOFF',
+          cutoffEndDate: {
+            gte: params.cutoffStartDate,
+            lt: nextMonth,
+          },
+          status: { not: 'CANCELLED' },
+        },
+        select: { id: true },
+      });
+      if (overlappingFirstRun) {
+        throw new ConflictException(
+          'The second cutoff overlaps a first cutoff; correct the dates before processing',
         );
       }
     }
@@ -619,13 +690,13 @@ export class PayrollService {
    * Unlike regular runs this disburses computed 13th-month payouts only:
    * no basic pay, no timekeeping lookup, no statutory contributions
    * (bonuses are not subject to SSS/PhilHealth/Pag-IBIG), and no loan
-   * amortization. Each payout is priced against the PHP 90,000 annual
-   * bucket together with year-to-date bonuses and de minimis excess, and
-   * the bucket-taxable remainder is withheld using the monthly TRAIN
-   * table; year-end annualization trues up any difference. Active employees
-   * with disbursed basic earnings receive a payout (managers included by
-   * company policy); the DOLE compliance report separately limits statutory
-   * coverage to rank-and-file staff.
+   * amortization. Each release pays only additional entitlement earned
+   * since earlier disbursed special runs. It prices that amount against the
+   * PHP 90,000 annual bucket and withholds tax on the taxable excess using
+   * the monthly TRAIN table; a separate annual tax reconciliation may still
+   * be required. Active employees with disbursed basic earnings receive a
+   * payout (managers included by company policy); the DOLE compliance report
+   * separately limits statutory coverage to rank-and-file staff.
    */
   async executeThirteenthMonthRun(params: ExecuteThirteenthMonthRunParams) {
     const normalized = {
@@ -704,23 +775,29 @@ export class PayrollService {
 
     if (existing) return this.assertIdempotentMatch(existing, runKey);
 
-    // The cutoff-key constraint permits distinct SPECIAL_RUN dates in the
-    // same year. Read this predicate in the serializable transaction so a
-    // concurrent second payout conflicts and retries against the first.
+    // A later special run is a true-up, not a second full annual payout.
+    // Require earlier releases to be disbursed so the credited amount really
+    // was paid, and reject out-of-order/same-date replays under a new key.
     const yearStart = new Date(Date.UTC(params.taxYear, 0, 1));
     const yearEnd = new Date(Date.UTC(params.taxYear + 1, 0, 1));
-    const priorAnnualRun = await transaction.payrollRun.findFirst({
+    const priorAnnualRuns = await transaction.payrollRun.findMany({
       where: {
         organizationId: params.organizationId,
         cutoffSequence: 'SPECIAL_RUN',
         cutoffEndDate: { gte: yearStart, lt: yearEnd },
         status: { not: 'CANCELLED' },
       },
-      select: { id: true },
+      select: { status: true, cutoffEndDate: true },
     });
-    if (priorAnnualRun) {
+    if (
+      priorAnnualRuns.some(
+        (run) =>
+          run.status !== 'DISBURSED' ||
+          run.cutoffEndDate >= params.cutoffEndDate,
+      )
+    ) {
       throw new ConflictException(
-        'A 13th-month run already exists for this year; cancel it before recalculating',
+        'Disburse the prior 13th-month run and use a later cutoff for a true-up, or cancel it first',
       );
     }
 
@@ -837,16 +914,23 @@ export class PayrollService {
         compensation.basicRateDailyCents,
       );
 
+      const previouslyPaidCents = ytdBucket._sum.bonusPaidCents ?? 0n;
+      const amountDueCents =
+        payout.thirteenthMonthPayCents > previouslyPaidCents
+          ? payout.thirteenthMonthPayCents - previouslyPaidCents
+          : 0n;
+      if (amountDueCents === 0n) continue;
+
       const bucket = allocateNinetiethBucket({
         ytdUsedCents: ytdUsed,
-        periodBonusesCents: payout.thirteenthMonthPayCents,
+        periodBonusesCents: amountDueCents,
       });
       const withholdingTaxCents = compensation.isTaxExempt
         ? 0n
         : calculateWithholdingTax(bucket.taxableCents, false, false);
       const netPayCents =
-        payout.thirteenthMonthPayCents > withholdingTaxCents
-          ? payout.thirteenthMonthPayCents - withholdingTaxCents
+        amountDueCents > withholdingTaxCents
+          ? amountDueCents - withholdingTaxCents
           : 0n;
 
       await transaction.payslip.create({
@@ -856,23 +940,23 @@ export class PayrollService {
           basicPayCents: 0n,
           taxableAllowancesCents: bucket.taxableCents,
           nonTaxableAllowancesCents: bucket.exemptCents,
-          grossPayCents: payout.thirteenthMonthPayCents,
+          grossPayCents: amountDueCents,
           withholdingTaxCents,
           totalDeductionsCents: withholdingTaxCents,
           netPayCents,
-          bonusPaidCents: payout.thirteenthMonthPayCents,
+          bonusPaidCents: amountDueCents,
           deMinimisExcessCents: 0n,
         },
       });
 
-      runTotalGross += payout.thirteenthMonthPayCents;
+      runTotalGross += amountDueCents;
       runTotalDeductions += withholdingTaxCents;
       runTotalNet += netPayCents;
     }
 
     if (runTotalGross === 0n) {
       throw new UnprocessableEntityException(
-        'No disbursed regular-payroll basic earnings exist for this year and cutoff',
+        'No additional earned 13th-month pay is due for this cutoff',
       );
     }
 
@@ -907,6 +991,16 @@ export class PayrollService {
     if (normalized.paymentDate < normalized.cutoffEndDate) {
       throw new BadRequestException(
         'Payment date must not be before cutoff end date',
+      );
+    }
+    if (
+      normalized.cutoffStartDate.getUTCFullYear() !==
+        normalized.cutoffEndDate.getUTCFullYear() ||
+      normalized.cutoffStartDate.getUTCMonth() !==
+        normalized.cutoffEndDate.getUTCMonth()
+    ) {
+      throw new BadRequestException(
+        'Regular payroll cutoffs must stay within one calendar month',
       );
     }
     if (normalized.cutoffSequence === 'SPECIAL_RUN') {

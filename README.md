@@ -73,6 +73,25 @@ holiday DTRs on a paid-leave day block payroll for manual reconciliation.
 Partial-day leave and nonstandard workweeks/shifts are not yet supported by
 this payroll path; do not process them as ordinary full-day leave.
 
+## Payroll run policy
+
+Regular payroll supports one first and one second cutoff per organization and
+calendar month; the cutoff start and end must be in the same month. A second
+run with altered dates cannot pay that cutoff again, and the first and second
+cutoffs cannot overlap. Same-date retries return the existing run; cancel
+non-disbursed runs in reverse dependency order before
+recalculating.
+
+13th-month runs pay one-twelfth of **disbursed regular basic earnings through
+the special cutoff**, less earlier disbursed 13th-month payments for that year.
+An early release can therefore be followed by a later, strictly forward-dated
+true-up once further regular earnings have been disbursed. Each prior special
+run must itself be disbursed. A request with no additional earned amount is
+rejected rather than creating a duplicate payment. Cancelling the underlying
+regular run is blocked once a later special payout depends on it; disbursed
+runs cannot be cancelled. Retroactive reductions and cross-year tax adjustments
+still require manual review; a true-up cannot issue a negative payout.
+
 ## Database commands
 
 ```bash

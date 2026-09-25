@@ -330,6 +330,14 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
     expect(run.status).toBe('AUDITED');
     await expect(
       callerFor(specialist).payroll.triggerRun({
+        cutoffStartDate: '2026-09-17',
+        cutoffEndDate: '2026-09-30',
+        paymentDate: '2026-10-01',
+        cutoffSequence: 'SECOND_CUTOFF',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      callerFor(specialist).payroll.triggerRun({
         cutoffStartDate: '2026-09-01',
         cutoffEndDate: '2026-09-15',
         paymentDate: '2026-09-16',
@@ -419,5 +427,71 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
     expect(slip.basicPayCents).toBe(275859n);
     expect(slip.absenceDeductionCents).toBe(0n);
     expect(slip.thirteenthMonthAccrualCents).toBe(22988n);
+  });
+
+  it('pays only newly earned 13th-month amounts on a later disbursed true-up', async () => {
+    const first = await prisma.payrollRun.findFirstOrThrow({
+      where: {
+        organizationId,
+        cutoffSequence: 'FIRST_CUTOFF',
+        cutoffEndDate: new Date('2026-11-15'),
+      },
+    });
+    await callerFor(hr).payroll.approveRun({ runId: first.id });
+    await callerFor(specialist).payroll.disburseRun({ runId: first.id });
+
+    const initialBonus = await callerFor(
+      specialist,
+    ).payroll.triggerThirteenthMonthRun({
+      cutoffStartDate: '2026-11-01',
+      cutoffEndDate: '2026-11-15',
+      paymentDate: '2026-11-20',
+    });
+    const initialSlip = await prisma.payslip.findFirstOrThrow({
+      where: { payrollRunId: initialBonus.id, employeeId },
+    });
+    expect(initialSlip.bonusPaidCents).toBe(22988n);
+    await callerFor(hr).payroll.approveRun({ runId: initialBonus.id });
+    await callerFor(specialist).payroll.disburseRun({ runId: initialBonus.id });
+    await expect(
+      callerFor(specialist).payroll.cancelRun({ runId: first.id }),
+    ).rejects.toThrow();
+
+    await prisma.dailyTimeRecord.create({
+      data: {
+        employeeId,
+        date: new Date('2026-11-25'),
+        actualWorkedMinutes: 480,
+        isApproved: true,
+      },
+    });
+    const second = await callerFor(specialist).payroll.triggerRun({
+      cutoffStartDate: '2026-11-16',
+      cutoffEndDate: '2026-11-30',
+      paymentDate: '2026-12-01',
+      cutoffSequence: 'SECOND_CUTOFF',
+    });
+    await callerFor(hr).payroll.approveRun({ runId: second.id });
+    await callerFor(specialist).payroll.disburseRun({ runId: second.id });
+
+    const topUp = await callerFor(specialist).payroll.triggerThirteenthMonthRun(
+      {
+        cutoffStartDate: '2026-11-16',
+        cutoffEndDate: '2026-11-30',
+        paymentDate: '2026-12-02',
+      },
+    );
+    const topUpSlip = await prisma.payslip.findFirstOrThrow({
+      where: { payrollRunId: topUp.id, employeeId },
+    });
+    expect(topUpSlip.bonusPaidCents).toBe(11494n);
+    expect(initialSlip.bonusPaidCents + topUpSlip.bonusPaidCents).toBe(34482n);
+    await expect(
+      callerFor(specialist).payroll.triggerThirteenthMonthRun({
+        cutoffStartDate: '2026-11-17',
+        cutoffEndDate: '2026-11-30',
+        paymentDate: '2026-12-03',
+      }),
+    ).rejects.toThrow();
   });
 });
