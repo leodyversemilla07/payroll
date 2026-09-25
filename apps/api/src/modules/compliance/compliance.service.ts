@@ -250,6 +250,123 @@ export class ComplianceService {
   }
 
   /**
+   * Read-only, tenant-scoped review queue. Include only employees with a
+   * disbursed payslip paid in the selected tax year. A blocked row is never
+   * treated as a zero-tax employee or silently dropped from the totals.
+   * These totals are NOT remittances or paid refunds.
+   */
+  async listYearEndReconciliations(organizationId: string, taxYear: number) {
+    this.assertSupportedTaxYear(taxYear);
+    const paymentDate = {
+      gte: new Date(Date.UTC(taxYear, 0, 1)),
+      lt: new Date(Date.UTC(taxYear + 1, 0, 1)),
+    };
+    const employees = await prisma.employee.findMany({
+      where: {
+        organizationId,
+        payslips: {
+          some: {
+            payrollRun: { organizationId, status: 'DISBURSED', paymentDate },
+          },
+        },
+      },
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        lastName: true,
+      },
+      orderBy: { employeeNumber: 'asc' },
+    });
+
+    type ReconciliationRow = {
+      employeeId: string;
+      employeeNumber: string;
+      name: string;
+      status:
+        | 'BALANCED'
+        | 'DEFICIENCY_REVIEW'
+        | 'REFUND_REVIEW'
+        | 'BLOCKED_REVIEW';
+      grossCents: bigint | null;
+      taxableCents: bigint | null;
+      taxDueCents: bigint | null;
+      taxWithheldCents: bigint | null;
+      unsettledDifferenceCents: bigint | null;
+      reason?: string;
+    };
+    const rows: ReconciliationRow[] = [];
+    for (const employee of employees) {
+      const identity = {
+        employeeId: employee.id,
+        employeeNumber: employee.employeeNumber,
+        name: `${employee.firstName} ${employee.lastName}`,
+      };
+      try {
+        const result = await this.generateBir2316(
+          employee.id,
+          organizationId,
+          taxYear,
+        );
+        const { partIVA } = result.certificate;
+        rows.push({
+          ...identity,
+          status: result.reconciliationStatus,
+          grossCents: partIVA.grossCompensationIncomeCents,
+          taxableCents: partIVA.totalTaxableCompensationCents,
+          taxDueCents: partIVA.taxDueAnnualCents,
+          taxWithheldCents: partIVA.totalTaxWithheldCents,
+          unsettledDifferenceCents: partIVA.taxAdjustmentCents,
+        });
+      } catch (error) {
+        if (
+          !(
+            error instanceof UnprocessableEntityException ||
+            error instanceof NotFoundException ||
+            error instanceof RangeError
+          )
+        ) {
+          throw error;
+        }
+        rows.push({
+          ...identity,
+          status: 'BLOCKED_REVIEW',
+          grossCents: null,
+          taxableCents: null,
+          taxDueCents: null,
+          taxWithheldCents: null,
+          unsettledDifferenceCents: null,
+          reason: error.message,
+        });
+      }
+    }
+    return {
+      taxYear,
+      reviewOnly: true as const,
+      employeeCount: rows.length,
+      blockedCount: rows.filter((row) => row.status === 'BLOCKED_REVIEW')
+        .length,
+      balancedCount: rows.filter((row) => row.status === 'BALANCED').length,
+      deficiencyReviewCount: rows.filter(
+        (row) => row.status === 'DEFICIENCY_REVIEW',
+      ).length,
+      refundReviewCount: rows.filter((row) => row.status === 'REFUND_REVIEW')
+        .length,
+      // Totals for classified rows ONLY, never a complete annual filing total
+      // when blockedCount is nonzero.
+      classifiedTaxDueCents: rows.reduce(
+        (sum, row) => sum + (row.taxDueCents ?? 0n),
+        0n,
+      ),
+      classifiedTaxWithheldCents: rows.reduce(
+        (sum, row) => sum + (row.taxWithheldCents ?? 0n),
+        0n,
+      ),
+      rows,
+    };
+  }
+
+  /**
    * Previews a read-only BIR 2316 reconciliation worksheet. NOT an official
    * certificate: tax adjustments are computed but not settled by this method.
    */
@@ -258,6 +375,7 @@ export class ComplianceService {
     organizationId: string,
     taxYear = new Date().getFullYear(),
   ) {
+    this.assertSupportedTaxYear(taxYear);
     const { generateBir2316Certificate, formatBir2316TextDocument } =
       await import('@workspace/payroll-engine');
 
@@ -394,7 +512,10 @@ export class ComplianceService {
     // The payslip ledger is not a year-end tax adjustment ledger: a difference
     // here is still due for collection/refund, not proof that it happened.
     const taxAdjustmentCents = certData.partIVA.taxAdjustmentCents;
-    const reconciliationStatus =
+    const reconciliationStatus:
+      | 'BALANCED'
+      | 'DEFICIENCY_REVIEW'
+      | 'REFUND_REVIEW' =
       taxAdjustmentCents === 0n
         ? 'BALANCED'
         : taxAdjustmentCents > 0n
@@ -407,6 +528,14 @@ export class ComplianceService {
       reconciliationStatus,
       formattedDocument,
     };
+  }
+
+  private assertSupportedTaxYear(taxYear: number): void {
+    if (!Number.isInteger(taxYear) || taxYear < 2023 || taxYear > 2100) {
+      throw new UnprocessableEntityException(
+        'BIR tax reconciliation supports 2023–2100 only; earlier years require a different annual tax table',
+      );
+    }
   }
 
   /**

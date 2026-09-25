@@ -71,8 +71,9 @@ and API so the development session cookie is sent to both; set
 
 ## Compliance previews (not filing documents)
 
-`compliance.previewBir2316Reconciliation` produces an internal, read-only
-worksheet, **not** an official BIR Form 2316. Its tax difference is not an
+`compliance.listYearEndReconciliations` provides a tenant-scoped, read-only
+review queue; `compliance.previewBir2316Reconciliation` produces an internal,
+read-only worksheet, **not** an official BIR Form 2316. Its tax difference is not an
 actual refund or deduction. Previous-employer income, remittances, year-end
 tax settlements, and the current official form layout still require review.
 See [the release-gate checklist](docs/validation-gates.md) before any BIR

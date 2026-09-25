@@ -72,7 +72,144 @@ function mockEmployeePayslips(payslips: object[]) {
 }
 
 describe('ComplianceService exports', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
+
+  it('lists only tenant/year disbursed employees and keeps blocked rows visible, not counted as zero', async () => {
+    const ids = ['balanced', 'refund', 'deficiency', 'blocked'];
+    jest.mocked(prisma.employee.findMany).mockResolvedValue(
+      ids.map((id) => ({
+        id,
+        employeeNumber: id,
+        firstName: id,
+        lastName: 'Tester',
+      })) as never,
+    );
+    const balanced = { ...basePayslip, withholdingTaxCents: 0n };
+    const refund = { ...basePayslip };
+    const deficiency = {
+      ...basePayslip,
+      basicPayCents: 50000000n,
+      grossPayCents: 50000000n,
+      tardinessDeductionCents: 0n,
+      overtimePayCents: 0n,
+      taxableAllowancesCents: 0n,
+      nonTaxableAllowancesCents: 0n,
+      sssEmployeeCents: 0n,
+      philhealthEmployeeCents: 0n,
+      pagibigEmployeeCents: 0n,
+      withholdingTaxCents: 0n,
+    };
+    for (const [id, payslips] of [
+      ['balanced', [balanced]],
+      ['refund', [refund]],
+      ['deficiency', [deficiency]],
+      ['blocked', [{ ...basePayslip, deMinimisExcessCents: 100n }]],
+    ] as const) {
+      jest
+        .mocked(prisma.employee.findFirst)
+        .mockResolvedValueOnce({ ...employee, id, payslips } as never);
+    }
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(prisma.employee.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        payslips: {
+          some: {
+            payrollRun: {
+              organizationId: 'org-1',
+              status: 'DISBURSED',
+              paymentDate: {
+                gte: new Date('2026-01-01'),
+                lt: new Date('2027-01-01'),
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        lastName: true,
+      },
+      orderBy: { employeeNumber: 'asc' },
+    });
+    expect(prisma.employee.findFirst).toHaveBeenCalledTimes(4);
+    for (const call of jest.mocked(prisma.employee.findFirst).mock.calls) {
+      expect(call[0]?.where).toEqual({
+        id: expect.any(String),
+        organizationId: 'org-1',
+      });
+      expect(call[0]?.include?.payslips).toEqual({
+        where: {
+          payrollRun: {
+            organizationId: 'org-1',
+            status: 'DISBURSED',
+            paymentDate: {
+              gte: new Date('2026-01-01'),
+              lt: new Date('2027-01-01'),
+            },
+          },
+        },
+      });
+    }
+    expect(report.reviewOnly).toBe(true);
+    expect(report.employeeCount).toBe(4);
+    expect(report.balancedCount).toBe(1);
+    expect(report.refundReviewCount).toBe(1);
+    expect(report.deficiencyReviewCount).toBe(1);
+    expect(report.blockedCount).toBe(1);
+    expect(report.classifiedTaxDueCents).toBe(4250000n);
+    expect(report.classifiedTaxWithheldCents).toBe(15000n);
+    expect(report.rows[3]).toMatchObject({
+      status: 'BLOCKED_REVIEW',
+      taxDueCents: null,
+      unsettledDifferenceCents: null,
+    });
+  });
+
+  it('rejects pre-2023 tax years instead of applying the newer annual tax table', async () => {
+    const service = new ComplianceService();
+    await expect(
+      service.listYearEndReconciliations('org-1', 2022),
+    ).rejects.toThrow(UnprocessableEntityException);
+    await expect(
+      service.generateBir2316('employee-1', 'org-1', 2022),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.employee.findMany).not.toHaveBeenCalled();
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty, non-certified queue for a year without disbursed payroll', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([]);
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.employeeCount).toBe(0);
+    expect(report.rows).toEqual([]);
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not convert a database outage into a blocked/zero-tax employee', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockRejectedValue(new Error('Database unavailable'));
+    await expect(
+      new ComplianceService().listYearEndReconciliations('org-1', 2026),
+    ).rejects.toThrow('Database unavailable');
+  });
 
   it('refuses to invent a BIR 2316 when no disbursed payslips exist', async () => {
     mockEmployeePayslips([]);

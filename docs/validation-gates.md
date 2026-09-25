@@ -1,6 +1,6 @@
 # Payroll release gates — NOT cleared for live payroll
 
-This is a verification checklist, **not** legal, tax, or bank-format approval. The generated 2316-inspired text is an **internal reconciliation worksheet**, not BIR Form 2316. The `compliance.previewBir2316Reconciliation` API returns recorded ledger withholding and an *unsettled* difference; it does not post a refund, collect a deficiency, or verify a remittance. `BALANCED` means only that the two computed amounts match, not that the employee is qualified for substituted filing or that a certificate can be issued.
+This is a verification checklist, **not** legal, tax, or bank-format approval. The generated 2316-inspired text is an **internal reconciliation worksheet**, not BIR Form 2316. The `compliance.listYearEndReconciliations` API returns a read-only, tenant-scoped review queue for employees with disbursed payslips paid in the specified year; `BLOCKED_REVIEW` rows have null financial figures and must not be treated as zero. Its `classified*` totals exclude blocked employees and are **not filing totals**. The `compliance.previewBir2316Reconciliation` API returns recorded ledger withholding and an *unsettled* difference; neither procedure posts a refund, collects a deficiency, or verifies a remittance. `BALANCED` means only that the two computed amounts match, not that the employee is qualified for substituted filing or that a certificate can be issued. Years before 2023 are rejected because this preview only implements the 2023-onwards annual tax table.
 
 ## Primary references inspected
 

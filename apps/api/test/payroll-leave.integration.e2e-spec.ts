@@ -494,4 +494,40 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('scopes the read-only year-end queue to disbursed payroll and the caller tenant', async () => {
+    await expect(
+      callerFor(staff).compliance.listYearEndReconciliations({ taxYear: 2026 }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const foreign = await callerFor(
+      foreignHr,
+    ).compliance.listYearEndReconciliations({ taxYear: 2026 });
+    expect(foreign.employeeCount).toBe(0);
+    const report = await callerFor(
+      specialist,
+    ).compliance.listYearEndReconciliations({ taxYear: 2026 });
+    expect(report.reviewOnly).toBe(true);
+    expect(report.employeeCount).toBe(1);
+    expect(report.blockedCount).toBe(0);
+    expect(report.rows[0]?.employeeId).toBe(employeeId);
+    const disbursed = await prisma.payslip.findMany({
+      where: {
+        employeeId,
+        payrollRun: {
+          organizationId,
+          status: 'DISBURSED',
+          paymentDate: {
+            gte: new Date('2026-01-01'),
+            lt: new Date('2027-01-01'),
+          },
+        },
+      },
+    });
+    expect(report.rows[0]?.grossCents).toBe(
+      disbursed.reduce((sum, slip) => sum + slip.grossPayCents, 0n),
+    );
+    expect(report.rows[0]?.taxWithheldCents).toBe(
+      disbursed.reduce((sum, slip) => sum + slip.withholdingTaxCents, 0n),
+    );
+  });
 });

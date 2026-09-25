@@ -54,11 +54,20 @@ export function createComplianceRouter(ctx: RouterContext) {
         return result;
       }),
 
+    listYearEndReconciliations: payrollProcedure
+      .input(z.object({ taxYear: z.number().int().min(2023).max(2100) }))
+      .query(({ input, ctx }) =>
+        complianceService.listYearEndReconciliations(
+          ctx.user.organizationId,
+          input.taxYear,
+        ),
+      ),
+
     previewBir2316Reconciliation: payrollProcedure
       .input(
         z.object({
           employeeId: z.string().uuid(),
-          taxYear: z.number().int().min(2020).max(2100).optional(),
+          taxYear: z.number().int().min(2023).max(2100).optional(),
         }),
       )
       .mutation(async ({ input, ctx }) => {
