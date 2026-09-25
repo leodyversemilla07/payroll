@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -249,6 +250,194 @@ export class ComplianceService {
     };
   }
 
+  private async assertEmployeeInTenant(
+    employeeId: string,
+    organizationId: string,
+  ) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, organizationId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+  }
+
+  private async createEvidence<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Tax evidence for this key already exists; corrections require manual review',
+        );
+      }
+      throw error;
+    }
+  }
+
+  async recordPriorEmployerDeclaration(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    hasPriorEmployer: boolean;
+    sourceReference: string;
+    recordedById: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    return this.createEvidence(() =>
+      prisma.priorEmployerDeclaration.create({
+        data: input,
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          hasPriorEmployer: true,
+          sourceReference: true,
+          recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  async recordPreviousEmployerIncome(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    employerName: string;
+    employerTin: string;
+    periodStart: Date;
+    periodEnd: Date;
+    grossCompensationCents: bigint;
+    taxableCompensationCents: bigint;
+    taxWithheldCents: bigint;
+    documentReference: string;
+    recordedById: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const declaration = await prisma.priorEmployerDeclaration.findUnique({
+      where: {
+        employeeId_taxYear: {
+          employeeId: input.employeeId,
+          taxYear: input.taxYear,
+        },
+      },
+    });
+    if (
+      !declaration ||
+      declaration.organizationId !== input.organizationId ||
+      !declaration.hasPriorEmployer
+    ) {
+      throw new UnprocessableEntityException(
+        'Declare prior employment before recording its tax documents',
+      );
+    }
+    if (
+      input.periodStart > input.periodEnd ||
+      input.periodStart.getUTCFullYear() !== input.taxYear ||
+      input.periodEnd.getUTCFullYear() !== input.taxYear ||
+      input.taxableCompensationCents > input.grossCompensationCents ||
+      input.grossCompensationCents < 0n ||
+      input.taxableCompensationCents < 0n ||
+      input.taxWithheldCents < 0n
+    ) {
+      throw new UnprocessableEntityException(
+        'Invalid previous-employer period or compensation totals',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.previousEmployerIncome.create({
+        data: input,
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          employerName: true,
+          employerTin: true,
+          periodStart: true,
+          periodEnd: true,
+          grossCompensationCents: true,
+          taxableCompensationCents: true,
+          taxWithheldCents: true,
+          documentReference: true,
+          recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  async recordMonthlyTaxRemittance(input: {
+    organizationId: string;
+    taxYear: number;
+    month: number;
+    remittedCents: bigint;
+    documentReference: string;
+    recordedById: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    if (
+      !Number.isInteger(input.month) ||
+      input.month < 1 ||
+      input.month > 12 ||
+      input.remittedCents < 0n
+    ) {
+      throw new UnprocessableEntityException(
+        'Invalid remittance month or amount',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.monthlyTaxRemittanceEvidence.create({
+        data: input,
+        select: {
+          id: true,
+          taxYear: true,
+          month: true,
+          remittedCents: true,
+          documentReference: true,
+          recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  async getTaxEvidence(
+    employeeId: string,
+    organizationId: string,
+    taxYear: number,
+  ) {
+    this.assertSupportedTaxYear(taxYear);
+    await this.assertEmployeeInTenant(employeeId, organizationId);
+    const [declaration, previousEmployers, monthlyRemittances] =
+      await Promise.all([
+        prisma.priorEmployerDeclaration.findFirst({
+          where: { employeeId, organizationId, taxYear },
+        }),
+        prisma.previousEmployerIncome.findMany({
+          where: { employeeId, organizationId, taxYear },
+          orderBy: { periodStart: 'asc' },
+        }),
+        prisma.monthlyTaxRemittanceEvidence.findMany({
+          where: { organizationId, taxYear },
+          orderBy: { month: 'asc' },
+        }),
+      ]);
+    return {
+      taxYear,
+      selfReportedUnverified: true as const,
+      declaration,
+      previousEmployers,
+      monthlyRemittances,
+    };
+  }
+
   /**
    * Read-only, tenant-scoped review queue. Include only employees with a
    * disbursed payslip paid in the selected tax year. A blocked row is never
@@ -279,6 +468,70 @@ export class ComplianceService {
       orderBy: { employeeNumber: 'asc' },
     });
 
+    const declarations = await prisma.priorEmployerDeclaration.findMany({
+      where: {
+        organizationId,
+        taxYear,
+        employeeId: { in: employees.map((employee) => employee.id) },
+      },
+      select: { employeeId: true, hasPriorEmployer: true },
+    });
+    const declarationByEmployee = new Map(
+      declarations.map((entry) => [entry.employeeId, entry]),
+    );
+    const previousRecords = await prisma.previousEmployerIncome.findMany({
+      where: {
+        organizationId,
+        taxYear,
+        employeeId: { in: employees.map((employee) => employee.id) },
+      },
+      select: { employeeId: true },
+    });
+    const previousEmployeeIds = new Set(
+      previousRecords.map((entry) => entry.employeeId),
+    );
+    const payslips = await prisma.payslip.findMany({
+      where: {
+        payrollRun: { organizationId, status: 'DISBURSED', paymentDate },
+      },
+      select: {
+        withholdingTaxCents: true,
+        payrollRun: { select: { paymentDate: true } },
+      },
+    });
+    const monthlyWithheld = new Map<number, bigint>();
+    for (const payslip of payslips) {
+      const month = payslip.payrollRun.paymentDate.getUTCMonth() + 1;
+      monthlyWithheld.set(
+        month,
+        (monthlyWithheld.get(month) ?? 0n) + payslip.withholdingTaxCents,
+      );
+    }
+    const remittances = await prisma.monthlyTaxRemittanceEvidence.findMany({
+      where: { organizationId, taxYear },
+      select: { month: true, remittedCents: true },
+    });
+    const remittedByMonth = new Map(
+      remittances.map((entry) => [entry.month, entry.remittedCents]),
+    );
+    const missingRemittanceMonths = [...monthlyWithheld.keys()].filter(
+      (month) => !remittedByMonth.has(month),
+    );
+    const mismatchedRemittanceMonths = [...monthlyWithheld.entries()]
+      .filter(
+        ([month, withheld]) =>
+          remittedByMonth.has(month) && remittedByMonth.get(month) !== withheld,
+      )
+      .map(([month]) => month);
+    // An entry with no disbursed payroll for that month also needs review;
+    // otherwise a mistakenly entered amount could look reconciled.
+    for (const [month, remitted] of remittedByMonth) {
+      if (!monthlyWithheld.has(month) && remitted !== 0n)
+        mismatchedRemittanceMonths.push(month);
+    }
+    missingRemittanceMonths.sort((a, b) => a - b);
+    mismatchedRemittanceMonths.sort((a, b) => a - b);
+
     type ReconciliationRow = {
       employeeId: string;
       employeeNumber: string;
@@ -303,6 +556,35 @@ export class ComplianceService {
         name: `${employee.firstName} ${employee.lastName}`,
       };
       try {
+        const declaration = declarationByEmployee.get(employee.id);
+        if (!declaration) {
+          throw new UnprocessableEntityException(
+            'Missing prior-employer declaration for this tax year',
+          );
+        }
+        if (
+          !declaration.hasPriorEmployer &&
+          previousEmployeeIds.has(employee.id)
+        ) {
+          throw new UnprocessableEntityException(
+            'Prior-employer declaration conflicts with recorded tax documents',
+          );
+        }
+        if (declaration.hasPriorEmployer) {
+          throw new UnprocessableEntityException(
+            previousEmployeeIds.has(employee.id)
+              ? 'Previous-employer evidence recorded but not yet included in annual tax computation'
+              : 'Missing previous-employer tax document',
+          );
+        }
+        if (
+          missingRemittanceMonths.length ||
+          mismatchedRemittanceMonths.length
+        ) {
+          throw new UnprocessableEntityException(
+            'Monthly withholding remittance evidence is incomplete or differs from disbursed payslips',
+          );
+        }
         const result = await this.generateBir2316(
           employee.id,
           organizationId,
@@ -352,6 +634,9 @@ export class ComplianceService {
       ).length,
       refundReviewCount: rows.filter((row) => row.status === 'REFUND_REVIEW')
         .length,
+      missingRemittanceMonths,
+      mismatchedRemittanceMonths,
+      remittanceEvidenceIsUnverified: true as const,
       // Totals for classified rows ONLY, never a complete annual filing total
       // when blockedCount is nonzero.
       classifiedTaxDueCents: rows.reduce(

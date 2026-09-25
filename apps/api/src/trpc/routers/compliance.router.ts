@@ -1,10 +1,116 @@
 import { z } from 'zod';
 import type { RouterContext } from './router-context';
 
+// Centavos arrive as decimal strings so browsers never round large amounts.
+const centsInput = z
+  .string()
+  .regex(/^\d{1,15}$/)
+  .transform(BigInt);
+const referenceInput = z.string().trim().min(1).max(160);
+
 export function createComplianceRouter(ctx: RouterContext) {
-  const { trpc, payrollProcedure, complianceService, auditService } = ctx;
+  const {
+    trpc,
+    payrollProcedure,
+    hrProcedure,
+    complianceService,
+    auditService,
+  } = ctx;
 
   return trpc.router({
+    recordPriorEmployerDeclaration: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          hasPriorEmployer: z.boolean(),
+          sourceReference: referenceInput,
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await complianceService.recordPriorEmployerDeclaration({
+          ...input,
+          organizationId: ctx.user.organizationId,
+          recordedById: ctx.user.id,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'PriorEmployerDeclaration',
+          entityId: record.id,
+          newValue: {
+            employeeId: input.employeeId,
+            taxYear: input.taxYear,
+            hasPriorEmployer: input.hasPriorEmployer,
+          },
+        });
+        return record;
+      }),
+
+    recordPreviousEmployerIncome: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          employerName: z.string().trim().min(1).max(200),
+          employerTin: z
+            .string()
+            .trim()
+            .regex(/^[0-9-]{9,20}$/),
+          periodStart: z.string().date(),
+          periodEnd: z.string().date(),
+          grossCompensationCents: centsInput,
+          taxableCompensationCents: centsInput,
+          taxWithheldCents: centsInput,
+          documentReference: referenceInput,
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await complianceService.recordPreviousEmployerIncome({
+          ...input,
+          organizationId: ctx.user.organizationId,
+          recordedById: ctx.user.id,
+          periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
+          periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'PreviousEmployerIncome',
+          entityId: record.id,
+          newValue: { employeeId: input.employeeId, taxYear: input.taxYear },
+        });
+        return record;
+      }),
+
+    recordMonthlyTaxRemittance: hrProcedure
+      .input(
+        z.object({
+          taxYear: z.number().int().min(2023).max(2100),
+          month: z.number().int().min(1).max(12),
+          remittedCents: centsInput,
+          documentReference: referenceInput,
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await complianceService.recordMonthlyTaxRemittance({
+          ...input,
+          organizationId: ctx.user.organizationId,
+          recordedById: ctx.user.id,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'MonthlyTaxRemittanceEvidence',
+          entityId: record.id,
+          newValue: { taxYear: input.taxYear, month: input.month },
+        });
+        return record;
+      }),
+
     exportBankTransmittal: payrollProcedure
       .input(
         z.object({
@@ -53,6 +159,21 @@ export function createComplianceRouter(ctx: RouterContext) {
         });
         return result;
       }),
+
+    getTaxEvidence: payrollProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+        }),
+      )
+      .query(({ input, ctx }) =>
+        complianceService.getTaxEvidence(
+          input.employeeId,
+          ctx.user.organizationId,
+          input.taxYear,
+        ),
+      ),
 
     listYearEndReconciliations: payrollProcedure
       .input(z.object({ taxYear: z.number().int().min(2023).max(2100) }))

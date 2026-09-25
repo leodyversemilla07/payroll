@@ -503,13 +503,54 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       foreignHr,
     ).compliance.listYearEndReconciliations({ taxYear: 2026 });
     expect(foreign.employeeCount).toBe(0);
-    const report = await callerFor(
+    const beforeEvidence = await callerFor(
       specialist,
     ).compliance.listYearEndReconciliations({ taxYear: 2026 });
-    expect(report.reviewOnly).toBe(true);
-    expect(report.employeeCount).toBe(1);
-    expect(report.blockedCount).toBe(0);
-    expect(report.rows[0]?.employeeId).toBe(employeeId);
+    expect(beforeEvidence.rows[0]?.status).toBe('BLOCKED_REVIEW');
+    await expect(
+      callerFor(staff).compliance.recordPriorEmployerDeclaration({
+        employeeId,
+        taxYear: 2026,
+        hasPriorEmployer: false,
+        sourceReference: 'HR-DECL-2026',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      callerFor(foreignHr).compliance.recordPriorEmployerDeclaration({
+        employeeId,
+        taxYear: 2026,
+        hasPriorEmployer: false,
+        sourceReference: 'OTHER-ORG',
+      }),
+    ).rejects.toThrow();
+    const declaration = await callerFor(
+      hr,
+    ).compliance.recordPriorEmployerDeclaration({
+      employeeId,
+      taxYear: 2026,
+      hasPriorEmployer: false,
+      sourceReference: 'HR-DECL-2026',
+    });
+    expect(declaration.recordedById).toBe(hr.id);
+    await expect(
+      callerFor(foreignHr).compliance.getTaxEvidence({
+        employeeId,
+        taxYear: 2026,
+      }),
+    ).rejects.toThrow();
+    const recordedEvidence = await callerFor(
+      specialist,
+    ).compliance.getTaxEvidence({ employeeId, taxYear: 2026 });
+    expect(recordedEvidence.selfReportedUnverified).toBe(true);
+    expect(recordedEvidence.declaration?.sourceReference).toBe('HR-DECL-2026');
+    await expect(
+      callerFor(hr).compliance.recordPriorEmployerDeclaration({
+        employeeId,
+        taxYear: 2026,
+        hasPriorEmployer: false,
+        sourceReference: 'HR-DECL-2026',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
     const disbursed = await prisma.payslip.findMany({
       where: {
         employeeId,
@@ -522,7 +563,31 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
           },
         },
       },
+      include: { payrollRun: { select: { paymentDate: true } } },
     });
+    for (const month of [11, 12]) {
+      const withheld = disbursed
+        .filter(
+          (slip) => slip.payrollRun.paymentDate.getUTCMonth() + 1 === month,
+        )
+        .reduce((sum, slip) => sum + slip.withholdingTaxCents, 0n);
+      const evidence = await callerFor(
+        hr,
+      ).compliance.recordMonthlyTaxRemittance({
+        taxYear: 2026,
+        month,
+        remittedCents: withheld.toString(),
+        documentReference: `TEST-1601C-${month}`,
+      });
+      expect(evidence.recordedById).toBe(hr.id);
+    }
+    const report = await callerFor(
+      specialist,
+    ).compliance.listYearEndReconciliations({ taxYear: 2026 });
+    expect(report.reviewOnly).toBe(true);
+    expect(report.employeeCount).toBe(1);
+    expect(report.blockedCount).toBe(0);
+    expect(report.rows[0]?.employeeId).toBe(employeeId);
     expect(report.rows[0]?.grossCents).toBe(
       disbursed.reduce((sum, slip) => sum + slip.grossPayCents, 0n),
     );

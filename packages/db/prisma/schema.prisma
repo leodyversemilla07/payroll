@@ -57,6 +57,9 @@ model Organization {
   users             User[]
   auditLogs          AuditLog[]
   payrollRuns       PayrollRun[]
+  monthlyTaxRemittances MonthlyTaxRemittanceEvidence[]
+  priorEmployerDeclarations PriorEmployerDeclaration[]
+  previousEmployerIncomes PreviousEmployerIncome[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -148,6 +151,8 @@ model Employee {
   overtimeRequests  OvertimeRequest[]
   loans             EmployeeLoan[]
   payslips          Payslip[]
+  priorEmployerDeclarations PriorEmployerDeclaration[]
+  priorEmployerIncomes PreviousEmployerIncome[]
   user              User?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -532,6 +537,64 @@ model BankTransmittalBatch {
   createdAt       DateTime     @default(now())
 
   @@index([payrollRunId])
+}
+
+// Write-once, employee-year declaration. A "no prior employer" answer is a
+// recorded assertion, not independent verification of employment history.
+model PriorEmployerDeclaration {
+  id                String   @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear           Int
+  hasPriorEmployer  Boolean
+  sourceReference   String
+  recordedById      String
+  createdAt         DateTime @default(now())
+
+  @@unique([employeeId, taxYear])
+  @@index([organizationId, taxYear])
+}
+
+// Write-once transcription of a previous employer's 2316. No amount here is
+// treated as present-employer withholding or independently verified evidence.
+model PreviousEmployerIncome {
+  id                          String   @id @default(uuid())
+  organizationId              String
+  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId                  String
+  employee                    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear                     Int
+  employerName                String
+  employerTin                 String
+  periodStart                 DateTime @db.Date
+  periodEnd                   DateTime @db.Date
+  grossCompensationCents      BigInt
+  taxableCompensationCents    BigInt
+  taxWithheldCents            BigInt
+  documentReference           String
+  recordedById                String
+  createdAt                   DateTime @default(now())
+
+  @@unique([employeeId, taxYear, employerTin, periodStart, periodEnd], map: "PreviousEmployerIncome_employee_year_tin_period_key")
+  @@index([organizationId, taxYear])
+}
+
+// Write-once reference to filed monthly remittance evidence. This is not
+// proof of BIR acceptance or an automatic debit/refund instruction.
+model MonthlyTaxRemittanceEvidence {
+  id                String       @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxYear           Int
+  month             Int
+  remittedCents     BigInt
+  documentReference String
+  recordedById      String
+  createdAt         DateTime     @default(now())
+
+  @@unique([organizationId, taxYear, month])
 }
 
 model AuditLog {

@@ -73,7 +73,11 @@ and API so the development session cookie is sent to both; set
 
 `compliance.listYearEndReconciliations` provides a tenant-scoped, read-only
 review queue; `compliance.previewBir2316Reconciliation` produces an internal,
-read-only worksheet, **not** an official BIR Form 2316. Its tax difference is not an
+read-only worksheet, **not** an official BIR Form 2316. HR staff can record
+write-once, self-reported prior-employer declarations/income and monthly
+remittance references; `compliance.getTaxEvidence` reads the references. The
+queue blocks missing or conflicting evidence, and prior-employer cases remain
+blocked until annualization supports them. Its tax difference is not an
 actual refund or deduction. Previous-employer income, remittances, year-end
 tax settlements, and the current official form layout still require review.
 See [the release-gate checklist](docs/validation-gates.md) before any BIR

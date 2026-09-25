@@ -50,7 +50,12 @@ describe('tRPC authorization', () => {
     executePayrollRun,
   } as unknown as PayrollService;
   const loansService = {} as LoansService;
-  const complianceService = {} as ComplianceService;
+  const recordPriorEmployerDeclaration = jest.fn();
+  const recordMonthlyTaxRemittance = jest.fn();
+  const complianceService = {
+    recordPriorEmployerDeclaration,
+    recordMonthlyTaxRemittance,
+  } as unknown as ComplianceService;
   const leavesService = {} as LeavesService;
   const authService = {} as AuthService;
   const auditService = { record: jest.fn() } as unknown as AuditService;
@@ -110,6 +115,58 @@ describe('tRPC authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(getEmployeeById).not.toHaveBeenCalled();
+  });
+
+  it('restricts tax-evidence writes to HR and derives provenance from the session', async () => {
+    const employeeId = '1941a12f-26c4-4a48-8e7e-d574f2109800';
+    await expect(
+      router
+        .createCaller(createContext(Role.PAYROLL_SPECIALIST))
+        .compliance.recordPriorEmployerDeclaration({
+          employeeId,
+          taxYear: 2026,
+          hasPriorEmployer: false,
+          sourceReference: 'DECL-1',
+        }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(recordPriorEmployerDeclaration).not.toHaveBeenCalled();
+    recordPriorEmployerDeclaration.mockResolvedValue({ id: 'record-1' });
+    const caller = router.createCaller(createContext(Role.HR_ADMIN));
+    await caller.compliance.recordPriorEmployerDeclaration({
+      employeeId,
+      taxYear: 2026,
+      hasPriorEmployer: false,
+      sourceReference: 'DECL-1',
+    });
+    expect(recordPriorEmployerDeclaration).toHaveBeenCalledWith({
+      employeeId,
+      taxYear: 2026,
+      hasPriorEmployer: false,
+      sourceReference: 'DECL-1',
+      organizationId: 'organization-a',
+      recordedById: 'user-a',
+    });
+    expect(auditService.record as jest.Mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'PriorEmployerDeclaration',
+        entityId: 'record-1',
+      }),
+    );
+    recordMonthlyTaxRemittance.mockResolvedValue({ id: 'record-2' });
+    await caller.compliance.recordMonthlyTaxRemittance({
+      taxYear: 2026,
+      month: 12,
+      remittedCents: '12345',
+      documentReference: '1601C-12',
+    });
+    expect(recordMonthlyTaxRemittance).toHaveBeenCalledWith({
+      taxYear: 2026,
+      month: 12,
+      remittedCents: 12345n,
+      documentReference: '1601C-12',
+      organizationId: 'organization-a',
+      recordedById: 'user-a',
+    });
   });
 
   it('prevents HR administrators from executing payroll', async () => {

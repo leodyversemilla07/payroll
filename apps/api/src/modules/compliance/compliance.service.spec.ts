@@ -11,6 +11,14 @@ jest.mock('@workspace/db', () => ({
     payslip: { findMany: jest.fn() },
     employee: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
     organization: { findUnique: jest.fn() },
+    priorEmployerDeclaration: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
+    previousEmployerIncome: { findMany: jest.fn(), create: jest.fn() },
+    monthlyTaxRemittanceEvidence: { findMany: jest.fn(), create: jest.fn() },
   },
 }));
 
@@ -72,7 +80,159 @@ function mockEmployeePayslips(payslips: object[]) {
 }
 
 describe('ComplianceService exports', () => {
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([]);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+  });
+
+  it('requires a tenant-owned employee, a prior-employer declaration and valid period for immutable tax inputs', async () => {
+    const service = new ComplianceService();
+    const declarationInput = {
+      employeeId: 'employee-1',
+      organizationId: 'org-1',
+      taxYear: 2026,
+      hasPriorEmployer: true,
+      sourceReference: 'DECL-1',
+      recordedById: 'hr-1',
+    };
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue(null);
+    await expect(
+      service.recordPriorEmployerDeclaration(declarationInput),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.priorEmployerDeclaration.create).not.toHaveBeenCalled();
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockResolvedValue({ id: 'employee-1' } as never);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.create)
+      .mockRejectedValue({ code: 'P2002' });
+    await expect(
+      service.recordPriorEmployerDeclaration(declarationInput),
+    ).rejects.toThrow('already exists');
+    jest.mocked(prisma.priorEmployerDeclaration.findUnique).mockResolvedValue({
+      ...declarationInput,
+      hasPriorEmployer: false,
+    } as never);
+    const priorInput = {
+      ...declarationInput,
+      employerName: 'Prior Inc.',
+      employerTin: '123-456-789',
+      periodStart: new Date('2026-01-01'),
+      periodEnd: new Date('2026-05-31'),
+      grossCompensationCents: 20000000n,
+      taxableCompensationCents: 10000000n,
+      taxWithheldCents: 100000n,
+      documentReference: '2316-1',
+    };
+    await expect(
+      service.recordPreviousEmployerIncome(priorInput),
+    ).rejects.toThrow(UnprocessableEntityException);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findUnique)
+      .mockResolvedValue(declarationInput as never);
+    await expect(
+      service.recordPreviousEmployerIncome({
+        ...priorInput,
+        periodStart: new Date('2025-12-31'),
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    await expect(
+      service.recordPreviousEmployerIncome({
+        ...priorInput,
+        taxableCompensationCents: 30000000n,
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.previousEmployerIncome.create).not.toHaveBeenCalled();
+    jest
+      .mocked(prisma.previousEmployerIncome.create)
+      .mockResolvedValue({ id: 'prior-1' } as never);
+    await service.recordPreviousEmployerIncome(priorInput);
+    expect(prisma.previousEmployerIncome.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          employeeId: 'employee-1',
+          organizationId: 'org-1',
+          recordedById: 'hr-1',
+        }),
+      }),
+    );
+  });
+
+  it('reads only a tenant employee’s self-reported tax evidence', async () => {
+    const service = new ComplianceService();
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue(null);
+    await expect(
+      service.getTaxEvidence('employee-1', 'wrong-org', 2026),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.priorEmployerDeclaration.findFirst).not.toHaveBeenCalled();
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockResolvedValue({ id: 'employee-1' } as never);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
+      .mockResolvedValue(null);
+    const evidence = await service.getTaxEvidence('employee-1', 'org-1', 2026);
+    expect(evidence.selfReportedUnverified).toBe(true);
+    expect(evidence.declaration).toBeNull();
+    expect(prisma.priorEmployerDeclaration.findFirst).toHaveBeenCalledWith({
+      where: {
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+      },
+    });
+    expect(prisma.previousEmployerIncome.findMany).toHaveBeenCalledWith({
+      where: {
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+      },
+      orderBy: { periodStart: 'asc' },
+    });
+  });
+
+  it('records a monthly remittance reference without claiming it was independently verified', async () => {
+    const service = new ComplianceService();
+    await expect(
+      service.recordMonthlyTaxRemittance({
+        organizationId: 'org-1',
+        taxYear: 2026,
+        month: 13,
+        remittedCents: 0n,
+        documentReference: '1601C-13',
+        recordedById: 'hr-1',
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.monthlyTaxRemittanceEvidence.create).not.toHaveBeenCalled();
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.create)
+      .mockResolvedValue({ id: 'evidence-1' } as never);
+    await service.recordMonthlyTaxRemittance({
+      organizationId: 'org-1',
+      taxYear: 2026,
+      month: 1,
+      remittedCents: 100n,
+      documentReference: '1601C-01',
+      recordedById: 'hr-1',
+    });
+    expect(prisma.monthlyTaxRemittanceEvidence.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          organizationId: 'org-1',
+          taxYear: 2026,
+          month: 1,
+          remittedCents: 100n,
+          documentReference: '1601C-01',
+          recordedById: 'hr-1',
+        },
+      }),
+    );
+  });
 
   it('lists only tenant/year disbursed employees and keeps blocked rows visible, not counted as zero', async () => {
     const ids = ['balanced', 'refund', 'deficiency', 'blocked'];
@@ -84,6 +244,26 @@ describe('ComplianceService exports', () => {
         lastName: 'Tester',
       })) as never,
     );
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue(
+      ids.map((employeeId) => ({
+        employeeId,
+        hasPriorEmployer: false,
+      })) as never,
+    );
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        withholdingTaxCents: 15000n,
+        payrollRun: { paymentDate: new Date('2026-09-30') },
+      },
+    ] as never);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([
+        {
+          month: 9,
+          remittedCents: 15000n,
+        },
+      ] as never);
     const balanced = { ...basePayslip, withholdingTaxCents: 0n };
     const refund = { ...basePayslip };
     const deficiency = {
@@ -158,6 +338,9 @@ describe('ComplianceService exports', () => {
     }
     expect(report.reviewOnly).toBe(true);
     expect(report.employeeCount).toBe(4);
+    expect(report.missingRemittanceMonths).toEqual([]);
+    expect(report.mismatchedRemittanceMonths).toEqual([]);
+    expect(report.remittanceEvidenceIsUnverified).toBe(true);
     expect(report.balancedCount).toBe(1);
     expect(report.refundReviewCount).toBe(1);
     expect(report.deficiencyReviewCount).toBe(1);
@@ -194,6 +377,91 @@ describe('ComplianceService exports', () => {
     expect(prisma.employee.findFirst).not.toHaveBeenCalled();
   });
 
+  it('blocks rows when prior-employer declaration or monthly remittance evidence is missing', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        withholdingTaxCents: 15000n,
+        payrollRun: { paymentDate: new Date('2026-09-30') },
+      },
+    ] as never);
+    const service = new ComplianceService();
+    const missingDeclaration = await service.listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(missingDeclaration.rows[0]).toMatchObject({
+      status: 'BLOCKED_REVIEW',
+      taxDueCents: null,
+      reason: expect.stringContaining('prior-employer declaration'),
+    });
+    expect(missingDeclaration.missingRemittanceMonths).toEqual([9]);
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
+      {
+        employeeId: 'employee-1',
+        hasPriorEmployer: false,
+      },
+    ] as never);
+    const missingRemittance = await service.listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(missingRemittance.rows[0]).toMatchObject({
+      status: 'BLOCKED_REVIEW',
+      reason: expect.stringContaining('remittance evidence'),
+    });
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([
+        {
+          month: 9,
+          remittedCents: 14999n,
+        },
+      ] as never);
+    const mismatched = await service.listYearEndReconciliations('org-1', 2026);
+    expect(mismatched.mismatchedRemittanceMonths).toEqual([9]);
+    expect(mismatched.rows[0]?.status).toBe('BLOCKED_REVIEW');
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('keeps a prior-employer case blocked even when figures are transcribed', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
+      {
+        employeeId: 'employee-1',
+        hasPriorEmployer: true,
+      },
+    ] as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        employeeId: 'employee-1',
+      },
+    ] as never);
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.rows[0]).toMatchObject({
+      status: 'BLOCKED_REVIEW',
+      reason: expect.stringContaining('not yet included'),
+    });
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+  });
+
   it('does not convert a database outage into a blocked/zero-tax employee', async () => {
     jest.mocked(prisma.employee.findMany).mockResolvedValue([
       {
@@ -201,6 +469,12 @@ describe('ComplianceService exports', () => {
         employeeNumber: 'EMP-1',
         firstName: 'Alex',
         lastName: 'Santos',
+      },
+    ] as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
+      {
+        employeeId: 'employee-1',
+        hasPriorEmployer: false,
       },
     ] as never);
     jest
