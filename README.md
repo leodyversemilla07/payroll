@@ -6,7 +6,7 @@ A pnpm/Turborepo monorepo for a Philippine payroll platform. It contains a Next.
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- Node.js 24.11 or newer (Node 24 LTS)
 - pnpm 10
 - Docker Desktop or a PostgreSQL 16 instance
 

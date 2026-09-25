@@ -20,13 +20,13 @@
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.14",
     "@workspace/typescript-config": "workspace:*",
-    "turbo": "^2.9.18",
-    "typescript": "^5"
+    "turbo": "^2.11.4",
+    "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@10.33.4",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=24.11.0 <25"
   }
 }
