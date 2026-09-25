@@ -1,3 +1,9 @@
+import {
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { RouterContext } from './router-context';
 
@@ -7,6 +13,23 @@ const centsInput = z
   .regex(/^\d{1,15}$/)
   .transform(BigInt);
 const referenceInput = z.string().trim().min(1).max(160);
+
+async function withEvidenceErrors<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof ConflictException) {
+      throw new TRPCError({ code: 'CONFLICT', message: error.message });
+    }
+    if (error instanceof NotFoundException) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: error.message });
+    }
+    if (error instanceof UnprocessableEntityException) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: error.message });
+    }
+    throw error;
+  }
+}
 
 export function createComplianceRouter(ctx: RouterContext) {
   const {
@@ -28,11 +51,13 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const record = await complianceService.recordPriorEmployerDeclaration({
-          ...input,
-          organizationId: ctx.user.organizationId,
-          recordedById: ctx.user.id,
-        });
+        const record = await withEvidenceErrors(() =>
+          complianceService.recordPriorEmployerDeclaration({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+          }),
+        );
         await auditService.record({
           user: ctx.user,
           request: ctx.req,
@@ -67,13 +92,15 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const record = await complianceService.recordPreviousEmployerIncome({
-          ...input,
-          organizationId: ctx.user.organizationId,
-          recordedById: ctx.user.id,
-          periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
-          periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
-        });
+        const record = await withEvidenceErrors(() =>
+          complianceService.recordPreviousEmployerIncome({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+            periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
+            periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
+          }),
+        );
         await auditService.record({
           user: ctx.user,
           request: ctx.req,
@@ -95,11 +122,13 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const record = await complianceService.recordMonthlyTaxRemittance({
-          ...input,
-          organizationId: ctx.user.organizationId,
-          recordedById: ctx.user.id,
-        });
+        const record = await withEvidenceErrors(() =>
+          complianceService.recordMonthlyTaxRemittance({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+          }),
+        );
         await auditService.record({
           user: ctx.user,
           request: ctx.req,
@@ -168,10 +197,12 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .query(({ input, ctx }) =>
-        complianceService.getTaxEvidence(
-          input.employeeId,
-          ctx.user.organizationId,
-          input.taxYear,
+        withEvidenceErrors(() =>
+          complianceService.getTaxEvidence(
+            input.employeeId,
+            ctx.user.organizationId,
+            input.taxYear,
+          ),
         ),
       ),
 
