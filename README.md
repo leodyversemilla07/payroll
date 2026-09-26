@@ -1,8 +1,8 @@
-# SweldoPH Payroll
+# Payroll
 
 A pnpm/Turborepo monorepo for a Philippine payroll platform. It contains a Next.js web app, a NestJS/tRPC API, a Prisma/PostgreSQL data layer, and a standalone payroll calculation engine.
 
-> This project is under active development. Authentication, tenant-scoped authorization, and audit logging are implemented in the API, but the web sign-in flow and final regulatory validation are not complete. Do not use it for live payroll yet.
+> This project is under active development. Authentication, tenant-scoped authorization, and audit logging are implemented in the API, and the web sign-in flow uses the API. Final regulatory validation is not complete. Do not use it for live payroll yet.
 
 ## Requirements
 

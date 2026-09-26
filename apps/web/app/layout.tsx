@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import "@workspace/ui/globals.css";
 import { cn } from "@workspace/ui/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TRPCProvider } from "@/lib/trpc-provider";
+
+export const metadata: Metadata = {
+  title: "Payroll",
+  description: "Philippine payroll portal",
+};
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 

@@ -853,7 +853,7 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
             </div>
             <div>
               <div className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                SweldoPH Enterprise
+                Payroll
                 <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.2 rounded font-medium">
                   DOLE & BIR 2026
                 </span>

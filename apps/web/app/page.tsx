@@ -81,7 +81,7 @@ export default function Portal() {
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">SweldoPH</h1>
+            <h1 className="text-3xl font-bold">Payroll</h1>
             <p className="text-slate-400">
               Payroll portal · API-backed records
             </p>
@@ -156,7 +156,7 @@ export default function Portal() {
                   <h2>Sign in</h2>
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Use your SweldoPH staff account to view payroll records.
+                  Use your staff account to view payroll records.
                 </CardDescription>
               </CardHeader>
               <CardContent>

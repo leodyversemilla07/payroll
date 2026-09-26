@@ -103,6 +103,10 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   });
 
   await page.goto("/");
+  await expect(page).toHaveTitle("Payroll");
+  await expect(
+    page.getByRole("heading", { name: "Payroll", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   const loginCard = page.locator('[data-slot="card"]');
   await expect(loginCard).toBeVisible();
@@ -142,6 +146,8 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
 
 test("demo is explicitly separate from persisted payroll", async ({ page }) => {
   await page.goto("/demo");
+  await expect(page).toHaveTitle("Payroll");
+  await expect(page.getByRole("banner")).toContainText("Payroll");
   await expect(page.getByRole("note")).toContainText("DEMO ONLY");
   await expect(page.getByRole("note")).toContainText("Nothing here is saved");
 });
