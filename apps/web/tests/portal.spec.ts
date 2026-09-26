@@ -110,9 +110,13 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   const loginCard = page.locator('[data-slot="card"]');
   await expect(loginCard).toBeVisible();
+  await expect(page.getByRole("note")).toContainText(
+    "Not validated for live payroll",
+  );
+  await expect(page.getByRole("note")).toHaveCount(1);
   await expect(loginCard.locator('[data-slot="field"]')).toHaveCount(3);
   await expect(
-    loginCard.getByText("Access is provisioned by your payroll administrator."),
+    loginCard.getByText("Contact your payroll administrator for access."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Google|GitHub/i }),
