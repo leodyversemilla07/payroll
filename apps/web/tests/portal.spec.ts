@@ -104,6 +104,15 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  const loginCard = page.locator('[data-slot="card"]');
+  await expect(loginCard).toBeVisible();
+  await expect(loginCard.locator('[data-slot="field"]')).toHaveCount(3);
+  await expect(
+    loginCard.getByText("Access is provisioned by your payroll administrator."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Google|GitHub/i }),
+  ).toHaveCount(0);
   await page.getByLabel("Email").fill("staff@example.com");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();

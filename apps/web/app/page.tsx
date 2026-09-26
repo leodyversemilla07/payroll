@@ -1,6 +1,22 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@workspace/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@workspace/ui/components/field";
+import { Input } from "@workspace/ui/components/input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -127,44 +143,81 @@ export default function Portal() {
             )}
           </>
         ) : me.error?.data?.code === "UNAUTHORIZED" ? (
-          <section className={`${panel} max-w-md`}>
-            <h2 className="mb-4 text-xl font-semibold">Sign in</h2>
-            <form onSubmit={signIn} className="space-y-4">
-              <label className="block">
-                Email
-                <input
-                  name="email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  className="mt-1 w-full rounded border border-slate-600 bg-slate-950 p-2"
-                />
-              </label>
-              <label className="block">
-                Password
-                <input
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  className="mt-1 w-full rounded border border-slate-600 bg-slate-950 p-2"
-                />
-              </label>
-              {login.isError && (
-                <p role="alert">
-                  {login.error.data?.code === "UNAUTHORIZED"
-                    ? "Invalid email or password."
-                    : "Sign in failed. Please retry."}
+          <section
+            className="mx-auto w-full max-w-md py-8"
+            aria-label="Staff sign in"
+          >
+            <Card className="border border-slate-800 bg-slate-900 py-8 text-slate-100 shadow-xl shadow-black/20">
+              <CardHeader className="gap-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+                  Secure staff access
                 </p>
-              )}
-              <button
-                type="submit"
-                disabled={login.isPending}
-                className="rounded bg-blue-600 px-4 py-2 disabled:opacity-50"
-              >
-                {login.isPending ? "Signing in…" : "Sign in"}
-              </button>
-            </form>
+                <CardTitle className="text-2xl font-semibold text-slate-50">
+                  <h2>Sign in</h2>
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Use your SweldoPH staff account to view payroll records.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={signIn} className="space-y-6">
+                  <FieldGroup className="gap-5">
+                    <Field>
+                      <FieldLabel
+                        htmlFor="staff-email"
+                        className="text-slate-200"
+                      >
+                        Email
+                      </FieldLabel>
+                      <Input
+                        id="staff-email"
+                        name="email"
+                        type="email"
+                        autoComplete="username"
+                        placeholder="name@company.com"
+                        required
+                        className="h-11 bg-slate-950 text-slate-50 placeholder:text-slate-500"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel
+                        htmlFor="staff-password"
+                        className="text-slate-200"
+                      >
+                        Password
+                      </FieldLabel>
+                      <Input
+                        id="staff-password"
+                        name="password"
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        className="h-11 bg-slate-950 text-slate-50"
+                      />
+                    </Field>
+                    {login.isError && (
+                      <FieldError className="text-red-300">
+                        {login.error.data?.code === "UNAUTHORIZED"
+                          ? "Invalid email or password."
+                          : "Sign in failed. Please retry."}
+                      </FieldError>
+                    )}
+                    <Field>
+                      <Button
+                        type="submit"
+                        disabled={login.isPending}
+                        className="h-11 w-full rounded-xl bg-blue-600 text-white hover:bg-blue-500"
+                      >
+                        {login.isPending ? "Signing in…" : "Sign in"}
+                      </Button>
+                      <FieldDescription className="text-center text-slate-400">
+                        Access is provisioned by your payroll administrator.
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                </form>
+              </CardContent>
+            </Card>
           </section>
         ) : (
           <section className={panel}>
