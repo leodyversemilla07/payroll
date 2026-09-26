@@ -72,6 +72,14 @@ export default function Portal() {
     queryClient.clear();
   }
   const me = trpc.auth.me.useQuery(undefined, { retry: false });
+  const [confirmedSignedOut, setConfirmedSignedOut] = useState(false);
+  useEffect(() => {
+    if (me.data) {
+      setConfirmedSignedOut(false);
+    } else if (me.isError) {
+      setConfirmedSignedOut(me.error?.data?.code === "UNAUTHORIZED");
+    }
+  }, [me.data, me.isError, me.error]);
   const login = trpc.auth.login.useMutation({
     onSuccess: async () => {
       // Never carry results from another account across a sign-in.
@@ -132,7 +140,7 @@ export default function Portal() {
           Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
           bank-file checks remain outstanding.
         </p>
-        {me.isPending ? (
+        {me.isPending && !confirmedSignedOut ? (
           <p role="status">Checking your session…</p>
         ) : me.data ? (
           <>
@@ -165,7 +173,8 @@ export default function Portal() {
               </section>
             )}
           </>
-        ) : me.error?.data?.code === "UNAUTHORIZED" ? (
+        ) : me.error?.data?.code === "UNAUTHORIZED" ||
+          (me.isPending && confirmedSignedOut) ? (
           <section
             className="mx-auto w-full max-w-md py-8"
             aria-label="Staff sign in"
