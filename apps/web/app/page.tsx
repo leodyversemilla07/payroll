@@ -18,10 +18,23 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
 const staffRoles = ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"];
+const loginEmailDraftKey = "payroll:login-email-draft";
+
+function saveEmailDraft(email: string) {
+  try {
+    if (email) {
+      sessionStorage.setItem(loginEmailDraftKey, email);
+    } else {
+      sessionStorage.removeItem(loginEmailDraftKey);
+    }
+  } catch {
+    // Storage can be blocked; the form still works without draft recovery.
+  }
+}
 
 function pesos(cents: bigint | number) {
   return new Intl.NumberFormat("en-PH", {
@@ -43,7 +56,17 @@ export default function Portal() {
   const queryClient = useQueryClient();
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  useEffect(() => {
+    try {
+      setEmailDraft(sessionStorage.getItem(loginEmailDraftKey) ?? "");
+    } catch {
+      // Storage can be blocked; the form still works without draft recovery.
+    }
+  }, []);
   function clearAccountData() {
+    setEmailDraft("");
+    saveEmailDraft("");
     setSelectedRun(null);
     setSelectedSlip(null);
     queryClient.clear();
@@ -173,6 +196,12 @@ export default function Portal() {
                         id="staff-email"
                         name="email"
                         type="email"
+                        value={emailDraft}
+                        onChange={(event) => {
+                          const email = event.currentTarget.value;
+                          setEmailDraft(email);
+                          saveEmailDraft(email);
+                        }}
                         autoComplete="username"
                         placeholder="name@company.com"
                         required

@@ -141,6 +141,7 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveValue("");
   await expect(page.getByText("Ana Santos")).toHaveCount(0);
 });
 
