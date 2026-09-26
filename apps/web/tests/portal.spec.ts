@@ -105,21 +105,27 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await page.goto("/");
   await expect(page).toHaveTitle("Payroll");
   await expect(
-    page.getByRole("heading", { name: "Payroll", exact: true }),
+    page.getByRole("heading", { name: "Login to your account" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   const loginCard = page.locator('[data-slot="card"]');
   await expect(loginCard).toBeVisible();
   await expect(loginCard.locator('[data-slot="field"]')).toHaveCount(3);
   await expect(
-    loginCard.getByText("Access is provisioned by your payroll administrator."),
+    loginCard.getByText("Don't have an account? Sign up"),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Google|GitHub/i }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Login with Google" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Sign up" })).toHaveCount(0);
+  await expect(page.getByRole("note")).toContainText(
+    "Not validated for live payroll",
+  );
   await page.getByLabel("Email").fill("staff@example.com");
   await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Payroll", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Signed in as")).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Employees" }).getByText("Ana Santos"),
@@ -140,7 +146,9 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
       .first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Login to your account" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveValue("");
   await expect(page.getByText("Ana Santos")).toHaveCount(0);
 });

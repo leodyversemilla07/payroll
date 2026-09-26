@@ -23,3 +23,14 @@ test("shadcn login preview uses the configured components without authenticating
   await expect(page).toHaveURL(/\/login-preview$/);
   expect(apiCalls).toEqual([]);
 });
+
+test("shadcn login preview uses the existing system theme", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/login-preview");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(
+    page.getByRole("heading", { name: "Login to your account" }),
+  ).toBeVisible();
+});

@@ -19,7 +19,7 @@ test("invalid credentials never reveal payroll records", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Email").fill("unknown@example.com");
   await page.getByLabel("Password").fill("wrong");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.locator("main [role=alert]")).toContainText(
     "Invalid email or password",
   );
