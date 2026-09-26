@@ -94,10 +94,6 @@ export default function Portal() {
     },
   });
 
-  const showingSignIn =
-    me.error?.data?.code === "UNAUTHORIZED" ||
-    (me.isPending && confirmedSignedOut);
-
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -115,28 +111,15 @@ export default function Portal() {
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white"
-            >
-              P
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">Payroll</h1>
-              {me.data && (
-                <p className="text-sm text-slate-400">
-                  API-backed payroll portal
-                </p>
-              )}
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold">Payroll</h1>
+            <p className="text-slate-400">
+              Payroll portal · API-backed records
+            </p>
           </div>
           <div className="flex items-center gap-4">
-            <Link
-              className="text-sm text-slate-300 underline-offset-4 hover:text-white hover:underline"
-              href="/demo"
-            >
-              View demo <span aria-hidden="true">↗</span>
+            <Link className="text-blue-300 underline" href="/demo">
+              Try the separate demo
             </Link>
             {me.data && (
               <button
@@ -150,15 +133,13 @@ export default function Portal() {
             )}
           </div>
         </header>
-        {!showingSignIn && (
-          <p
-            role="note"
-            className="rounded-lg border border-amber-700 bg-amber-950/50 p-3 text-sm text-amber-200"
-          >
-            Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
-            bank-file checks remain outstanding.
-          </p>
-        )}
+        <p
+          role="note"
+          className="rounded-lg border border-amber-700 bg-amber-950/50 p-3 text-sm text-amber-200"
+        >
+          Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
+          bank-file checks remain outstanding.
+        </p>
         {me.isPending && !confirmedSignedOut ? (
           <p role="status">Checking your session…</p>
         ) : me.data ? (
@@ -192,27 +173,31 @@ export default function Portal() {
               </section>
             )}
           </>
-        ) : showingSignIn ? (
+        ) : me.error?.data?.code === "UNAUTHORIZED" ||
+          (me.isPending && confirmedSignedOut) ? (
           <section
-            className="mx-auto w-full max-w-md space-y-5 py-10 sm:py-20"
+            className="mx-auto w-full max-w-md py-8"
             aria-label="Staff sign in"
           >
-            <Card className="rounded-2xl border border-slate-200 bg-white py-8 text-slate-950 shadow-2xl shadow-black/20">
-              <CardHeader className="gap-2 px-7 sm:px-8">
-                <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+            <Card className="border border-slate-800 bg-slate-900 py-8 text-slate-100 shadow-xl shadow-black/20">
+              <CardHeader className="gap-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+                  Secure staff access
+                </p>
+                <CardTitle className="text-2xl font-semibold text-slate-50">
                   <h2>Sign in</h2>
                 </CardTitle>
-                <CardDescription className="text-slate-500">
-                  Enter your credentials to access your payroll workspace.
+                <CardDescription className="text-slate-400">
+                  Use your staff account to view payroll records.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-7 sm:px-8">
-                <form onSubmit={signIn}>
+              <CardContent>
+                <form onSubmit={signIn} className="space-y-6">
                   <FieldGroup className="gap-5">
                     <Field>
                       <FieldLabel
                         htmlFor="staff-email"
-                        className="text-sm font-medium text-slate-700"
+                        className="text-slate-200"
                       >
                         Email
                       </FieldLabel>
@@ -229,13 +214,13 @@ export default function Portal() {
                         autoComplete="username"
                         placeholder="name@company.com"
                         required
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3.5 text-slate-950 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-blue-600/15"
+                        className="h-11 bg-slate-950 text-slate-50 placeholder:text-slate-500"
                       />
                     </Field>
                     <Field>
                       <FieldLabel
                         htmlFor="staff-password"
-                        className="text-sm font-medium text-slate-700"
+                        className="text-slate-200"
                       >
                         Password
                       </FieldLabel>
@@ -245,11 +230,11 @@ export default function Portal() {
                         type="password"
                         autoComplete="current-password"
                         required
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3.5 text-slate-950 focus-visible:border-blue-600 focus-visible:ring-blue-600/15"
+                        className="h-11 bg-slate-950 text-slate-50"
                       />
                     </Field>
                     {login.isError && (
-                      <FieldError className="text-red-700">
+                      <FieldError className="text-red-300">
                         {login.error.data?.code === "UNAUTHORIZED"
                           ? "Invalid email or password."
                           : "Sign in failed. Please retry."}
@@ -259,25 +244,18 @@ export default function Portal() {
                       <Button
                         type="submit"
                         disabled={login.isPending}
-                        className="h-11 w-full rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700 focus-visible:ring-blue-600/30"
+                        className="h-11 w-full rounded-xl bg-blue-600 text-white hover:bg-blue-500"
                       >
                         {login.isPending ? "Signing in…" : "Sign in"}
                       </Button>
-                      <FieldDescription className="text-center text-slate-500">
-                        Contact your payroll administrator for access.
+                      <FieldDescription className="text-center text-slate-400">
+                        Access is provisioned by your payroll administrator.
                       </FieldDescription>
                     </Field>
                   </FieldGroup>
                 </form>
               </CardContent>
             </Card>
-            <p
-              role="note"
-              className="rounded-xl border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm leading-relaxed text-amber-100"
-            >
-              Not validated for live payroll. Regulatory, annual-tax/BIR 2316
-              and bank-file checks remain outstanding.
-            </p>
           </section>
         ) : (
           <section className={panel}>
