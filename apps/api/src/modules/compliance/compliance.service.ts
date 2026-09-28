@@ -823,6 +823,171 @@ export class ComplianceService {
     });
   }
 
+  async getBir2316Issuance(
+    employeeId: string,
+    organizationId: string,
+    taxYear: number,
+  ) {
+    this.assertSupportedTaxYear(taxYear);
+    await this.assertEmployeeInTenant(employeeId, organizationId);
+    const issuance = await prisma.bir2316Issuance.findFirst({
+      where: { employeeId, organizationId, taxYear },
+      orderBy: { version: 'desc' },
+    });
+    if (!issuance) return null;
+    return { ...issuance, ...issuanceTiming(issuance.taxYear) };
+  }
+
+  /**
+   * Issues a BIR 2316 certificate to an employee. The preview worksheet is
+   * never the certificate: issuance is allowed only for a conclusive,
+   * fully-settled reconciliation (balanced or settled to zero), which also
+   * inherits the de-minimis/MWE/gross-reconciliation guards. Recomputed
+   * figures are frozen into the snapshot for audit. Filing eligibility
+   * (e.g. substituted filing) is not decided here.
+   */
+  async issueBir2316(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    issuedById: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const current = await prisma.bir2316Issuance.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (current?.status === 'ISSUED') {
+      throw new ConflictException(
+        'A certificate is already issued for this employee-year; void it before re-issuing',
+      );
+    }
+    const preview = await this.generateBir2316(
+      input.employeeId,
+      input.organizationId,
+      input.taxYear,
+    );
+    if (preview.remainingDifferenceCents !== 0n) {
+      throw new UnprocessableEntityException(
+        'An unsettled tax difference remains; post a settlement before issuing a certificate',
+      );
+    }
+    const queue = await this.listYearEndReconciliations(
+      input.organizationId,
+      input.taxYear,
+    );
+    const row = queue.rows.find(
+      (entry) => entry.employeeId === input.employeeId,
+    );
+    if (!row || row.status === 'BLOCKED_REVIEW') {
+      throw new UnprocessableEntityException(
+        'Year-end evidence is incomplete for this employee; resolve the review queue before issuing a certificate',
+      );
+    }
+    const declaration = await prisma.priorEmployerDeclaration.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+    const { partIVA } = preview.certificate;
+    const cents = (value: bigint) => value.toString();
+    return this.createEvidence(() =>
+      prisma.bir2316Issuance.create({
+        data: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          status: 'ISSUED',
+          snapshot: {
+            grossCents: cents(partIVA.grossCompensationIncomeCents),
+            taxableCents: cents(partIVA.totalTaxableCompensationCents),
+            taxDueCents: cents(partIVA.taxDueAnnualCents),
+            withheldCents: cents(partIVA.totalTaxWithheldCents),
+            adjustmentCents: cents(partIVA.taxAdjustmentCents),
+            priorEmployerTotals: preview.priorEmployerTotals
+              ? {
+                  employerCount: preview.priorEmployerTotals.employerCount,
+                  grossCents: cents(preview.priorEmployerTotals.grossCents),
+                  taxableCents: cents(
+                    preview.priorEmployerTotals.taxableCents,
+                  ),
+                  withheldCents: cents(
+                    preview.priorEmployerTotals.withheldCents,
+                  ),
+                }
+              : null,
+            settlementId: preview.settlement?.id ?? null,
+            reconciliationStatus: preview.reconciliationStatus,
+            frozenAt: new Date().toISOString(),
+          },
+          hadPriorEmployer: declaration?.hasPriorEmployer ?? false,
+          issuedById: input.issuedById,
+          version: (current?.version ?? 0) + 1,
+          supersedesId: current?.id ?? null,
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          status: true,
+          snapshot: true,
+          hadPriorEmployer: true,
+          issuedById: true,
+          issuedAt: true,
+          version: true,
+          supersedesId: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Voids an issued certificate without deleting history. Correct the
+   * underlying evidence, then re-issue a new version.
+   */
+  async voidBir2316Issuance(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    voidReason: string;
+    voidedById: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const voidReason = this.assertCorrectionReason(input.voidReason);
+    const current = await prisma.bir2316Issuance.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!current || current.status !== 'ISSUED') {
+      throw new NotFoundException(
+        'No issued certificate exists to void for this employee-year',
+      );
+    }
+    return prisma.bir2316Issuance.update({
+      where: { id: current.id },
+      data: {
+        status: 'VOIDED',
+        voidedById: input.voidedById,
+        voidedAt: new Date(),
+        voidReason,
+      },
+    });
+  }
+
   /**
    * Posts an auditable December/termination settlement for a computed year-end
    * tax difference. A 2316 worksheet difference is not a payment: this row
@@ -1165,6 +1330,29 @@ export class ComplianceService {
     const previousEmployeeIds = new Set(
       [...currentPreviousByKey.values()].map((entry) => entry.employeeId),
     );
+    const issuances = await prisma.bir2316Issuance.findMany({
+      where: {
+        organizationId,
+        taxYear,
+        employeeId: { in: employees.map((employee) => employee.id) },
+      },
+      select: {
+        employeeId: true,
+        status: true,
+        issuedAt: true,
+        version: true,
+      },
+    });
+    const issuanceByEmployee = new Map<
+      string,
+      { status: string; issuedAt: Date; version: number }
+    >();
+    for (const entry of issuances) {
+      const current = issuanceByEmployee.get(entry.employeeId);
+      if (!current || entry.version > current.version) {
+        issuanceByEmployee.set(entry.employeeId, entry);
+      }
+    }
     const payslips = await prisma.payslip.findMany({
       where: {
         payrollRun: { organizationId, status: 'DISBURSED', paymentDate },
@@ -1238,6 +1426,8 @@ export class ComplianceService {
       remainingDifferenceCents: bigint | null;
       settlementType: string | null;
       settledCents: bigint | null;
+      issuanceStatus: string | null;
+      issuedAt: Date | null;
       reason?: string;
     };
     const rows: ReconciliationRow[] = [];
@@ -1284,6 +1474,7 @@ export class ComplianceService {
           taxYear,
         );
         const { partIVA } = result.certificate;
+        const issuance = issuanceByEmployee.get(employee.id);
         rows.push({
           ...identity,
           status: result.isSettled ? 'SETTLED' : result.reconciliationStatus,
@@ -1295,6 +1486,8 @@ export class ComplianceService {
           remainingDifferenceCents: result.remainingDifferenceCents,
           settlementType: result.settlement?.settlementType ?? null,
           settledCents: result.settlement?.settledCents ?? null,
+          issuanceStatus: issuance?.status ?? null,
+          issuedAt: issuance?.issuedAt ?? null,
         });
       } catch (error) {
         if (
@@ -1306,6 +1499,7 @@ export class ComplianceService {
         ) {
           throw error;
         }
+        const blockedIssuance = issuanceByEmployee.get(employee.id);
         rows.push({
           ...identity,
           status: 'BLOCKED_REVIEW',
@@ -1317,6 +1511,8 @@ export class ComplianceService {
           remainingDifferenceCents: null,
           settlementType: null,
           settledCents: null,
+          issuanceStatus: blockedIssuance?.status ?? null,
+          issuedAt: blockedIssuance?.issuedAt ?? null,
           reason: error.message,
         });
       }
@@ -1334,6 +1530,8 @@ export class ComplianceService {
       refundReviewCount: rows.filter((row) => row.status === 'REFUND_REVIEW')
         .length,
       settledCount: rows.filter((row) => row.status === 'SETTLED').length,
+      issuedCount: rows.filter((row) => row.issuanceStatus === 'ISSUED')
+        .length,
       missingRemittanceMonths,
       mismatchedRemittanceMonths,
       remittanceEvidenceIsUnverified: true as const,
@@ -1808,4 +2006,20 @@ export class ComplianceService {
       filename: `DOLE_13th_Month_Compliance_Report_${taxYear}.txt`,
     };
   }
+}
+
+/**
+ * BIR certificates for a tax year are due to employees by January 31 of the
+ * following year (sooner on termination). Informational only: lateness never
+ * rewrites computed figures.
+ */
+function issuanceTiming(taxYear: number): {
+  statutoryDeadline: string;
+  isLate: boolean;
+} {
+  const deadline = new Date(Date.UTC(taxYear + 1, 0, 31));
+  return {
+    statutoryDeadline: deadline.toISOString().slice(0, 10),
+    isLate: new Date() > deadline,
+  };
 }

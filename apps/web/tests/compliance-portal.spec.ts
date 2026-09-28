@@ -194,3 +194,126 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
   await expect(yearEnd.getByText("Correction recorded.")).toBeVisible();
   expect(mutations).toContain("compliance.correctPriorEmployerDeclaration");
 });
+
+// Exercise certificate issuance against mocked tRPC: a settled employee can
+// be issued, then voided with a reason.
+test("issue and void a 2316 certificate", async ({ page }) => {
+  let signedIn = false;
+  const mutations: string[] = [];
+  let issuance: Record<string, unknown> | null = null;
+  const settledRow = {
+    ...queueRow,
+    status: "SETTLED",
+    unsettledDifferenceCents: 5250000,
+    remainingDifferenceCents: 0,
+    settlementType: "DEFICIENCY_WITHHELD",
+    settledCents: 5250000,
+    issuanceStatus: null,
+    issuedAt: null,
+  };
+  const settledQueue = { ...queue, rows: [settledRow], settledCount: 1 };
+  const settledEvidence = {
+    ...evidence,
+    settlement: {
+      id: "settle-1",
+      settlementType: "DEFICIENCY_WITHHELD",
+      settledCents: 5250000,
+      settlementDate: "2026-12-15T00:00:00.000Z",
+      documentReference: "DEC-2026",
+    },
+  };
+  const settledPreview = {
+    ...preview,
+    reconciliationStatus: "SETTLED",
+    remainingDifferenceCents: 0,
+    isSettled: true,
+  };
+  await page.route("**/trpc/**", async (route) => {
+    const paths = (
+      new URL(route.request().url()).pathname.split("/trpc/")[1] ?? ""
+    ).split(",");
+    const isMutation = route.request().method() === "POST";
+    const results = paths.map((path) => {
+      if (path === "auth.login") {
+        signedIn = true;
+        return { result: { data: { json: { user } } } };
+      }
+      if (path === "auth.logout") {
+        signedIn = false;
+        return { result: { data: { json: { success: true } } } };
+      }
+      if (!signedIn)
+        return {
+          error: {
+            json: {
+              message: "Unauthorized",
+              code: -32001,
+              data: { code: "UNAUTHORIZED", httpStatus: 401 },
+            },
+          },
+        };
+      if (isMutation) mutations.push(path);
+      if (path === "compliance.issueBir2316") {
+        issuance = {
+          id: "iss-1",
+          status: "ISSUED",
+          version: 1,
+          issuedAt: "2027-01-15T00:00:00.000Z",
+          statutoryDeadline: "2027-01-31",
+          hadPriorEmployer: true,
+        };
+        return { result: { data: { json: issuance } } };
+      }
+      if (path === "compliance.voidBir2316Issuance") {
+        issuance = { ...issuance, status: "VOIDED" };
+        return { result: { data: { json: issuance } } };
+      }
+      const json =
+        path === "auth.me"
+          ? user
+          : path === "employees.list"
+            ? [employee]
+            : path === "payroll.listRuns"
+              ? []
+              : path === "compliance.listYearEndReconciliations"
+                ? settledQueue
+                : path === "compliance.getTaxEvidence"
+                  ? settledEvidence
+                  : path === "compliance.previewBir2316Reconciliation"
+                    ? settledPreview
+                    : path === "compliance.getBir2316Issuance"
+                      ? issuance
+                      : null;
+      return { result: { data: { json } } };
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(paths.length === 1 ? results[0] : results),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("hr@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  const yearEnd = page.getByRole("region", { name: "Year-end tax" });
+  await expect(yearEnd).toBeVisible();
+  await yearEnd.getByRole("button", { name: /Ana Santos/ }).click();
+  await yearEnd.getByRole("button", { name: "Preview worksheet" }).click();
+  await expect(yearEnd.getByText("INTERNAL TAX RECONCILIATION")).toBeVisible();
+  await expect(
+    yearEnd.getByText("before a certificate can be issued"),
+  ).toHaveCount(0);
+
+  await yearEnd.getByRole("button", { name: "Issue certificate" }).click();
+  await expect(yearEnd.getByText("Certificate issued.")).toBeVisible();
+  expect(mutations).toContain("compliance.issueBir2316");
+
+  await yearEnd
+    .getByLabel(/Void reason/)
+    .fill("Certificate printed with a transposed TIN digit");
+  await yearEnd.getByRole("button", { name: "Void certificate" }).click();
+  await expect(yearEnd.getByText("Certificate voided.")).toBeVisible();
+  expect(mutations).toContain("compliance.voidBir2316Issuance");
+});

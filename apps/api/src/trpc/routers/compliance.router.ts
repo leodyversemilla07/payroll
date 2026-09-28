@@ -394,8 +394,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           reviewerId: z.string().uuid(),
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
+      .mutation(async ({ input, ctx }) => {        const record = await withEvidenceErrors(() =>
           complianceService.supersedeYearEndSettlement({
             employeeId: input.employeeId,
             organizationId: ctx.user.organizationId,
@@ -422,6 +421,82 @@ export function createComplianceRouter(ctx: RouterContext) {
         });
         return record;
       }),
+
+    issueBir2316: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.issueBir2316({
+            employeeId: input.employeeId,
+            organizationId: ctx.user.organizationId,
+            taxYear: input.taxYear,
+            issuedById: ctx.user.id,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'Bir2316Issuance',
+          entityId: record.id,
+          newValue: {
+            employeeId: input.employeeId,
+            taxYear: input.taxYear,
+          },
+        });
+        return record;
+      }),
+
+    voidBir2316Issuance: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          voidReason: correctionReasonInput,
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.voidBir2316Issuance({
+            employeeId: input.employeeId,
+            organizationId: ctx.user.organizationId,
+            taxYear: input.taxYear,
+            voidReason: input.voidReason,
+            voidedById: ctx.user.id,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'Bir2316Issuance',
+          entityId: record.id,
+          newValue: { status: record.status },
+        });
+        return record;
+      }),
+
+    getBir2316Issuance: payrollProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+        }),
+      )
+      .query(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          complianceService.getBir2316Issuance(
+            input.employeeId,
+            ctx.user.organizationId,
+            input.taxYear,
+          ),
+        ),
+      ),
 
     exportDole13thMonth: payrollProcedure
       .input(

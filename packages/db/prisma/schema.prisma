@@ -61,6 +61,7 @@ model Organization {
   priorEmployerDeclarations PriorEmployerDeclaration[]
   previousEmployerIncomes PreviousEmployerIncome[]
   yearEndTaxSettlements YearEndTaxSettlement[]
+  bir2316Issuances Bir2316Issuance[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -155,6 +156,7 @@ model Employee {
   priorEmployerDeclarations PriorEmployerDeclaration[]
   priorEmployerIncomes PreviousEmployerIncome[]
   yearEndTaxSettlements YearEndTaxSettlement[]
+  bir2316Issuances Bir2316Issuance[]
   user              User?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -649,6 +651,36 @@ model YearEndTaxSettlement {
   correctionReason        String?
   reviewedById            String?
   createdAt               DateTime @default(now())
+
+  @@unique([employeeId, taxYear, version])
+  @@index([organizationId, taxYear])
+}
+
+// BIR 2316 issuance record. The worksheet preview is never the certificate:
+// this row marks that a certificate was actually issued to the employee,
+// freezing the reconciled figures for audit. Certificates are voided (never
+// deleted); a re-issue appends a higher version. Filing eligibility
+// (e.g. substituted filing) is NOT decided here — only facts are stored.
+model Bir2316Issuance {
+  id                String   @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear           Int
+  status            String   // ISSUED | VOIDED
+  snapshot          Json     // Frozen partIVA figures (decimal strings), prior totals, settlement id
+  hadPriorEmployer  Boolean
+  issuedById        String
+  issuedAt          DateTime @default(now())
+  voidedById        String?
+  voidedAt          DateTime?
+  voidReason        String?
+  version           Int      @default(1)
+  supersedesId      String?  @unique
+  supersedes        Bir2316Issuance? @relation("IssuanceSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy      Bir2316Issuance? @relation("IssuanceSupersession")
+  createdAt         DateTime @default(now())
 
   @@unique([employeeId, taxYear, version])
   @@index([organizationId, taxYear])

@@ -33,6 +33,12 @@ jest.mock('@workspace/db', () => ({
       findMany: jest.fn(),
       create: jest.fn(),
     },
+    bir2316Issuance: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
   },
 }));
 
@@ -117,6 +123,8 @@ describe('ComplianceService exports', () => {
     jest
       .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
       .mockResolvedValue(null);
+    jest.mocked(prisma.bir2316Issuance.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue(null);
   });
 
   it('requires a tenant-owned employee, a prior-employer declaration and valid period for immutable tax inputs', async () => {
@@ -1072,6 +1080,8 @@ describe('ComplianceService year-end settlement', () => {
       .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
       .mockResolvedValue(null);
     jest.mocked(prisma.user.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.bir2316Issuance.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue(null);
   });
 
   function mockLedgerWith(payslips: object[], employmentStatus = 'ACTIVE') {
@@ -1427,6 +1437,8 @@ describe('ComplianceService evidence supersession', () => {
       .mockResolvedValue(null);
     jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue(null);
     jest.mocked(prisma.user.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.bir2316Issuance.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue(null);
   });
 
   function mockReviewer() {
@@ -1854,5 +1866,300 @@ describe('ComplianceService evidence supersession', () => {
     expect(
       evidence.supersededHistory.previousEmployers.map((row) => row.id),
     ).toEqual(['prior-1']);
+  });
+});
+
+describe('ComplianceService 2316 issuance', () => {
+  const deficiencySlip = {
+    ...basePayslip,
+    basicPayCents: 50000000n,
+    grossPayCents: 50000000n,
+    tardinessDeductionCents: 0n,
+    overtimePayCents: 0n,
+    taxableAllowancesCents: 0n,
+    nonTaxableAllowancesCents: 0n,
+    sssEmployeeCents: 0n,
+    philhealthEmployeeCents: 0n,
+    pagibigEmployeeCents: 0n,
+    withholdingTaxCents: 0n,
+  };
+  const balancedSlip = { ...basePayslip, withholdingTaxCents: 0n };
+  const empIdentity = {
+    id: 'employee-1',
+    employeeNumber: 'EMP-1',
+    firstName: 'Alex',
+    lastName: 'Santos',
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue({
+      id: 'employee-1',
+    } as never);
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([]);
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue(
+      [],
+    );
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue(
+      null,
+    );
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.bir2316Issuance.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue(null);
+  });
+
+  function mockLedger(payslips: object[]) {
+    jest.mocked(prisma.employee.findFirst).mockImplementation((args) =>
+      (args as { include?: unknown })?.include
+        ? ({ ...employee, payslips } as never)
+        : ({ id: 'employee-1', employmentStatus: 'ACTIVE' } as never),
+    );
+  }
+
+  function mockCompleteEvidence() {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      empIdentity,
+    ] as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
+      { employeeId: 'employee-1', hasPriorEmployer: false, version: 1 },
+    ] as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: false,
+    } as never);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        withholdingTaxCents: 0n,
+        payrollRun: { paymentDate: new Date('2026-12-31') },
+      },
+    ] as never);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([{ month: 12, remittedCents: 0n, version: 1 }] as never);
+  }
+
+  function mockIssuanceCreate() {
+    (prisma.bir2316Issuance.create as unknown as jest.Mock).mockImplementation(
+      (args: { data: object }) =>
+        Promise.resolve({
+          id: 'iss-1',
+          issuedAt: new Date('2027-01-15'),
+          createdAt: new Date('2027-01-15'),
+          ...args.data,
+        }),
+    );
+  }
+
+  const issueInput = {
+    employeeId: 'employee-1',
+    organizationId: 'org-1',
+    taxYear: 2026,
+    issuedById: 'hr-1',
+  };
+
+  it('issues a certificate for a balanced reconciliation and freezes the figures', async () => {
+    mockLedger([balancedSlip]);
+    mockCompleteEvidence();
+    mockIssuanceCreate();
+
+    const record = await new ComplianceService().issueBir2316(issueInput);
+    expect(record).toMatchObject({
+      status: 'ISSUED',
+      version: 1,
+      hadPriorEmployer: false,
+    });
+    expect(record.snapshot).toMatchObject({
+      grossCents: '1545000',
+      taxableCents: '1295000',
+      taxDueCents: '0',
+      withheldCents: '0',
+      adjustmentCents: '0',
+      priorEmployerTotals: null,
+      settlementId: null,
+      reconciliationStatus: 'BALANCED',
+    });
+  });
+
+  it('issues a certificate for a settled deficiency with its snapshot', async () => {
+    mockLedger([deficiencySlip]);
+    mockCompleteEvidence();
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settle-1',
+      settlementType: 'DEFICIENCY_WITHHELD',
+      settledCents: 4250000n,
+    } as never);
+    mockIssuanceCreate();
+
+    const record = await new ComplianceService().issueBir2316(issueInput);
+    expect(record).toMatchObject({
+      status: 'ISSUED',
+      snapshot: expect.objectContaining({
+        taxDueCents: '4250000',
+        adjustmentCents: '4250000',
+        settlementId: 'settle-1',
+      }),
+    });
+  });
+
+  it('refuses issuance while a tax difference is unsettled', async () => {
+    mockLedger([deficiencySlip]);
+    mockCompleteEvidence();
+    await expect(
+      new ComplianceService().issueBir2316(issueInput),
+    ).rejects.toThrow('settlement');
+    expect(prisma.bir2316Issuance.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses issuance with incomplete year-end evidence', async () => {
+    mockLedger([balancedSlip]);
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      empIdentity,
+    ] as never);
+    // No prior-employer declaration: the queue row stays blocked.
+    await expect(
+      new ComplianceService().issueBir2316(issueInput),
+    ).rejects.toThrow('incomplete');
+    expect(prisma.bir2316Issuance.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a duplicate active issuance', async () => {
+    mockLedger([balancedSlip]);
+    mockCompleteEvidence();
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue({
+      id: 'iss-1',
+      version: 1,
+      status: 'ISSUED',
+    } as never);
+    await expect(
+      new ComplianceService().issueBir2316(issueInput),
+    ).rejects.toThrow('already issued');
+    expect(prisma.bir2316Issuance.create).not.toHaveBeenCalled();
+  });
+
+  it('voids an issuance and re-issues a new version', async () => {
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue({
+      id: 'iss-1',
+      version: 1,
+      status: 'ISSUED',
+    } as never);
+    jest.mocked(prisma.bir2316Issuance.update).mockImplementation((args) =>
+      Promise.resolve({
+        id: 'iss-1',
+        ...((args as { data: object }).data ?? {}),
+      }) as never,
+    );
+    const voided = await new ComplianceService().voidBir2316Issuance({
+      employeeId: 'employee-1',
+      organizationId: 'org-1',
+      taxYear: 2026,
+      voidReason: 'Certificate printed with a transposed TIN digit',
+      voidedById: 'hr-1',
+    });
+    expect(voided).toMatchObject({ status: 'VOIDED' });
+    expect(prisma.bir2316Issuance.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'iss-1' },
+        data: expect.objectContaining({
+          status: 'VOIDED',
+          voidedById: 'hr-1',
+        }),
+      }),
+    );
+
+    mockLedger([balancedSlip]);
+    mockCompleteEvidence();
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue({
+      id: 'iss-1',
+      version: 1,
+      status: 'VOIDED',
+    } as never);
+    mockIssuanceCreate();
+    const reissued = await new ComplianceService().issueBir2316(issueInput);
+    expect(reissued).toMatchObject({
+      status: 'ISSUED',
+      version: 2,
+      supersedesId: 'iss-1',
+    });
+  });
+
+  it('refuses to void without an active issuance', async () => {
+    await expect(
+      new ComplianceService().voidBir2316Issuance({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        voidReason: 'Voiding a certificate that was never issued',
+        voidedById: 'hr-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue({
+      id: 'iss-1',
+      version: 2,
+      status: 'VOIDED',
+    } as never);
+    await expect(
+      new ComplianceService().voidBir2316Issuance({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        voidReason: 'Voiding an already voided certificate',
+        voidedById: 'hr-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.bir2316Issuance.update).not.toHaveBeenCalled();
+  });
+
+  it('exposes issuance state in the review queue', async () => {
+    mockLedger([deficiencySlip]);
+    mockCompleteEvidence();
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settle-1',
+      settlementType: 'DEFICIENCY_WITHHELD',
+      settledCents: 4250000n,
+    } as never);
+    const issuedAt = new Date('2027-01-15');
+    jest.mocked(prisma.bir2316Issuance.findMany).mockResolvedValue([
+      { employeeId: 'employee-1', status: 'ISSUED', issuedAt, version: 1 },
+    ] as never);
+
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.issuedCount).toBe(1);
+    expect(report.rows[0]).toMatchObject({
+      status: 'SETTLED',
+      issuanceStatus: 'ISSUED',
+      issuedAt,
+    });
+  });
+
+  it('reads the latest issuance with its statutory deadline', async () => {
+    const issued = await new ComplianceService().getBir2316Issuance(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(issued).toBeNull();
+    jest.mocked(prisma.bir2316Issuance.findFirst).mockResolvedValue({
+      id: 'iss-1',
+      taxYear: 2026,
+      status: 'ISSUED',
+    } as never);
+    const record = await new ComplianceService().getBir2316Issuance(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(record).toMatchObject({
+      id: 'iss-1',
+      statutoryDeadline: '2027-01-31',
+    });
+    expect(typeof record?.isLate).toBe('boolean');
   });
 });

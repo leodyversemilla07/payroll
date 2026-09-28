@@ -1094,6 +1094,38 @@ function PreviewCard({
     onSuccess: () => setDone(true),
   });
   const result = preview.data;
+  const utils = trpc.useUtils();
+  const issuanceQuery = trpc.compliance.getBir2316Issuance.useQuery(
+    { employeeId, taxYear },
+    { retry: false },
+  );
+  const issuance = issuanceQuery.data ?? null;
+  const [issued, setIssued] = useState(false);
+  const issue = trpc.compliance.issueBir2316.useMutation({
+    onSuccess: () => {
+      setIssued(true);
+      setVoided(false);
+      void utils.compliance.getBir2316Issuance.invalidate();
+      void utils.compliance.listYearEndReconciliations.invalidate();
+    },
+  });
+  const [voidReason, setVoidReason] = useState("");
+  const [voided, setVoided] = useState(false);
+  const voidIssuance = trpc.compliance.voidBir2316Issuance.useMutation({
+    onSuccess: () => {
+      setVoided(true);
+      setIssued(false);
+      void utils.compliance.getBir2316Issuance.invalidate();
+      void utils.compliance.listYearEndReconciliations.invalidate();
+    },
+  });
+  const remaining = result ? big(result.remainingDifferenceCents) : null;
+
+  function submitVoid(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setVoided(false);
+    voidIssuance.mutate({ employeeId, taxYear, voidReason });
+  }
 
   return (
     <Card size="sm">
@@ -1140,8 +1172,86 @@ function PreviewCard({
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-slate-700 p-3 text-xs">
               {result.formattedDocument}
             </pre>
+            {remaining !== null && remaining !== 0n && (
+              <p>
+                Settle the remaining {fmt(remaining)} before a certificate can
+                be issued.
+              </p>
+            )}
           </div>
         )}
+        <Separator />
+        <section
+          aria-label="Certificate issuance"
+          className="space-y-3 text-sm"
+        >
+          <h4 className="font-semibold">Certificate issuance (HR only)</h4>
+          {issued && <p role="status">Certificate issued.</p>}
+          {voided && <p role="status">Certificate voided.</p>}
+          {issuanceQuery.isPending ? (
+            <p role="status">Loading issuance…</p>
+          ) : issuance && issuance.status === "ISSUED" ? (
+            <>
+              <p>
+                Issued {issuance.issuedAt ? fmtDate(issuance.issuedAt) : "—"} ·
+                version {String(issuance.version ?? "?")} · statutory deadline{" "}
+                {issuance.statutoryDeadline ?? "—"}
+                {issuance.hadPriorEmployer
+                  ? " · prior employer on file (no substituted-filing verdict)"
+                  : ""}
+              </p>
+              <form onSubmit={submitVoid}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="issuance-void-reason">
+                      Void reason (10–500 characters)
+                    </FieldLabel>
+                    <Input
+                      id="issuance-void-reason"
+                      value={voidReason}
+                      onChange={(event) =>
+                        setVoidReason(event.currentTarget.value)
+                      }
+                      minLength={10}
+                      maxLength={500}
+                      required
+                    />
+                  </Field>
+                  <MutationError error={voidIssuance.error} />
+                  <Field>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={voidIssuance.isPending}
+                    >
+                      {voidIssuance.isPending ? "Voiding…" : "Void certificate"}
+                    </Button>
+                  </Field>
+                </FieldGroup>
+              </form>
+            </>
+          ) : (
+            <>
+              <MutationError error={issue.error} />
+              <Button
+                type="button"
+                disabled={
+                  issue.isPending || remaining === null || remaining !== 0n
+                }
+                onClick={() => {
+                  setIssued(false);
+                  issue.mutate({ employeeId, taxYear });
+                }}
+              >
+                {issue.isPending ? "Issuing…" : "Issue certificate"}
+              </Button>
+              <FieldDescription>
+                Allowed only for a conclusive, fully-settled reconciliation;
+                figures are frozen into the issuance record.
+              </FieldDescription>
+            </>
+          )}
+        </section>
       </CardContent>
     </Card>
   );
