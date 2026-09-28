@@ -25,7 +25,9 @@ ALTER TABLE "MonthlyTaxRemittanceEvidence" ADD COLUMN "supersedesId" TEXT;
 ALTER TABLE "MonthlyTaxRemittanceEvidence" ADD COLUMN "correctionReason" TEXT;
 ALTER TABLE "MonthlyTaxRemittanceEvidence" ADD COLUMN "reviewedById" TEXT;
 DROP INDEX "MonthlyTaxRemittanceEvidence_organizationId_taxYear_month_key";
-CREATE UNIQUE INDEX "MonthlyTaxRemittanceEvidence_organizationId_taxYear_month_version_key" ON "MonthlyTaxRemittanceEvidence"("organizationId", "taxYear", "month", "version");
+-- NB: Prisma truncates this identifier to 63 chars; keep the exact name so
+-- future diffs stay clean.
+CREATE UNIQUE INDEX "MonthlyTaxRemittanceEvidence_organizationId_taxYear_month_v_key" ON "MonthlyTaxRemittanceEvidence"("organizationId", "taxYear", "month", "version");
 CREATE UNIQUE INDEX "MonthlyTaxRemittanceEvidence_supersedesId_key" ON "MonthlyTaxRemittanceEvidence"("supersedesId");
 ALTER TABLE "MonthlyTaxRemittanceEvidence" ADD CONSTRAINT "MonthlyTaxRemittanceEvidence_supersedesId_fkey" FOREIGN KEY ("supersedesId") REFERENCES "MonthlyTaxRemittanceEvidence"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
