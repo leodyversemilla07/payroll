@@ -47,7 +47,7 @@ export interface AttendanceSummary {
   tardinessMinutes: number;
   undertimeMinutes: number;
   absentDays: number;
-  /** Approved full workdays of paid leave, separate from actual hours worked. */
+  /** Approved paid-leave days in 0.5 increments, separate from actual hours worked. */
   paidLeaveDays?: number;
 
   // Overtime Hours

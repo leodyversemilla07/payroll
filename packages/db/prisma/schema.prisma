@@ -60,6 +60,7 @@ model Organization {
   monthlyTaxRemittances MonthlyTaxRemittanceEvidence[]
   priorEmployerDeclarations PriorEmployerDeclaration[]
   previousEmployerIncomes PreviousEmployerIncome[]
+  yearEndTaxSettlements YearEndTaxSettlement[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -153,6 +154,7 @@ model Employee {
   payslips          Payslip[]
   priorEmployerDeclarations PriorEmployerDeclaration[]
   priorEmployerIncomes PreviousEmployerIncome[]
+  yearEndTaxSettlements YearEndTaxSettlement[]
   user              User?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -336,6 +338,8 @@ model LeaveRequest {
   startDate         DateTime     @db.Date
   endDate           DateTime     @db.Date
   daysCount         Decimal      @db.Decimal(5, 2)
+  // The single half-day date for fractional (x.5) requests; null for whole-day requests.
+  partialDate       DateTime?    @db.Date
   isPaid            Boolean      @default(true)
   reason            String
   status            String       @default("PENDING") // PENDING, APPROVED, REJECTED
@@ -541,6 +545,8 @@ model BankTransmittalBatch {
 
 // Write-once, employee-year declaration. A "no prior employer" answer is a
 // recorded assertion, not independent verification of employment history.
+// Corrections never mutate a row: a superseding version points at the row it
+// replaces, and readers use the highest version per key.
 model PriorEmployerDeclaration {
   id                String   @id @default(uuid())
   organizationId    String
@@ -551,14 +557,22 @@ model PriorEmployerDeclaration {
   hasPriorEmployer  Boolean
   sourceReference   String
   recordedById      String
+  version           Int      @default(1)
+  supersedesId      String?  @unique
+  supersedes        PriorEmployerDeclaration? @relation("DeclarationSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy      PriorEmployerDeclaration? @relation("DeclarationSupersession")
+  correctionReason  String?
+  reviewedById      String?
   createdAt         DateTime @default(now())
 
-  @@unique([employeeId, taxYear])
+  @@unique([employeeId, taxYear, version])
   @@index([organizationId, taxYear])
 }
 
 // Write-once transcription of a previous employer's 2316. No amount here is
 // treated as present-employer withholding or independently verified evidence.
+// Corrections append a higher version of the same document key; readers use
+// the highest version per key.
 model PreviousEmployerIncome {
   id                          String   @id @default(uuid())
   organizationId              String
@@ -575,14 +589,21 @@ model PreviousEmployerIncome {
   taxWithheldCents            BigInt
   documentReference           String
   recordedById                String
+  version                     Int      @default(1)
+  supersedesId                String?  @unique
+  supersedes                  PreviousEmployerIncome? @relation("PreviousIncomeSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy                PreviousEmployerIncome? @relation("PreviousIncomeSupersession")
+  correctionReason            String?
+  reviewedById                String?
   createdAt                   DateTime @default(now())
 
-  @@unique([employeeId, taxYear, employerTin, periodStart, periodEnd], map: "PreviousEmployerIncome_employee_year_tin_period_key")
+  @@unique([employeeId, taxYear, employerTin, periodStart, periodEnd, version], map: "PreviousEmployerIncome_employee_year_tin_period_version_key")
   @@index([organizationId, taxYear])
 }
 
 // Write-once reference to filed monthly remittance evidence. This is not
 // proof of BIR acceptance or an automatic debit/refund instruction.
+// Corrections append a higher version; readers use the highest version.
 model MonthlyTaxRemittanceEvidence {
   id                String       @id @default(uuid())
   organizationId    String
@@ -592,9 +613,45 @@ model MonthlyTaxRemittanceEvidence {
   remittedCents     BigInt
   documentReference String
   recordedById      String
+  version           Int      @default(1)
+  supersedesId      String?  @unique
+  supersedes        MonthlyTaxRemittanceEvidence? @relation("RemittanceSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy      MonthlyTaxRemittanceEvidence? @relation("RemittanceSupersession")
+  correctionReason  String?
+  reviewedById      String?
   createdAt         DateTime     @default(now())
 
-  @@unique([organizationId, taxYear, month])
+  @@unique([organizationId, taxYear, month, version])
+}
+
+// Auditable December/termination year-end tax settlement ledger. A computed
+// 2316 difference is not a payment: this row records that a deficiency was
+// actually withheld from (or a refund actually paid with) disbursed payroll.
+// Write-once per employee-year version; corrections append a higher version
+// that re-attests the total settled to date, and readers use the latest.
+model YearEndTaxSettlement {
+  id                      String   @id @default(uuid())
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId              String
+  employee                Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear                 Int
+  settlementType          String   // DEFICIENCY_WITHHELD | REFUND_PAID
+  computedDifferenceCents BigInt   // Snapshot of the 2316 taxAdjustment at settlement
+  settledCents            BigInt   // Positive amount actually withheld/refunded
+  settlementDate          DateTime @db.Date
+  documentReference       String
+  recordedById            String
+  version                 Int      @default(1)
+  supersedesId            String?  @unique
+  supersedes              YearEndTaxSettlement? @relation("SettlementSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy            YearEndTaxSettlement? @relation("SettlementSupersession")
+  correctionReason        String?
+  reviewedById            String?
+  createdAt               DateTime @default(now())
+
+  @@unique([employeeId, taxYear, version])
+  @@index([organizationId, taxYear])
 }
 
 model AuditLog {

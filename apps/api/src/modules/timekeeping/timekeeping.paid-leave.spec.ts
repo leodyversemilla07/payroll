@@ -25,6 +25,7 @@ function mockDatabase() {
     startDate: new Date('2026-09-10'),
     endDate: new Date('2026-09-10'),
     daysCount: 1,
+    partialDate: null as Date | null,
   };
   const db = {
     dailyTimeRecord: { findMany: jest.fn().mockResolvedValue([record]) },
@@ -96,6 +97,100 @@ describe('paid-leave payroll reconciliation', () => {
 
     leave.daysCount = 1;
     db.leaveRequest.findMany.mockResolvedValue([leave, { ...leave }]);
+    await expect(summary(db)).rejects.toThrow('Overlapping paid leave');
+  });
+
+  it('credits a half day on top of a worked half shift', async () => {
+    const { db, record, leave } = mockDatabase();
+    leave.daysCount = 0.5;
+    leave.partialDate = new Date('2026-09-10');
+    record.actualWorkedMinutes = 240;
+    record.isAbsent = false;
+    record.isApproved = true;
+    record.timeIn = new Date('2026-09-10T01:00:00.000Z');
+    record.timeOut = new Date('2026-09-10T05:00:00.000Z');
+    expect(await summary(db)).toMatchObject({
+      paidLeaveDays: 0.5,
+      absentDays: 0,
+      regularHoursWorked: 4,
+    });
+  });
+
+  it('credits one full day plus a half day across a two-day range', async () => {
+    const { db, record, leave } = mockDatabase();
+    leave.startDate = new Date('2026-09-07');
+    leave.endDate = new Date('2026-09-08');
+    leave.daysCount = 1.5;
+    leave.partialDate = new Date('2026-09-08');
+    db.dailyTimeRecord.findMany.mockResolvedValue([
+      {
+        ...record,
+        date: new Date('2026-09-08'),
+        actualWorkedMinutes: 240,
+        isAbsent: false,
+        isApproved: true,
+      },
+    ]);
+    expect(await summary(db)).toMatchObject({
+      paidLeaveDays: 1.5,
+      regularHoursWorked: 4,
+    });
+  });
+
+  it('requires a worked record for the half-day date', async () => {
+    const { db, leave } = mockDatabase();
+    leave.daysCount = 0.5;
+    leave.partialDate = new Date('2026-09-10');
+    db.dailyTimeRecord.findMany.mockResolvedValue([]);
+    await expect(summary(db)).rejects.toThrow('worked attendance record');
+  });
+
+  it('rejects more than a half shift worked on the half-day date', async () => {
+    const { db, record, leave } = mockDatabase();
+    leave.daysCount = 0.5;
+    leave.partialDate = new Date('2026-09-10');
+    record.actualWorkedMinutes = 300;
+    record.isAbsent = false;
+    record.isApproved = true;
+    await expect(summary(db)).rejects.toThrow('more than a half shift');
+  });
+
+  it('rejects overtime on the half-day date', async () => {
+    const { db, record, leave } = mockDatabase();
+    leave.daysCount = 0.5;
+    leave.partialDate = new Date('2026-09-10');
+    record.actualWorkedMinutes = 240;
+    record.overtimeMinutes = 60;
+    record.isAbsent = false;
+    record.isApproved = true;
+    await expect(summary(db)).rejects.toThrow('overtime');
+  });
+
+  it('rejects a half-day date outside scheduled weekdays', async () => {
+    const { db, leave } = mockDatabase();
+    leave.startDate = new Date('2026-09-11');
+    leave.endDate = new Date('2026-09-14');
+    leave.daysCount = 1.5;
+    leave.partialDate = new Date('2026-09-12');
+    db.dailyTimeRecord.findMany.mockResolvedValue([]);
+    await expect(summary(db)).rejects.toThrow('scheduled weekday');
+  });
+
+  it('rejects a half-day count that does not match the range', async () => {
+    const { db, leave } = mockDatabase();
+    leave.daysCount = 1.5;
+    leave.partialDate = new Date('2026-09-10');
+    await expect(summary(db)).rejects.toThrow('less one half day');
+  });
+
+  it('rejects a full-day request overlapping an approved half day', async () => {
+    const { db, leave } = mockDatabase();
+    const half = {
+      ...leave,
+      daysCount: 0.5,
+      partialDate: new Date('2026-09-10'),
+    };
+    db.leaveRequest.findMany.mockResolvedValue([leave, half]);
     await expect(summary(db)).rejects.toThrow('Overlapping paid leave');
   });
 

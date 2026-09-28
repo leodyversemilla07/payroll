@@ -201,6 +201,126 @@ describe("Philippine Tax & Payroll Calculation Engine", () => {
       expect(result.totalPremiumPayCents).toBe(0n);
     });
 
+    it("credits a half-day leave at half the daily rate", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.DAILY,
+          monthlyBasicRateCents: 2200000n,
+          dailyRateCents: 100000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: true,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 0.5 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.paidLeavePayCents).toBe(50000n);
+      expect(result.basicPayForPeriodCents).toBe(50000n);
+    });
+
+    it("credits a half-day leave at four hourly rates", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.HOURLY,
+          monthlyBasicRateCents: 3000000n,
+          hourlyRateCents: 20000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 1.5 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.paidLeavePayCents).toBe(240000n);
+    });
+
+    it("truncates a sub-centavo half-day remainder like other rate divisions", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.FIRST_CUTOFF,
+        schedule: {
+          deductSssIn: "SECOND_CUTOFF",
+          deductPhilhealthIn: "SECOND_CUTOFF",
+          deductPagibigIn: "SECOND_CUTOFF",
+          deductTaxIn: "SECOND_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.DAILY,
+          monthlyBasicRateCents: 2200000n,
+          dailyRateCents: 100001n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: true,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 0.5 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.paidLeavePayCents).toBe(50000n);
+    });
+
+    it("keeps monthly basic pay fixed for half-day leave", () => {
+      const result = calculatePhilippinePayroll({
+        cutoffType: CutoffType.SECOND_CUTOFF,
+        schedule: {
+          deductSssIn: "FIRST_CUTOFF",
+          deductPhilhealthIn: "FIRST_CUTOFF",
+          deductPagibigIn: "FIRST_CUTOFF",
+          deductTaxIn: "FIRST_CUTOFF",
+        },
+        compensation: {
+          payBasis: PayBasis.MONTHLY,
+          monthlyBasicRateCents: 3000000n,
+          divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+          isMinimumWageEarner: false,
+        },
+        attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays: 0.5 },
+        allowances: [],
+        loans: [],
+      });
+      expect(result.basicPayForPeriodCents).toBe(1500000n);
+      expect(result.paidLeavePayCents).toBe(0n);
+    });
+
+    it.each([0.25, 1.1, -0.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      "rejects a non-half-increment paid-leave input of %s",
+      (paidLeaveDays) => {
+        expect(() =>
+          calculatePhilippinePayroll({
+            cutoffType: CutoffType.FIRST_CUTOFF,
+            schedule: {
+              deductSssIn: "SECOND_CUTOFF",
+              deductPhilhealthIn: "SECOND_CUTOFF",
+              deductPagibigIn: "SECOND_CUTOFF",
+              deductTaxIn: "SECOND_CUTOFF",
+            },
+            compensation: {
+              payBasis: PayBasis.DAILY,
+              monthlyBasicRateCents: 2200000n,
+              dailyRateCents: 100000n,
+              divisor: WorkDayDivisor.FIVE_DAYS_PER_WEEK,
+              isMinimumWageEarner: true,
+            },
+            attendance: { ...EMPTY_ATTENDANCE, paidLeaveDays },
+            allowances: [],
+            loans: [],
+          }),
+        ).toThrow(RangeError);
+      },
+    );
+
     it("pays hourly employees for fractional approved hours worked", () => {
       const result = calculatePhilippinePayroll({
         cutoffType: CutoffType.FIRST_CUTOFF,

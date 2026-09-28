@@ -38,6 +38,7 @@ export function createLeavesRouter(ctx: RouterContext) {
           startDate: z.string().date(),
           endDate: z.string().date(),
           daysCount: z.number().positive().finite(),
+          partialDate: z.string().date().optional(),
           isPaid: z.boolean().default(true),
           reason: z.string().trim().min(1).max(2000),
         }),
@@ -53,6 +54,10 @@ export function createLeavesRouter(ctx: RouterContext) {
           organizationId: ctx.user.organizationId,
           startDate: new Date(input.startDate),
           endDate: new Date(input.endDate),
+          partialDate:
+            input.partialDate === undefined
+              ? undefined
+              : new Date(input.partialDate),
         });
         await auditService.record({
           user: ctx.user,

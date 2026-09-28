@@ -3,8 +3,15 @@ import { prisma } from '@workspace/db';
 import { LeavesService } from './leaves.service';
 
 jest.mock('@workspace/db', () => ({
-  prisma: { $transaction: jest.fn() },
-  Prisma: { TransactionIsolationLevel: { Serializable: 'Serializable' } },
+  prisma: {
+    $transaction: jest.fn(),
+    employee: { findFirst: jest.fn() },
+    leaveRequest: { create: jest.fn() },
+  },
+  Prisma: {
+    Decimal: jest.fn((value: number) => value),
+    TransactionIsolationLevel: { Serializable: 'Serializable' },
+  },
 }));
 
 function mockApproval(
@@ -168,6 +175,142 @@ describe('LeavesService approval', () => {
     mockApproval({ missing: true });
     await expect(
       new LeavesService().approveLeaveRequest('request-1', 'org-1', 'admin-1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('LeavesService filing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue({
+      id: 'employee-1',
+    } as never);
+    (prisma.leaveRequest.create as unknown as jest.Mock).mockImplementation(
+      (args: { data: object }) =>
+        Promise.resolve({ id: 'leave-1', ...args.data }),
+    );
+  });
+
+  const base = {
+    employeeId: 'employee-1',
+    organizationId: 'org-1',
+    leaveType: 'VACATION',
+    // Thursday 2026-09-10.
+    startDate: new Date('2026-09-10'),
+    endDate: new Date('2026-09-10'),
+    isPaid: true,
+    reason: 'Family errand',
+  };
+
+  it('files a whole-day request without a partial date', async () => {
+    const request = await new LeavesService().fileLeaveRequest({
+      ...base,
+      daysCount: 1,
+    });
+    expect(request).toMatchObject({ partialDate: null });
+    expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ partialDate: null }),
+      }),
+    );
+  });
+
+  it('files a half-day request naming the partial weekday', async () => {
+    const request = await new LeavesService().fileLeaveRequest({
+      ...base,
+      // Friday 2026-09-11 through Monday 2026-09-14: two scheduled days.
+      startDate: new Date('2026-09-11'),
+      endDate: new Date('2026-09-14'),
+      daysCount: 1.5,
+      partialDate: new Date('2026-09-14'),
+    });
+    expect(request).toMatchObject({ id: 'leave-1' });
+    expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          partialDate: new Date('2026-09-14'),
+        }),
+      }),
+    );
+  });
+
+  it.each([0.25, 1.1, 0, -1])(
+    'rejects a non-half-increment count of %s',
+    async (daysCount) => {
+      await expect(
+        new LeavesService().fileLeaveRequest({ ...base, daysCount }),
+      ).rejects.toThrow('multiple of 0.5');
+      expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a half-day count without naming the partial date', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({ ...base, daysCount: 0.5 }),
+    ).rejects.toThrow('scheduled weekdays');
+  });
+
+  it('rejects a half-day count that does not match the range', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        daysCount: 1.5,
+        partialDate: new Date('2026-09-10'),
+      }),
+    ).rejects.toThrow('one half day short');
+  });
+
+  it('rejects a weekend partial date', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        startDate: new Date('2026-09-11'),
+        endDate: new Date('2026-09-14'),
+        daysCount: 1.5,
+        // Saturday 2026-09-12.
+        partialDate: new Date('2026-09-12'),
+      }),
+    ).rejects.toThrow('weekday inside the range');
+  });
+
+  it('rejects a partial date outside the request range', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        startDate: new Date('2026-09-11'),
+        endDate: new Date('2026-09-14'),
+        daysCount: 1.5,
+        // Wednesday 2026-09-09 is a weekday but outside the range.
+        partialDate: new Date('2026-09-09'),
+      }),
+    ).rejects.toThrow('weekday inside the range');
+  });
+
+  it('rejects a whole-day count carrying a partial date', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        daysCount: 1,
+        partialDate: new Date('2026-09-10'),
+      }),
+    ).rejects.toThrow('one half day short');
+  });
+
+  it('rejects an inverted date range', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        startDate: new Date('2026-09-11'),
+        endDate: new Date('2026-09-10'),
+        daysCount: 1,
+      }),
+    ).rejects.toThrow('valid range');
+  });
+
+  it('rejects filing for another tenant’s employee', async () => {
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue(null);
+    await expect(
+      new LeavesService().fileLeaveRequest({ ...base, daysCount: 1 }),
     ).rejects.toThrow(NotFoundException);
   });
 });

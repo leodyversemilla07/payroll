@@ -17,8 +17,22 @@ jest.mock('@workspace/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
     },
-    previousEmployerIncome: { findMany: jest.fn(), create: jest.fn() },
-    monthlyTaxRemittanceEvidence: { findMany: jest.fn(), create: jest.fn() },
+    previousEmployerIncome: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    monthlyTaxRemittanceEvidence: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    user: { findFirst: jest.fn() },
+    yearEndTaxSettlement: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
   },
 }));
 
@@ -88,6 +102,21 @@ describe('ComplianceService exports', () => {
       .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
       .mockResolvedValue([]);
     jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.yearEndTaxSettlement.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findUnique)
+      .mockResolvedValue(null);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.previousEmployerIncome.findFirst)
+      .mockResolvedValue(null);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
+      .mockResolvedValue(null);
   });
 
   it('requires a tenant-owned employee, a prior-employer declaration and valid period for immutable tax inputs', async () => {
@@ -114,7 +143,7 @@ describe('ComplianceService exports', () => {
     await expect(
       service.recordPriorEmployerDeclaration(declarationInput),
     ).rejects.toThrow('already exists');
-    jest.mocked(prisma.priorEmployerDeclaration.findUnique).mockResolvedValue({
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
       ...declarationInput,
       hasPriorEmployer: false,
     } as never);
@@ -133,7 +162,7 @@ describe('ComplianceService exports', () => {
       service.recordPreviousEmployerIncome(priorInput),
     ).rejects.toThrow(UnprocessableEntityException);
     jest
-      .mocked(prisma.priorEmployerDeclaration.findUnique)
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
       .mockResolvedValue(declarationInput as never);
     await expect(
       service.recordPreviousEmployerIncome({
@@ -169,22 +198,26 @@ describe('ComplianceService exports', () => {
     await expect(
       service.getTaxEvidence('employee-1', 'wrong-org', 2026),
     ).rejects.toThrow(NotFoundException);
-    expect(prisma.priorEmployerDeclaration.findFirst).not.toHaveBeenCalled();
+    expect(prisma.priorEmployerDeclaration.findMany).not.toHaveBeenCalled();
     jest
       .mocked(prisma.employee.findFirst)
       .mockResolvedValue({ id: 'employee-1' } as never);
-    jest
-      .mocked(prisma.priorEmployerDeclaration.findFirst)
-      .mockResolvedValue(null);
     const evidence = await service.getTaxEvidence('employee-1', 'org-1', 2026);
     expect(evidence.selfReportedUnverified).toBe(true);
     expect(evidence.declaration).toBeNull();
-    expect(prisma.priorEmployerDeclaration.findFirst).toHaveBeenCalledWith({
+    expect(evidence.supersededHistory).toEqual({
+      declarations: [],
+      previousEmployers: [],
+      monthlyRemittances: [],
+      settlements: [],
+    });
+    expect(prisma.priorEmployerDeclaration.findMany).toHaveBeenCalledWith({
       where: {
         employeeId: 'employee-1',
         organizationId: 'org-1',
         taxYear: 2026,
       },
+      orderBy: { version: 'desc' },
     });
     expect(prisma.previousEmployerIncome.findMany).toHaveBeenCalledWith({
       where: {
@@ -192,7 +225,7 @@ describe('ComplianceService exports', () => {
         organizationId: 'org-1',
         taxYear: 2026,
       },
-      orderBy: { periodStart: 'asc' },
+      orderBy: [{ version: 'desc' }, { periodStart: 'asc' }],
     });
   });
 
@@ -431,35 +464,115 @@ describe('ComplianceService exports', () => {
     expect(prisma.employee.findFirst).not.toHaveBeenCalled();
   });
 
-  it('keeps a prior-employer case blocked even when figures are transcribed', async () => {
-    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+  it('annualizes transcribed prior-employer income instead of blocking the row', async () => {
+    mockEmployeePayslips([
       {
-        id: 'employee-1',
-        employeeNumber: 'EMP-1',
-        firstName: 'Alex',
-        lastName: 'Santos',
+        ...basePayslip,
+        basicPayCents: 50000000n,
+        grossPayCents: 50000000n,
+        tardinessDeductionCents: 0n,
+        overtimePayCents: 0n,
+        taxableAllowancesCents: 0n,
+        nonTaxableAllowancesCents: 0n,
+        sssEmployeeCents: 0n,
+        philhealthEmployeeCents: 0n,
+        pagibigEmployeeCents: 0n,
+        withholdingTaxCents: 0n,
       },
-    ] as never);
-    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
-      {
-        employeeId: 'employee-1',
-        hasPriorEmployer: true,
-      },
-    ] as never);
+    ]);
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: true,
+    } as never);
     jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
       {
-        employeeId: 'employee-1',
+        employerTin: '123-456-789-000',
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 1,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
       },
     ] as never);
-    const report = await new ComplianceService().listYearEndReconciliations(
+    const result = await new ComplianceService().generateBir2316(
+      'employee-1',
       'org-1',
       2026,
     );
-    expect(report.rows[0]).toMatchObject({
-      status: 'BLOCKED_REVIEW',
-      reason: expect.stringContaining('not yet included'),
+    // Present 500,000 taxable plus prior 100,000 => 600,000 taxable =>
+    // 22,500 + 20% x 200,000 = 62,500 due; 10,000 withheld => 52,500 due.
+    expect(result.certificate.partIVA.grossCompensationIncomeCents).toBe(
+      70000000n,
+    );
+    expect(result.certificate.partIVA.totalTaxableCompensationCents).toBe(
+      60000000n,
+    );
+    expect(result.certificate.partIVA.taxDueAnnualCents).toBe(6250000n);
+    expect(result.certificate.partIVA.totalTaxWithheldCents).toBe(1000000n);
+    expect(result.certificate.partIVA.taxAdjustmentCents).toBe(5250000n);
+    expect(result.reconciliationStatus).toBe('DEFICIENCY_REVIEW');
+    expect(result.priorEmployerTotals).toMatchObject({
+      employerCount: 1,
+      grossCents: 20000000n,
+      taxableCents: 10000000n,
+      withheldCents: 1000000n,
     });
-    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    expect(result.formattedDocument).toContain('PRIOR EMPLOYER INCOME');
+  });
+
+  it('requires manual review for a minimum-wage earner with prior-employer taxable income', async () => {
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue({
+      ...employee,
+      compensation: { ...employee.compensation, isTaxExempt: true },
+      payslips: [
+        {
+          ...basePayslip,
+          taxableAllowancesCents: 0n,
+          grossPayCents: 1520000n,
+          withholdingTaxCents: 0n,
+        },
+      ],
+    } as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: true,
+    } as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        employerTin: '123-456-789-000',
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 1,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
+      },
+    ] as never);
+    await expect(
+      new ComplianceService().generateBir2316('employee-1', 'org-1', 2026),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  it('refuses to annualize prior documents without a matching prior-employment declaration', async () => {
+    mockEmployeePayslips([{ ...basePayslip, withholdingTaxCents: 0n }]);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        employerTin: '123-456-789-000',
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 1,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
+      },
+    ] as never);
+    await expect(
+      new ComplianceService().generateBir2316('employee-1', 'org-1', 2026),
+    ).rejects.toThrow(UnprocessableEntityException);
   });
 
   it('does not convert a database outage into a blocked/zero-tax employee', async () => {
@@ -923,5 +1036,823 @@ describe('ComplianceService exports', () => {
         'org-1',
       ),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('ComplianceService year-end settlement', () => {
+  const deficiencyPayslip = {
+    ...basePayslip,
+    basicPayCents: 50000000n,
+    grossPayCents: 50000000n,
+    tardinessDeductionCents: 0n,
+    overtimePayCents: 0n,
+    taxableAllowancesCents: 0n,
+    nonTaxableAllowancesCents: 0n,
+    sssEmployeeCents: 0n,
+    philhealthEmployeeCents: 0n,
+    pagibigEmployeeCents: 0n,
+    withholdingTaxCents: 0n,
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([]);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.previousEmployerIncome.findFirst)
+      .mockResolvedValue(null);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.user.findFirst).mockResolvedValue(null);
+  });
+
+  function mockLedgerWith(payslips: object[], employmentStatus = 'ACTIVE') {
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockImplementation((args) =>
+        (args as { include?: unknown })?.include
+          ? ({ ...employee, employmentStatus, payslips } as never)
+          : ({ id: 'employee-1', employmentStatus } as never),
+      );
+  }
+
+  function mockDecemberNet(netPayCents: bigint) {
+    jest
+      .mocked(prisma.payslip.findMany)
+      .mockResolvedValue([{ netPayCents }] as never);
+  }
+
+  function mockSettlementCreate() {
+    jest.mocked(prisma.yearEndTaxSettlement.create).mockImplementation(
+      (args) =>
+        Promise.resolve({
+          id: 'settlement-1',
+          createdAt: new Date('2026-12-20'),
+          ...(args as { data: object }).data,
+        }) as never,
+    );
+  }
+
+  const settlementInput = {
+    employeeId: 'employee-1',
+    organizationId: 'org-1',
+    taxYear: 2026,
+    settlementDate: new Date('2026-12-15'),
+    documentReference: 'DEC-PAYROLL-2026',
+    recordedById: 'hr-1',
+  };
+
+  it('posts a deficiency withheld from December net pay and reports the row settled', async () => {
+    mockLedgerWith([deficiencyPayslip]);
+    mockDecemberNet(50000000n);
+    mockSettlementCreate();
+    const service = new ComplianceService();
+
+    const record = await service.recordYearEndSettlement(settlementInput);
+    // 500,000 taxable => 22,500 + 20% x 100,000 = 42,500.
+    expect(record).toMatchObject({
+      settlementType: 'DEFICIENCY_WITHHELD',
+      computedDifferenceCents: 4250000n,
+      settledCents: 4250000n,
+    });
+    expect(prisma.yearEndTaxSettlement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          employeeId: 'employee-1',
+          organizationId: 'org-1',
+          taxYear: 2026,
+        }),
+      }),
+    );
+
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      ...record,
+      organizationId: 'org-1',
+    } as never);
+    const preview = await service.generateBir2316('employee-1', 'org-1', 2026);
+    expect(preview.reconciliationStatus).toBe('SETTLED');
+    expect(preview.isSettled).toBe(true);
+    expect(preview.remainingDifferenceCents).toBe(0n);
+  });
+
+  it('posts a refund payment and zeroes the remaining balance', async () => {
+    // Base payslip overwithholds 15,000 against its annual due, so the
+    // recomputed preview is a refund to review until it is paid.
+    mockLedgerWith([{ ...basePayslip }]);
+    mockDecemberNet(1500000n);
+    mockSettlementCreate();
+    const service = new ComplianceService();
+    const record = await service.recordYearEndSettlement(settlementInput);
+    expect(record).toMatchObject({ settlementType: 'REFUND_PAID' });
+    expect(record.settledCents).toBe(
+      -(record.computedDifferenceCents as bigint),
+    );
+
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      ...record,
+      organizationId: 'org-1',
+    } as never);
+    const preview = await service.generateBir2316('employee-1', 'org-1', 2026);
+    expect(preview.isSettled).toBe(true);
+    expect(preview.remainingDifferenceCents).toBe(0n);
+  });
+
+  it('rejects a deficiency larger than the settlement month’s disbursed net pay', async () => {
+    mockLedgerWith([deficiencyPayslip]);
+    mockDecemberNet(1000n);
+    await expect(
+      new ComplianceService().recordYearEndSettlement(settlementInput),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.yearEndTaxSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects active-employee settlement outside December', async () => {
+    mockLedgerWith([deficiencyPayslip]);
+    mockDecemberNet(50000000n);
+    await expect(
+      new ComplianceService().recordYearEndSettlement({
+        ...settlementInput,
+        settlementDate: new Date('2026-11-15'),
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.yearEndTaxSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('allows separated employees to settle with termination-month pay', async () => {
+    mockLedgerWith([deficiencyPayslip], 'RESIGNED');
+    mockDecemberNet(50000000n);
+    mockSettlementCreate();
+    const record = await new ComplianceService().recordYearEndSettlement({
+      ...settlementInput,
+      settlementDate: new Date('2026-11-15'),
+    });
+    expect(record).toMatchObject({ settlementType: 'DEFICIENCY_WITHHELD' });
+  });
+
+  it('rejects settlement without a disbursed payment in the settlement month', async () => {
+    mockLedgerWith([deficiencyPayslip]);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+    await expect(
+      new ComplianceService().recordYearEndSettlement(settlementInput),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(prisma.yearEndTaxSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects settlement when annual withholding already matches tax due', async () => {
+    // Balanced fixture: recomputed adjustment is zero, so there is nothing
+    // to withhold or refund.
+    mockLedgerWith([{ ...basePayslip, withholdingTaxCents: 0n }]);
+    const preview = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(preview.reconciliationStatus).toBe('BALANCED');
+    await expect(
+      new ComplianceService().recordYearEndSettlement(settlementInput),
+    ).rejects.toThrow('nothing to settle');
+    expect(prisma.yearEndTaxSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps a duplicate settlement write-once per employee-year', async () => {
+    mockLedgerWith([deficiencyPayslip]);
+    mockDecemberNet(50000000n);
+    jest
+      .mocked(prisma.yearEndTaxSettlement.create)
+      .mockRejectedValue({ code: 'P2002' });
+    await expect(
+      new ComplianceService().recordYearEndSettlement(settlementInput),
+    ).rejects.toThrow('already exists');
+  });
+
+  it('reports a remaining balance when payroll changes after settlement', async () => {
+    // Settled 42,500, then a later disbursement raises the recomputed
+    // deficiency to 50,000: the queue must show the 7,500 still due.
+    mockLedgerWith([
+      { ...deficiencyPayslip, withholdingTaxCents: 0n },
+      {
+        ...basePayslip,
+        basicPayCents: 5000000n,
+        grossPayCents: 5000000n,
+        tardinessDeductionCents: 0n,
+        overtimePayCents: 0n,
+        taxableAllowancesCents: 0n,
+        nonTaxableAllowancesCents: 0n,
+        sssEmployeeCents: 0n,
+        philhealthEmployeeCents: 0n,
+        pagibigEmployeeCents: 0n,
+        withholdingTaxCents: 0n,
+      },
+    ]);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settlement-1',
+      settlementType: 'DEFICIENCY_WITHHELD',
+      settledCents: 4250000n,
+    } as never);
+    const preview = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(preview.isSettled).toBe(false);
+    expect(preview.reconciliationStatus).toBe('DEFICIENCY_REVIEW');
+    expect(preview.remainingDifferenceCents).toBe(
+      preview.certificate.partIVA.taxAdjustmentCents - 4250000n,
+    );
+    expect(preview.remainingDifferenceCents).not.toBe(0n);
+  });
+
+  it('lists a settled employee with a zero remaining balance', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findMany)
+      .mockResolvedValue([
+        { employeeId: 'employee-1', hasPriorEmployer: false },
+      ] as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        withholdingTaxCents: 0n,
+        payrollRun: { paymentDate: new Date('2026-12-31') },
+      },
+    ] as never);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([{ month: 12, remittedCents: 0n }] as never);
+    mockLedgerWith([deficiencyPayslip]);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settlement-1',
+      settlementType: 'DEFICIENCY_WITHHELD',
+      settledCents: 4250000n,
+    } as never);
+
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.settledCount).toBe(1);
+    expect(report.deficiencyReviewCount).toBe(0);
+    expect(report.rows[0]).toMatchObject({
+      status: 'SETTLED',
+      settledCents: 4250000n,
+      remainingDifferenceCents: 0n,
+    });
+  });
+
+  it('computes the queue row with prior-employer annualization instead of blocking', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findMany)
+      .mockResolvedValue([
+        { employeeId: 'employee-1', hasPriorEmployer: true },
+      ] as never);
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: true,
+    } as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        employeeId: 'employee-1',
+        employerTin: '123-456-789-000',
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 1,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
+      },
+    ] as never);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([
+      {
+        withholdingTaxCents: 0n,
+        payrollRun: { paymentDate: new Date('2026-12-31') },
+      },
+    ] as never);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([{ month: 12, remittedCents: 0n }] as never);
+    mockLedgerWith([deficiencyPayslip]);
+
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.blockedCount).toBe(0);
+    expect(report.deficiencyReviewCount).toBe(1);
+    expect(report.rows[0]).toMatchObject({
+      status: 'DEFICIENCY_REVIEW',
+      grossCents: 70000000n,
+      taxableCents: 60000000n,
+      taxDueCents: 6250000n,
+      taxWithheldCents: 1000000n,
+      unsettledDifferenceCents: 5250000n,
+    });
+  });
+
+  it('keeps a prior-employer case blocked when no tax document is transcribed', async () => {
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([
+      {
+        id: 'employee-1',
+        employeeNumber: 'EMP-1',
+        firstName: 'Alex',
+        lastName: 'Santos',
+      },
+    ] as never);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findMany)
+      .mockResolvedValue([
+        { employeeId: 'employee-1', hasPriorEmployer: true },
+      ] as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+
+    const report = await new ComplianceService().listYearEndReconciliations(
+      'org-1',
+      2026,
+    );
+    expect(report.rows[0]).toMatchObject({
+      status: 'BLOCKED_REVIEW',
+      reason: expect.stringContaining('Missing previous-employer tax document'),
+    });
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('ComplianceService evidence supersession', () => {
+  const priorKey = {
+    employerTin: '123-456-789-000',
+    periodStart: new Date('2026-01-01'),
+    periodEnd: new Date('2026-05-31'),
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue({
+      id: 'employee-1',
+    } as never);
+    jest.mocked(prisma.payslip.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([]);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
+      .mockResolvedValue(null);
+    jest
+      .mocked(prisma.priorEmployerDeclaration.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([]);
+    jest
+      .mocked(prisma.previousEmployerIncome.findFirst)
+      .mockResolvedValue(null);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue(null);
+    jest.mocked(prisma.user.findFirst).mockResolvedValue(null);
+  });
+
+  function mockReviewer() {
+    jest.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: 'reviewer-1',
+    } as never);
+  }
+
+  function mockCreateEcho(model: { create: (...args: never[]) => unknown }) {
+    (model.create as unknown as jest.Mock).mockImplementation((args) =>
+      Promise.resolve({
+        id: 'new-1',
+        createdAt: new Date('2026-12-20'),
+        ...((args as { data: object }).data ?? {}),
+      }),
+    );
+  }
+
+  it('supersedes a declaration with a higher version instead of mutating it', async () => {
+    mockReviewer();
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      id: 'decl-1',
+      version: 1,
+    } as never);
+    mockCreateEcho(prisma.priorEmployerDeclaration);
+
+    const record =
+      await new ComplianceService().supersedePriorEmployerDeclaration({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        hasPriorEmployer: true,
+        sourceReference: 'HR-DECL-v2',
+        correctionReason:
+          'Employee disclosed earlier employment omitted from the onboarding record',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      });
+    expect(record).toMatchObject({
+      version: 2,
+      supersedesId: 'decl-1',
+      reviewedById: 'reviewer-1',
+      hasPriorEmployer: true,
+    });
+  });
+
+  it('enforces four-eyes review and a written reason on corrections', async () => {
+    const base = {
+      employeeId: 'employee-1',
+      organizationId: 'org-1',
+      taxYear: 2026,
+      hasPriorEmployer: true,
+      sourceReference: 'HR-DECL-v2',
+      correctionReason:
+        'Employee disclosed earlier employment omitted from the record',
+      recordedById: 'hr-1',
+      reviewerId: 'hr-1',
+    };
+    await expect(
+      new ComplianceService().supersedePriorEmployerDeclaration(base),
+    ).rejects.toThrow('four-eyes');
+    await expect(
+      new ComplianceService().supersedePriorEmployerDeclaration({
+        ...base,
+        reviewerId: 'reviewer-1',
+        correctionReason: 'typo',
+      }),
+    ).rejects.toThrow('10–500 characters');
+    await expect(
+      new ComplianceService().supersedePriorEmployerDeclaration({
+        ...base,
+        reviewerId: 'ghost-1',
+        correctionReason: base.correctionReason,
+      }),
+    ).rejects.toThrow('active user');
+    expect(prisma.priorEmployerDeclaration.create).not.toHaveBeenCalled();
+  });
+
+  it('requires an existing row before superseding it', async () => {
+    mockReviewer();
+    await expect(
+      new ComplianceService().supersedePriorEmployerDeclaration({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        hasPriorEmployer: true,
+        sourceReference: 'HR-DECL-v2',
+        correctionReason: 'Correcting a declaration that was never recorded',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      new ComplianceService().supersedeMonthlyTaxRemittance({
+        organizationId: 'org-1',
+        taxYear: 2026,
+        month: 12,
+        remittedCents: 100n,
+        documentReference: '1601C-12-v2',
+        correctionReason: 'Correcting a remittance that was never recorded',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      new ComplianceService().supersedeYearEndSettlement({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        settlementDate: new Date('2026-12-15'),
+        documentReference: 'DEC-PAYROLL-2026-v2',
+        correctionReason: 'Correcting a settlement that was never posted',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('directs duplicate initial records to the correction procedure', async () => {
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      id: 'decl-1',
+    } as never);
+    await expect(
+      new ComplianceService().recordPriorEmployerDeclaration({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        hasPriorEmployer: false,
+        sourceReference: 'HR-DECL-2026',
+        recordedById: 'hr-1',
+      }),
+    ).rejects.toThrow('correction procedure');
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findFirst)
+      .mockResolvedValue({ id: 'rem-1' } as never);
+    await expect(
+      new ComplianceService().recordMonthlyTaxRemittance({
+        organizationId: 'org-1',
+        taxYear: 2026,
+        month: 12,
+        remittedCents: 100n,
+        documentReference: '1601C-12',
+        recordedById: 'hr-1',
+      }),
+    ).rejects.toThrow('correction procedure');
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settle-1',
+    } as never);
+    await expect(
+      new ComplianceService().recordYearEndSettlement({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        settlementDate: new Date('2026-12-15'),
+        documentReference: 'DEC-PAYROLL-2026',
+        recordedById: 'hr-1',
+      }),
+    ).rejects.toThrow('correction procedure');
+  });
+
+  it('annualizes the corrected transcription, not the replaced figures', async () => {
+    mockReviewer();
+    jest.mocked(prisma.employee.findFirst).mockImplementation((args) =>
+      (args as { include?: unknown })?.include
+        ? ({
+            ...employee,
+            payslips: [
+              {
+                ...basePayslip,
+                basicPayCents: 50000000n,
+                grossPayCents: 50000000n,
+                tardinessDeductionCents: 0n,
+                overtimePayCents: 0n,
+                taxableAllowancesCents: 0n,
+                nonTaxableAllowancesCents: 0n,
+                sssEmployeeCents: 0n,
+                philhealthEmployeeCents: 0n,
+                pagibigEmployeeCents: 0n,
+                withholdingTaxCents: 0n,
+              },
+            ],
+          } as never)
+        : ({ id: 'employee-1', employmentStatus: 'ACTIVE' } as never),
+    );
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: true,
+    } as never);
+    jest.mocked(prisma.previousEmployerIncome.findFirst).mockResolvedValue({
+      id: 'prior-1',
+      version: 1,
+    } as never);
+    const corrected = {
+      ...priorKey,
+      grossCompensationCents: 20000000n,
+      taxableCompensationCents: 5000000n,
+      taxWithheldCents: 500000n,
+    };
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      { id: 'prior-2', version: 2, ...corrected },
+      {
+        id: 'prior-1',
+        version: 1,
+        ...priorKey,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
+      },
+    ] as never);
+    mockCreateEcho(prisma.previousEmployerIncome);
+
+    const record =
+      await new ComplianceService().supersedePreviousEmployerIncome({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        employerName: 'Prior Inc.',
+        ...corrected,
+        documentReference: '2316-1-v2',
+        correctionReason:
+          'Prior employer reissued the certificate with lower taxable pay',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      });
+    expect(record).toMatchObject({
+      version: 2,
+      supersedesId: 'prior-1',
+      taxableCompensationCents: 5000000n,
+    });
+
+    const preview = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    // Present 500,000 plus corrected prior 50,000 => 550,000 taxable =>
+    // 22,500 + 20% x 150,000 = 52,500 due; 5,000 withheld => 47,500 due.
+    expect(preview.certificate.partIVA.totalTaxableCompensationCents).toBe(
+      55000000n,
+    );
+    expect(preview.certificate.partIVA.taxDueAnnualCents).toBe(5250000n);
+    expect(preview.certificate.partIVA.taxAdjustmentCents).toBe(4750000n);
+    expect(preview.priorEmployerTotals).toMatchObject({
+      employerCount: 1,
+      taxableCents: 5000000n,
+    });
+  });
+
+  it('re-settles the moved difference after a prior correction', async () => {
+    mockReviewer();
+    jest.mocked(prisma.employee.findFirst).mockImplementation((args) =>
+      (args as { include?: unknown })?.include
+        ? ({
+            ...employee,
+            payslips: [
+              {
+                ...basePayslip,
+                basicPayCents: 50000000n,
+                grossPayCents: 50000000n,
+                tardinessDeductionCents: 0n,
+                overtimePayCents: 0n,
+                taxableAllowancesCents: 0n,
+                nonTaxableAllowancesCents: 0n,
+                sssEmployeeCents: 0n,
+                philhealthEmployeeCents: 0n,
+                pagibigEmployeeCents: 0n,
+                withholdingTaxCents: 0n,
+              },
+            ],
+          } as never)
+        : ({ id: 'employee-1', employmentStatus: 'ACTIVE' } as never),
+    );
+    jest.mocked(prisma.priorEmployerDeclaration.findFirst).mockResolvedValue({
+      organizationId: 'org-1',
+      hasPriorEmployer: true,
+    } as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        id: 'prior-2',
+        version: 2,
+        ...priorKey,
+        grossCompensationCents: 20000000n,
+        taxableCompensationCents: 10000000n,
+        taxWithheldCents: 1000000n,
+      },
+    ] as never);
+    jest
+      .mocked(prisma.payslip.findMany)
+      .mockResolvedValue([{ netPayCents: 50000000n }] as never);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settle-1',
+      version: 1,
+      settlementType: 'DEFICIENCY_WITHHELD',
+      settledCents: 4250000n,
+    } as never);
+    mockCreateEcho(prisma.yearEndTaxSettlement);
+
+    const record = await new ComplianceService().supersedeYearEndSettlement({
+      employeeId: 'employee-1',
+      organizationId: 'org-1',
+      taxYear: 2026,
+      settlementDate: new Date('2026-12-20'),
+      documentReference: 'DEC-PAYROLL-2026-v2',
+      correctionReason:
+        'Prior-employer income was transcribed after the first settlement; re-attesting the full amount withheld',
+      recordedById: 'hr-1',
+      reviewerId: 'reviewer-1',
+    });
+    // Recomputed combined difference is 52,500, so the new version settles
+    // that total rather than the stale 42,500.
+    expect(record).toMatchObject({
+      version: 2,
+      supersedesId: 'settle-1',
+      settlementType: 'DEFICIENCY_WITHHELD',
+      computedDifferenceCents: 5250000n,
+      settledCents: 5250000n,
+    });
+
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      ...record,
+      organizationId: 'org-1',
+    } as never);
+    const preview = await new ComplianceService().generateBir2316(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(preview.reconciliationStatus).toBe('SETTLED');
+    expect(preview.remainingDifferenceCents).toBe(0n);
+  });
+
+  it('rejects a settlement correction when nothing moved', async () => {
+    mockReviewer();
+    jest.mocked(prisma.employee.findFirst).mockResolvedValue({
+      ...employee,
+      employmentStatus: 'ACTIVE',
+      payslips: [{ ...basePayslip }],
+    } as never);
+    jest
+      .mocked(prisma.payslip.findMany)
+      .mockResolvedValue([{ netPayCents: 1500000n }] as never);
+    jest.mocked(prisma.yearEndTaxSettlement.findFirst).mockResolvedValue({
+      id: 'settle-1',
+      version: 1,
+      settlementType: 'REFUND_PAID',
+      settledCents: 15000n,
+    } as never);
+    // Base payslip overwithholds 15,000 against zero annual due, matching the
+    // posted refund exactly.
+    await expect(
+      new ComplianceService().supersedeYearEndSettlement({
+        employeeId: 'employee-1',
+        organizationId: 'org-1',
+        taxYear: 2026,
+        settlementDate: new Date('2026-12-20'),
+        documentReference: 'DEC-PAYROLL-2026-v2',
+        correctionReason: 'Re-attesting an unchanged settlement for the record',
+        recordedById: 'hr-1',
+        reviewerId: 'reviewer-1',
+      }),
+    ).rejects.toThrow('nothing to correct');
+    expect(prisma.yearEndTaxSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('reads current evidence with full supersession history', async () => {
+    jest.mocked(prisma.priorEmployerDeclaration.findMany).mockResolvedValue([
+      { id: 'decl-2', version: 2, hasPriorEmployer: true },
+      { id: 'decl-1', version: 1, hasPriorEmployer: false },
+    ] as never);
+    jest.mocked(prisma.previousEmployerIncome.findMany).mockResolvedValue([
+      {
+        id: 'prior-2',
+        ...priorKey,
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 2,
+      },
+      {
+        id: 'prior-1',
+        ...priorKey,
+        periodStart: new Date('2026-01-01'),
+        periodEnd: new Date('2026-05-31'),
+        version: 1,
+      },
+      {
+        id: 'prior-other-1',
+        employerTin: '999-888-777-000',
+        periodStart: new Date('2026-06-01'),
+        periodEnd: new Date('2026-08-31'),
+        version: 1,
+      },
+    ] as never);
+    jest
+      .mocked(prisma.monthlyTaxRemittanceEvidence.findMany)
+      .mockResolvedValue([
+        { id: 'rem-12-2', month: 12, remittedCents: 15000n, version: 2 },
+        { id: 'rem-12-1', month: 12, remittedCents: 0n, version: 1 },
+        { id: 'rem-11-1', month: 11, remittedCents: 5000n, version: 1 },
+      ] as never);
+    jest.mocked(prisma.yearEndTaxSettlement.findMany).mockResolvedValue([
+      { id: 'settle-2', version: 2 },
+      { id: 'settle-1', version: 1 },
+    ] as never);
+
+    const evidence = await new ComplianceService().getTaxEvidence(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(evidence.declaration).toMatchObject({ id: 'decl-2' });
+    expect(evidence.previousEmployers.map((row) => row.id).sort()).toEqual([
+      'prior-2',
+      'prior-other-1',
+    ]);
+    expect(evidence.monthlyRemittances.map((row) => row.id)).toEqual([
+      'rem-11-1',
+      'rem-12-2',
+    ]);
+    expect(evidence.settlement).toMatchObject({ id: 'settle-2' });
+    expect(evidence.supersededHistory).toMatchObject({
+      declarations: [{ id: 'decl-1' }],
+      monthlyRemittances: [{ id: 'rem-12-1' }],
+      settlements: [{ id: 'settle-1' }],
+    });
+    expect(
+      evidence.supersededHistory.previousEmployers.map((row) => row.id),
+    ).toEqual(['prior-1']);
   });
 });

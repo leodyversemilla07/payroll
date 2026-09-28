@@ -69,14 +69,25 @@ export function calculatePhilippinePayroll(
   // leave as worked time (which would also attract premiums).
   const isMonthly = compensation.payBasis === PayBasis.MONTHLY;
   const paidLeaveDays = attendance.paidLeaveDays ?? 0;
-  if (!Number.isSafeInteger(paidLeaveDays) || paidLeaveDays < 0) {
-    throw new RangeError("Paid leave days must be a non-negative whole number");
+  if (
+    !Number.isFinite(paidLeaveDays) ||
+    paidLeaveDays < 0 ||
+    !Number.isInteger(paidLeaveDays * 2)
+  ) {
+    throw new RangeError(
+      "Paid leave days must be a non-negative multiple of 0.5",
+    );
   }
+  // Half-day granularity: a sub-centavo remainder from an odd rate is
+  // truncated, matching the engine's integer-division convention elsewhere.
+  const paidLeaveHalfDays = Math.round(paidLeaveDays * 2);
   const paidLeavePayCents = isMonthly
     ? 0n
-    : (compensation.payBasis === PayBasis.DAILY
+    : ((compensation.payBasis === PayBasis.DAILY
         ? dailyRateCents
-        : hourlyRateCents * 8n) * BigInt(paidLeaveDays);
+        : hourlyRateCents * 8n) *
+        BigInt(paidLeaveHalfDays)) /
+      2n;
   const basicPayForPeriodCents = isMonthly
     ? isSemiMonthly
       ? compensation.monthlyBasicRateCents / 2n

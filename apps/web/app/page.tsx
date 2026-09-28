@@ -40,7 +40,14 @@ export default function LoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [emailDraft, setEmailDraft] = useState("");
+  // A background session recheck resets a never-successful query to
+  // pending, which must not unmount the sign-in form and discard what the
+  // user already typed. Gate only the initial check, then keep the form
+  // mounted across refetches.
+  const [sessionChecked, setSessionChecked] = useState(false);
   const me = trpc.auth.me.useQuery(undefined, { retry: false });
+  const sessionSettled = me.isSuccess || (me.isError && !me.isFetching);
+  const apiUnreachable = me.isError && me.error?.data?.code !== "UNAUTHORIZED";
   const login = trpc.auth.login.useMutation({
     onSuccess: async () => {
       queryClient.clear();
@@ -57,6 +64,12 @@ export default function LoginPage() {
       // Storage can be blocked; the form still works without draft recovery.
     }
   }, []);
+
+  useEffect(() => {
+    if (sessionSettled) {
+      setSessionChecked(true);
+    }
+  }, [sessionSettled]);
 
   useEffect(() => {
     if (me.data) {
@@ -77,14 +90,30 @@ export default function LoginPage() {
       });
   }
 
-  if (me.isPending || me.data) {
-    return <p className="p-6" role="status">Checking your session…</p>;
+  if (!sessionChecked) {
+    return (
+      <p className="p-6" role="status">
+        Checking your session…
+      </p>
+    );
   }
 
   return (
     <main className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
+          {apiUnreachable && (
+            <p role="alert">
+              Could not reach the payroll API. Check that it is running, then{" "}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void me.refetch()}
+              >
+                Retry
+              </Button>
+            </p>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>

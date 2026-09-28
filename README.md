@@ -63,7 +63,10 @@ tenant fixtures. CI provides PostgreSQL 16 and applies migrations before testing
 The browser test runs against the built Next.js app with mocked tRPC responses;
 it verifies the sign-in, staff lists, payslip detail, sign-out and demo separation.
 The portal reads persisted data via the API (requires a running API and a staff
-account for lists); it does not run or disburse payroll. Use the separate `/demo`
+account); its year-end tax section also records evidence, previews worksheets,
+posts settlements and files corrections through the API, and staff can
+trigger, approve, disburse and cancel payroll runs (maker-checker enforced by
+the API). It does not generate bank files. Use the separate `/demo`
 for simulated, in-memory workflows only. Use `localhost` consistently for web
 and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
@@ -75,26 +78,48 @@ and API so the development session cookie is sent to both; set
 review queue; `compliance.previewBir2316Reconciliation` produces an internal,
 read-only worksheet, **not** an official BIR Form 2316. HR staff can record
 write-once, self-reported prior-employer declarations/income and monthly
-remittance references; `compliance.getTaxEvidence` reads the references. The
-queue blocks missing or conflicting evidence, and prior-employer cases remain
-blocked until annualization supports them. Its tax difference is not an
-actual refund or deduction. Previous-employer income, remittances, year-end
-tax settlements, and the current official form layout still require review.
-See [the release-gate checklist](docs/validation-gates.md) before any BIR
-certificate or bank file is issued. Do not use this project for live payroll.
+remittance references; `compliance.getTaxEvidence` reads the references with
+full supersession history. Rows are never mutated: the `compliance.correct*`
+procedures append a higher-version row (with reason and a different reviewer,
+four-eyes) that replaces the current one, and every reader annualizes,
+remits, and settles from the latest version per key. The
+queue blocks missing or conflicting evidence. Transcribed previous-employer
+2316 figures are annualized with present-employer payroll in one graduated-
+table computation per RR 11-2018 §2.79 (prior taxable taken as stated, never
+re-bucketed); minimum-wage earners with prior taxable income stay blocked for
+manual review. A computed tax difference is not a
+payment: `compliance.recordYearEndSettlement` posts a write-once
+`YearEndTaxSettlement` row recording that a deficiency was actually withheld
+from (or a refund actually paid with) disbursed payroll. Active employees
+settle against December payroll only; separated employees settle with
+termination-month pay, and a deficiency larger than that month's disbursed net
+pay is rejected instead of driving net pay negative. The preview and queue
+recompute the remaining balance live, so later disbursements surface a new
+balance due instead of trusting the settled snapshot. Previous-employer
+income, remittances, and the current official form layout still require
+review. See [the release-gate checklist](docs/validation-gates.md) before any
+BIR certificate or bank file is issued. Do not use this project for live
+payroll.
 
 ## Paid-leave payroll rules
 
 Approved paid leave is credited as **whole Monday–Friday workdays** when the
 request's `daysCount` matches the scheduled weekdays in its date range.
-Monthly staff retain their fixed basic salary; daily staff receive their daily
-rate per leave day, and hourly staff receive eight hourly rates per leave day.
+A request may instead take exactly one half day: `daysCount` in 0.5 steps,
+one half day short of the scheduled weekdays, with the partial weekday named
+in `partialDate`. The partial date keeps its real DTR — up to half a standard
+shift of worked minutes still counts as hours worked, with overtime, holiday
+premiums, absence, or a missing record blocking payroll for manual
+reconciliation. Monthly staff retain their fixed basic salary; daily staff
+receive their daily rate per leave day (half rate for the partial date), and
+hourly staff receive eight hourly rates per leave day (four for the partial
+date). A sub-centavo remainder from an odd rate is truncated.
 The daily/hourly credit is included in `Payslip.basicPayCents` and separately
 recorded in `Payslip.paidLeavePayCents` (do not add the latter to gross again).
 Leave days are not counted as hours worked. Overlapping requests and worked or
 holiday DTRs on a paid-leave day block payroll for manual reconciliation.
-Partial-day leave and nonstandard workweeks/shifts are not yet supported by
-this payroll path; do not process them as ordinary full-day leave.
+Finer-than-half-day leave and nonstandard workweeks/shifts are not yet
+supported by this payroll path; do not process them as ordinary leave.
 
 ## Payroll run policy
 

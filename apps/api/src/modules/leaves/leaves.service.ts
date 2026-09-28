@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma, prisma } from '@workspace/db';
 import { calculateSilCashConversion } from '@workspace/payroll-engine';
@@ -80,7 +81,9 @@ export class LeavesService {
   }
 
   /**
-   * Submits a leave request.
+   * Submits a leave request. Whole-day requests credit full Mon–Fri days;
+   * half-day requests (daysCount in 0.5 steps, exactly one half day short of
+   * the scheduled weekdays) name that date explicitly via partialDate.
    */
   async fileLeaveRequest(data: {
     employeeId: string;
@@ -89,6 +92,7 @@ export class LeavesService {
     startDate: Date;
     endDate: Date;
     daysCount: number;
+    partialDate?: Date;
     isPaid: boolean;
     reason: string;
   }) {
@@ -97,13 +101,65 @@ export class LeavesService {
       data.organizationId,
     );
 
+    const startDate = normalizeLeaveDate(data.startDate);
+    const endDate = normalizeLeaveDate(data.endDate);
+    if (
+      startDate > endDate ||
+      endDate.getTime() - startDate.getTime() > 366 * 86_400_000
+    ) {
+      throw new UnprocessableEntityException(
+        'Leave dates must form a valid range within one year',
+      );
+    }
+    if (
+      !Number.isFinite(data.daysCount) ||
+      data.daysCount <= 0 ||
+      !Number.isInteger(data.daysCount * 2)
+    ) {
+      throw new UnprocessableEntityException(
+        'Leave days must be a positive multiple of 0.5',
+      );
+    }
+    let workingDays = 0;
+    for (
+      let day = startDate.getTime();
+      day <= endDate.getTime();
+      day += 86_400_000
+    ) {
+      const weekday = new Date(day).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) workingDays += 1;
+    }
+    const partialDate =
+      data.partialDate === undefined
+        ? null
+        : normalizeLeaveDate(data.partialDate);
+    if (partialDate !== null) {
+      const weekday = partialDate.getUTCDay();
+      if (
+        data.daysCount !== workingDays - 0.5 ||
+        weekday === 0 ||
+        weekday === 6 ||
+        partialDate < startDate ||
+        partialDate > endDate
+      ) {
+        throw new UnprocessableEntityException(
+          'A half-day request must be exactly one half day short of its scheduled weekdays, on a weekday inside the range',
+        );
+      }
+    } else if (data.daysCount !== workingDays) {
+      throw new UnprocessableEntityException(
+        'Leave days must match the scheduled weekdays in the date range',
+      );
+    }
+
     return prisma.leaveRequest.create({
       data: {
         employeeId: data.employeeId,
         leaveType: data.leaveType,
-        startDate: data.startDate,
-        endDate: data.endDate,
+        startDate,
+        endDate,
         daysCount: new Prisma.Decimal(data.daysCount),
+        partialDate,
         isPaid: data.isPaid,
         reason: data.reason,
         status: 'PENDING',
@@ -264,4 +320,13 @@ export class LeavesService {
       throw new NotFoundException('Employee not found');
     }
   }
+}
+
+function normalizeLeaveDate(value: Date): Date {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new UnprocessableEntityException('Leave dates must be valid dates');
+  }
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
 }

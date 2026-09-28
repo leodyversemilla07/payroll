@@ -272,10 +272,45 @@ export class ComplianceService {
         error.code === 'P2002'
       ) {
         throw new ConflictException(
-          'Tax evidence for this key already exists; corrections require manual review',
+          'Tax evidence for this key already exists; use the correction procedure with a reviewer to supersede it',
         );
       }
       throw error;
+    }
+  }
+
+  private assertCorrectionReason(reason: string): string {
+    const trimmed = reason.trim();
+    if (trimmed.length < 10 || trimmed.length > 500) {
+      throw new UnprocessableEntityException(
+        'Correction requires a reason of 10–500 characters',
+      );
+    }
+    return trimmed;
+  }
+
+  private async assertCorrectionReviewer(input: {
+    organizationId: string;
+    recorderId: string;
+    reviewerId: string;
+  }): Promise<void> {
+    if (input.reviewerId === input.recorderId) {
+      throw new UnprocessableEntityException(
+        'Correction reviewer must differ from the recorder (four-eyes)',
+      );
+    }
+    const reviewer = await prisma.user.findFirst({
+      where: {
+        id: input.reviewerId,
+        organizationId: input.organizationId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!reviewer) {
+      throw new UnprocessableEntityException(
+        'Correction reviewer must be an active user in this organization',
+      );
     }
   }
 
@@ -289,6 +324,19 @@ export class ComplianceService {
   }) {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const existing = await prisma.priorEmployerDeclaration.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'A declaration already exists for this employee-year; use the correction procedure with a reviewer to supersede it',
+      );
+    }
     return this.createEvidence(() =>
       prisma.priorEmployerDeclaration.create({
         data: input,
@@ -299,6 +347,74 @@ export class ComplianceService {
           hasPriorEmployer: true,
           sourceReference: true,
           recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Appends a higher-version declaration that replaces the current one. The
+   * replaced row is never mutated; readers use the highest version.
+   */
+  async supersedePriorEmployerDeclaration(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    hasPriorEmployer: boolean;
+    sourceReference: string;
+    correctionReason: string;
+    recordedById: string;
+    reviewerId: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const correctionReason = this.assertCorrectionReason(
+      input.correctionReason,
+    );
+    await this.assertCorrectionReviewer({
+      organizationId: input.organizationId,
+      recorderId: input.recordedById,
+      reviewerId: input.reviewerId,
+    });
+    const current = await prisma.priorEmployerDeclaration.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!current) {
+      throw new NotFoundException(
+        'No prior-employer declaration exists to correct',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.priorEmployerDeclaration.create({
+        data: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          hasPriorEmployer: input.hasPriorEmployer,
+          sourceReference: input.sourceReference,
+          recordedById: input.recordedById,
+          version: current.version + 1,
+          supersedesId: current.id,
+          correctionReason,
+          reviewedById: input.reviewerId,
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          hasPriorEmployer: true,
+          sourceReference: true,
+          recordedById: true,
+          version: true,
+          supersedesId: true,
+          correctionReason: true,
+          reviewedById: true,
           createdAt: true,
         },
       }),
@@ -321,19 +437,15 @@ export class ComplianceService {
   }) {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const declaration = await prisma.priorEmployerDeclaration.findUnique({
+    const declaration = await prisma.priorEmployerDeclaration.findFirst({
       where: {
-        employeeId_taxYear: {
-          employeeId: input.employeeId,
-          taxYear: input.taxYear,
-        },
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
       },
+      orderBy: { version: 'desc' },
     });
-    if (
-      !declaration ||
-      declaration.organizationId !== input.organizationId ||
-      !declaration.hasPriorEmployer
-    ) {
+    if (!declaration?.hasPriorEmployer) {
       throw new UnprocessableEntityException(
         'Declare prior employment before recording its tax documents',
       );
@@ -349,6 +461,22 @@ export class ComplianceService {
     ) {
       throw new UnprocessableEntityException(
         'Invalid previous-employer period or compensation totals',
+      );
+    }
+    const existingDocument = await prisma.previousEmployerIncome.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+        employerTin: input.employerTin,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+      },
+      select: { id: true },
+    });
+    if (existingDocument) {
+      throw new ConflictException(
+        'This previous-employer document already exists; use the correction procedure with a reviewer to supersede it',
       );
     }
     return this.createEvidence(() =>
@@ -367,6 +495,106 @@ export class ComplianceService {
           taxWithheldCents: true,
           documentReference: true,
           recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Appends a higher-version transcription that replaces one
+   * previous-employer document. The document key (TIN + period) is immutable;
+   * only figures, names and the reference change.
+   */
+  async supersedePreviousEmployerIncome(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    employerName: string;
+    employerTin: string;
+    periodStart: Date;
+    periodEnd: Date;
+    grossCompensationCents: bigint;
+    taxableCompensationCents: bigint;
+    taxWithheldCents: bigint;
+    documentReference: string;
+    correctionReason: string;
+    recordedById: string;
+    reviewerId: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    const correctionReason = this.assertCorrectionReason(
+      input.correctionReason,
+    );
+    await this.assertCorrectionReviewer({
+      organizationId: input.organizationId,
+      recorderId: input.recordedById,
+      reviewerId: input.reviewerId,
+    });
+    if (
+      input.taxableCompensationCents > input.grossCompensationCents ||
+      input.grossCompensationCents < 0n ||
+      input.taxableCompensationCents < 0n ||
+      input.taxWithheldCents < 0n
+    ) {
+      throw new UnprocessableEntityException(
+        'Invalid previous-employer compensation totals',
+      );
+    }
+    const current = await prisma.previousEmployerIncome.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+        employerTin: input.employerTin,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!current) {
+      throw new NotFoundException(
+        'No previous-employer document exists to correct',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.previousEmployerIncome.create({
+        data: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          employerName: input.employerName,
+          employerTin: input.employerTin,
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          grossCompensationCents: input.grossCompensationCents,
+          taxableCompensationCents: input.taxableCompensationCents,
+          taxWithheldCents: input.taxWithheldCents,
+          documentReference: input.documentReference,
+          recordedById: input.recordedById,
+          version: current.version + 1,
+          supersedesId: current.id,
+          correctionReason,
+          reviewedById: input.reviewerId,
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          employerName: true,
+          employerTin: true,
+          periodStart: true,
+          periodEnd: true,
+          grossCompensationCents: true,
+          taxableCompensationCents: true,
+          taxWithheldCents: true,
+          documentReference: true,
+          recordedById: true,
+          version: true,
+          supersedesId: true,
+          correctionReason: true,
+          reviewedById: true,
           createdAt: true,
         },
       }),
@@ -392,6 +620,20 @@ export class ComplianceService {
         'Invalid remittance month or amount',
       );
     }
+    const existingRemittance =
+      await prisma.monthlyTaxRemittanceEvidence.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          month: input.month,
+        },
+        select: { id: true },
+      });
+    if (existingRemittance) {
+      throw new ConflictException(
+        'A remittance reference already exists for this month; use the correction procedure with a reviewer to supersede it',
+      );
+    }
     return this.createEvidence(() =>
       prisma.monthlyTaxRemittanceEvidence.create({
         data: input,
@@ -408,6 +650,83 @@ export class ComplianceService {
     );
   }
 
+  /**
+   * Appends a higher-version monthly remittance reference that replaces the
+   * current one. The replaced row is never mutated.
+   */
+  async supersedeMonthlyTaxRemittance(input: {
+    organizationId: string;
+    taxYear: number;
+    month: number;
+    remittedCents: bigint;
+    documentReference: string;
+    correctionReason: string;
+    recordedById: string;
+    reviewerId: string;
+  }) {
+    this.assertSupportedTaxYear(input.taxYear);
+    if (
+      !Number.isInteger(input.month) ||
+      input.month < 1 ||
+      input.month > 12 ||
+      input.remittedCents < 0n
+    ) {
+      throw new UnprocessableEntityException(
+        'Invalid remittance month or amount',
+      );
+    }
+    const correctionReason = this.assertCorrectionReason(
+      input.correctionReason,
+    );
+    await this.assertCorrectionReviewer({
+      organizationId: input.organizationId,
+      recorderId: input.recordedById,
+      reviewerId: input.reviewerId,
+    });
+    const current = await prisma.monthlyTaxRemittanceEvidence.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+        month: input.month,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!current) {
+      throw new NotFoundException(
+        'No monthly remittance reference exists to correct',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.monthlyTaxRemittanceEvidence.create({
+        data: {
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          month: input.month,
+          remittedCents: input.remittedCents,
+          documentReference: input.documentReference,
+          recordedById: input.recordedById,
+          version: current.version + 1,
+          supersedesId: current.id,
+          correctionReason,
+          reviewedById: input.reviewerId,
+        },
+        select: {
+          id: true,
+          taxYear: true,
+          month: true,
+          remittedCents: true,
+          documentReference: true,
+          recordedById: true,
+          version: true,
+          supersedesId: true,
+          correctionReason: true,
+          reviewedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
   async getTaxEvidence(
     employeeId: string,
     organizationId: string,
@@ -415,26 +734,358 @@ export class ComplianceService {
   ) {
     this.assertSupportedTaxYear(taxYear);
     await this.assertEmployeeInTenant(employeeId, organizationId);
-    const [declaration, previousEmployers, monthlyRemittances] =
-      await Promise.all([
-        prisma.priorEmployerDeclaration.findFirst({
-          where: { employeeId, organizationId, taxYear },
-        }),
-        prisma.previousEmployerIncome.findMany({
-          where: { employeeId, organizationId, taxYear },
-          orderBy: { periodStart: 'asc' },
-        }),
-        prisma.monthlyTaxRemittanceEvidence.findMany({
-          where: { organizationId, taxYear },
-          orderBy: { month: 'asc' },
-        }),
-      ]);
+    const [
+      declarationVersions,
+      previousVersions,
+      remittanceVersions,
+      settlementVersions,
+    ] = await Promise.all([
+      prisma.priorEmployerDeclaration.findMany({
+        where: { employeeId, organizationId, taxYear },
+        orderBy: { version: 'desc' },
+      }),
+      prisma.previousEmployerIncome.findMany({
+        where: { employeeId, organizationId, taxYear },
+        orderBy: [{ version: 'desc' }, { periodStart: 'asc' }],
+      }),
+      prisma.monthlyTaxRemittanceEvidence.findMany({
+        where: { organizationId, taxYear },
+        orderBy: [{ month: 'asc' }, { version: 'desc' }],
+      }),
+      prisma.yearEndTaxSettlement.findMany({
+        where: { employeeId, organizationId, taxYear },
+        orderBy: { version: 'desc' },
+      }),
+    ]);
+    // Readers use the highest version per key; every replaced row stays in
+    // history for audit.
+    const declaration = declarationVersions[0] ?? null;
+    const currentPreviousByKey = new Map<
+      string,
+      (typeof previousVersions)[number]
+    >();
+    for (const record of previousVersions) {
+      const key = `${record.employerTin}|${record.periodStart.toISOString()}|${record.periodEnd.toISOString()}`;
+      if (!currentPreviousByKey.has(key)) {
+        currentPreviousByKey.set(key, record);
+      }
+    }
+    const currentPreviousIds = new Set(
+      [...currentPreviousByKey.values()].map((record) => record.id),
+    );
+    const previousEmployers = [...currentPreviousByKey.values()];
+    const currentRemittanceByMonth = new Map<
+      number,
+      (typeof remittanceVersions)[number]
+    >();
+    for (const record of remittanceVersions) {
+      if (!currentRemittanceByMonth.has(record.month)) {
+        currentRemittanceByMonth.set(record.month, record);
+      }
+    }
+    const currentRemittanceIds = new Set(
+      [...currentRemittanceByMonth.values()].map((record) => record.id),
+    );
+    const monthlyRemittances = [...currentRemittanceByMonth.values()].sort(
+      (a, b) => a.month - b.month,
+    );
+    const settlement = settlementVersions[0] ?? null;
     return {
       taxYear,
       selfReportedUnverified: true as const,
       declaration,
       previousEmployers,
       monthlyRemittances,
+      settlement,
+      supersededHistory: {
+        declarations: declarationVersions.slice(1),
+        previousEmployers: previousVersions.filter(
+          (record) => !currentPreviousIds.has(record.id),
+        ),
+        monthlyRemittances: remittanceVersions.filter(
+          (record) => !currentRemittanceIds.has(record.id),
+        ),
+        settlements: settlementVersions.slice(1),
+      },
+    };
+  }
+
+  async getYearEndSettlement(
+    employeeId: string,
+    organizationId: string,
+    taxYear: number,
+  ) {
+    this.assertSupportedTaxYear(taxYear);
+    await this.assertEmployeeInTenant(employeeId, organizationId);
+    return prisma.yearEndTaxSettlement.findFirst({
+      where: { employeeId, organizationId, taxYear },
+      orderBy: { version: 'desc' },
+    });
+  }
+
+  /**
+   * Posts an auditable December/termination settlement for a computed year-end
+   * tax difference. A 2316 worksheet difference is not a payment: this row
+   * records that a deficiency was actually withheld from disbursed payroll,
+   * or that a refund was actually paid to the employee. Write-once per
+   * employee-year; corrections require controlled manual review.
+   *
+   * Timing: active staff settle against December payroll only (RR 11-2018
+   * annualization). Separated staff settle against a month with disbursed
+   * payroll (last/termination pay). A deficiency larger than that month's
+   * disbursed net pay is rejected instead of driving net negative.
+   */
+  async recordYearEndSettlement(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    settlementDate: Date;
+    documentReference: string;
+    recordedById: string;
+  }) {
+    const existing = await prisma.yearEndTaxSettlement.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'Year-end tax is already settled for this employee-year; use the correction procedure with a reviewer to supersede it',
+      );
+    }
+    const posting = await this.prepareSettlementPosting(input);
+    return this.createEvidence(() =>
+      prisma.yearEndTaxSettlement.create({
+        data: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          settlementType: posting.settlementType,
+          computedDifferenceCents: posting.adjustment,
+          settledCents: posting.settledCents,
+          settlementDate: posting.settlementDate,
+          documentReference: posting.documentReference,
+          recordedById: input.recordedById,
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          settlementType: true,
+          computedDifferenceCents: true,
+          settledCents: true,
+          settlementDate: true,
+          documentReference: true,
+          recordedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Supersedes a posted settlement — e.g. prior-employer figures were
+   * corrected after settlement, so the recomputed difference moved. The new
+   * version re-attests the total settled to date; the replaced snapshot stays
+   * for audit.
+   */
+  async supersedeYearEndSettlement(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    settlementDate: Date;
+    documentReference: string;
+    correctionReason: string;
+    recordedById: string;
+    reviewerId: string;
+  }) {
+    const correctionReason = this.assertCorrectionReason(
+      input.correctionReason,
+    );
+    await this.assertCorrectionReviewer({
+      organizationId: input.organizationId,
+      recorderId: input.recordedById,
+      reviewerId: input.reviewerId,
+    });
+    const current = await prisma.yearEndTaxSettlement.findFirst({
+      where: {
+        employeeId: input.employeeId,
+        organizationId: input.organizationId,
+        taxYear: input.taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!current) {
+      throw new NotFoundException('No year-end settlement exists to correct');
+    }
+    const posting = await this.prepareSettlementPosting(input);
+    const currentSigned =
+      current.settlementType === 'DEFICIENCY_WITHHELD'
+        ? current.settledCents
+        : -current.settledCents;
+    if (
+      posting.adjustment === currentSigned &&
+      posting.settlementType === current.settlementType
+    ) {
+      throw new UnprocessableEntityException(
+        'Recomputed difference already matches the posted settlement; nothing to correct',
+      );
+    }
+    return this.createEvidence(() =>
+      prisma.yearEndTaxSettlement.create({
+        data: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          settlementType: posting.settlementType,
+          computedDifferenceCents: posting.adjustment,
+          settledCents: posting.settledCents,
+          settlementDate: posting.settlementDate,
+          documentReference: posting.documentReference,
+          recordedById: input.recordedById,
+          version: current.version + 1,
+          supersedesId: current.id,
+          correctionReason,
+          reviewedById: input.reviewerId,
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          taxYear: true,
+          settlementType: true,
+          computedDifferenceCents: true,
+          settledCents: true,
+          settlementDate: true,
+          documentReference: true,
+          recordedById: true,
+          version: true,
+          supersedesId: true,
+          correctionReason: true,
+          reviewedById: true,
+          createdAt: true,
+        },
+      }),
+    );
+  }
+
+  private async prepareSettlementPosting(input: {
+    employeeId: string;
+    organizationId: string;
+    taxYear: number;
+    settlementDate: Date;
+    documentReference: string;
+  }): Promise<{
+    documentReference: string;
+    settlementDate: Date;
+    adjustment: bigint;
+    settlementType: string;
+    settledCents: bigint;
+  }> {
+    this.assertSupportedTaxYear(input.taxYear);
+    const documentReference = input.documentReference.trim();
+    if (!documentReference || documentReference.length > 160) {
+      throw new UnprocessableEntityException(
+        'Settlement requires a document reference of 1–160 characters',
+      );
+    }
+    const settlementDate = new Date(
+      Date.UTC(
+        input.settlementDate.getUTCFullYear(),
+        input.settlementDate.getUTCMonth(),
+        input.settlementDate.getUTCDate(),
+      ),
+    );
+    if (Number.isNaN(settlementDate.getTime())) {
+      throw new UnprocessableEntityException('Settlement date is invalid');
+    }
+    if (settlementDate.getUTCFullYear() !== input.taxYear) {
+      throw new UnprocessableEntityException(
+        'Settlement date must fall within the tax year being settled',
+      );
+    }
+    const employee = await prisma.employee.findFirst({
+      where: { id: input.employeeId, organizationId: input.organizationId },
+      select: { id: true, employmentStatus: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    // Recompute from the disbursed ledger so the posted amount always matches
+    // current payroll; never trust a client-supplied amount.
+    const { certificate } = await this.generateBir2316(
+      input.employeeId,
+      input.organizationId,
+      input.taxYear,
+    );
+    const adjustment = certificate.partIVA.taxAdjustmentCents;
+    if (adjustment === 0n) {
+      throw new UnprocessableEntityException(
+        'Annual withholding already matches tax due; nothing to settle',
+      );
+    }
+    const settlementType =
+      adjustment > 0n ? 'DEFICIENCY_WITHHELD' : 'REFUND_PAID';
+    const settledCents = adjustment > 0n ? adjustment : -adjustment;
+
+    const monthStart = new Date(
+      Date.UTC(
+        settlementDate.getUTCFullYear(),
+        settlementDate.getUTCMonth(),
+        1,
+      ),
+    );
+    const nextMonth = new Date(
+      Date.UTC(
+        settlementDate.getUTCFullYear(),
+        settlementDate.getUTCMonth() + 1,
+        1,
+      ),
+    );
+    const monthPayslips = await prisma.payslip.findMany({
+      where: {
+        employeeId: input.employeeId,
+        payrollRun: {
+          organizationId: input.organizationId,
+          status: 'DISBURSED',
+          paymentDate: { gte: monthStart, lt: nextMonth },
+        },
+      },
+      select: { netPayCents: true },
+    });
+    if (monthPayslips.length === 0) {
+      throw new UnprocessableEntityException(
+        'Settlement requires a disbursed payroll payment in the settlement month',
+      );
+    }
+    if (
+      (employee.employmentStatus === 'ACTIVE' ||
+        employee.employmentStatus === 'ON_LEAVE' ||
+        employee.employmentStatus === 'SUSPENDED') &&
+      settlementDate.getUTCMonth() !== 11
+    ) {
+      throw new UnprocessableEntityException(
+        'Active employees settle year-end tax in December; separated employees settle with termination/last pay',
+      );
+    }
+    if (settlementType === 'DEFICIENCY_WITHHELD') {
+      const monthNet = monthPayslips.reduce(
+        (sum, slip) => sum + slip.netPayCents,
+        0n,
+      );
+      if (settledCents > monthNet) {
+        throw new UnprocessableEntityException(
+          'Deficiency exceeds the settlement month’s disbursed net pay; collect the balance separately instead of driving net pay negative',
+        );
+      }
+    }
+    return {
+      documentReference,
+      settlementDate,
+      adjustment,
+      settlementType,
+      settledCents,
     };
   }
 
@@ -474,21 +1125,45 @@ export class ComplianceService {
         taxYear,
         employeeId: { in: employees.map((employee) => employee.id) },
       },
-      select: { employeeId: true, hasPriorEmployer: true },
+      select: { employeeId: true, hasPriorEmployer: true, version: true },
     });
-    const declarationByEmployee = new Map(
-      declarations.map((entry) => [entry.employeeId, entry]),
-    );
+    const declarationByEmployee = new Map<
+      string,
+      { hasPriorEmployer: boolean; version: number }
+    >();
+    for (const entry of declarations) {
+      const current = declarationByEmployee.get(entry.employeeId);
+      if (!current || entry.version > current.version) {
+        declarationByEmployee.set(entry.employeeId, entry);
+      }
+    }
     const previousRecords = await prisma.previousEmployerIncome.findMany({
       where: {
         organizationId,
         taxYear,
         employeeId: { in: employees.map((employee) => employee.id) },
       },
-      select: { employeeId: true },
+      select: {
+        employeeId: true,
+        employerTin: true,
+        periodStart: true,
+        periodEnd: true,
+        version: true,
+      },
     });
+    const currentPreviousByKey = new Map<
+      string,
+      (typeof previousRecords)[number]
+    >();
+    for (const entry of previousRecords) {
+      const key = `${entry.employeeId}|${entry.employerTin}|${entry.periodStart.toISOString()}|${entry.periodEnd.toISOString()}`;
+      const current = currentPreviousByKey.get(key);
+      if (!current || entry.version > current.version) {
+        currentPreviousByKey.set(key, entry);
+      }
+    }
     const previousEmployeeIds = new Set(
-      previousRecords.map((entry) => entry.employeeId),
+      [...currentPreviousByKey.values()].map((entry) => entry.employeeId),
     );
     const payslips = await prisma.payslip.findMany({
       where: {
@@ -509,10 +1184,23 @@ export class ComplianceService {
     }
     const remittances = await prisma.monthlyTaxRemittanceEvidence.findMany({
       where: { organizationId, taxYear },
-      select: { month: true, remittedCents: true },
+      select: { month: true, remittedCents: true, version: true },
     });
+    const latestRemittanceByMonth = new Map<
+      number,
+      { remittedCents: bigint; version: number }
+    >();
+    for (const entry of remittances) {
+      const current = latestRemittanceByMonth.get(entry.month);
+      if (!current || entry.version > current.version) {
+        latestRemittanceByMonth.set(entry.month, entry);
+      }
+    }
     const remittedByMonth = new Map(
-      remittances.map((entry) => [entry.month, entry.remittedCents]),
+      [...latestRemittanceByMonth].map(([month, entry]) => [
+        month,
+        entry.remittedCents,
+      ]),
     );
     const missingRemittanceMonths = [...monthlyWithheld.keys()].filter(
       (month) => !remittedByMonth.has(month),
@@ -540,12 +1228,16 @@ export class ComplianceService {
         | 'BALANCED'
         | 'DEFICIENCY_REVIEW'
         | 'REFUND_REVIEW'
+        | 'SETTLED'
         | 'BLOCKED_REVIEW';
       grossCents: bigint | null;
       taxableCents: bigint | null;
       taxDueCents: bigint | null;
       taxWithheldCents: bigint | null;
       unsettledDifferenceCents: bigint | null;
+      remainingDifferenceCents: bigint | null;
+      settlementType: string | null;
+      settledCents: bigint | null;
       reason?: string;
     };
     const rows: ReconciliationRow[] = [];
@@ -570,11 +1262,12 @@ export class ComplianceService {
             'Prior-employer declaration conflicts with recorded tax documents',
           );
         }
-        if (declaration.hasPriorEmployer) {
+        if (
+          declaration.hasPriorEmployer &&
+          !previousEmployeeIds.has(employee.id)
+        ) {
           throw new UnprocessableEntityException(
-            previousEmployeeIds.has(employee.id)
-              ? 'Previous-employer evidence recorded but not yet included in annual tax computation'
-              : 'Missing previous-employer tax document',
+            'Missing previous-employer tax document',
           );
         }
         if (
@@ -593,12 +1286,15 @@ export class ComplianceService {
         const { partIVA } = result.certificate;
         rows.push({
           ...identity,
-          status: result.reconciliationStatus,
+          status: result.isSettled ? 'SETTLED' : result.reconciliationStatus,
           grossCents: partIVA.grossCompensationIncomeCents,
           taxableCents: partIVA.totalTaxableCompensationCents,
           taxDueCents: partIVA.taxDueAnnualCents,
           taxWithheldCents: partIVA.totalTaxWithheldCents,
           unsettledDifferenceCents: partIVA.taxAdjustmentCents,
+          remainingDifferenceCents: result.remainingDifferenceCents,
+          settlementType: result.settlement?.settlementType ?? null,
+          settledCents: result.settlement?.settledCents ?? null,
         });
       } catch (error) {
         if (
@@ -618,6 +1314,9 @@ export class ComplianceService {
           taxDueCents: null,
           taxWithheldCents: null,
           unsettledDifferenceCents: null,
+          remainingDifferenceCents: null,
+          settlementType: null,
+          settledCents: null,
           reason: error.message,
         });
       }
@@ -634,6 +1333,7 @@ export class ComplianceService {
       ).length,
       refundReviewCount: rows.filter((row) => row.status === 'REFUND_REVIEW')
         .length,
+      settledCount: rows.filter((row) => row.status === 'SETTLED').length,
       missingRemittanceMonths,
       mismatchedRemittanceMonths,
       remittanceEvidenceIsUnverified: true as const,
@@ -661,8 +1361,11 @@ export class ComplianceService {
     taxYear = new Date().getFullYear(),
   ) {
     this.assertSupportedTaxYear(taxYear);
-    const { generateBir2316Certificate, formatBir2316TextDocument } =
-      await import('@workspace/payroll-engine');
+    const {
+      generateBir2316Certificate,
+      formatBir2316TextDocument,
+      annualizeTax,
+    } = await import('@workspace/payroll-engine');
 
     const employee = await prisma.employee.findFirst({
       where: { id: employeeId, organizationId },
@@ -794,24 +1497,146 @@ export class ComplianceService {
       );
     }
 
+    // Successor-employer annualization (RR 11-2018 §2.79): transcribed
+    // previous-employer taxable compensation and withholding join the
+    // present-employer figures in one graduated-table computation. Prior
+    // taxable is taken as stated on the transcribed 2316 — the previous
+    // employer applied its own ₱90,000 cap — and is never re-bucketed here.
+    const [priorDeclaration, priorRecordVersions] = await Promise.all([
+      prisma.priorEmployerDeclaration.findFirst({
+        where: { employeeId, organizationId, taxYear },
+        orderBy: { version: 'desc' },
+        select: { hasPriorEmployer: true },
+      }),
+      prisma.previousEmployerIncome.findMany({
+        where: { employeeId, organizationId, taxYear },
+      }),
+    ]);
+    // Only the highest version of each transcribed document annualizes.
+    const currentPriorByKey = new Map<
+      string,
+      (typeof priorRecordVersions)[number]
+    >();
+    for (const record of priorRecordVersions) {
+      const key = `${record.employerTin}|${record.periodStart.toISOString()}|${record.periodEnd.toISOString()}`;
+      const current = currentPriorByKey.get(key);
+      if (!current || record.version > current.version) {
+        currentPriorByKey.set(key, record);
+      }
+    }
+    const priorRecords = [...currentPriorByKey.values()];
+    let priorEmployerTotals: {
+      employerCount: number;
+      grossCents: bigint;
+      taxableCents: bigint;
+      withheldCents: bigint;
+    } | null = null;
+    if (priorRecords.length > 0) {
+      if (!priorDeclaration?.hasPriorEmployer) {
+        throw new UnprocessableEntityException(
+          'Declare prior employment before including its tax documents in annual tax computation',
+        );
+      }
+      const priorGrossCents = priorRecords.reduce(
+        (sum, record) => sum + record.grossCompensationCents,
+        0n,
+      );
+      const priorTaxableCents = priorRecords.reduce(
+        (sum, record) => sum + record.taxableCompensationCents,
+        0n,
+      );
+      const priorWithheldCents = priorRecords.reduce(
+        (sum, record) => sum + record.taxWithheldCents,
+        0n,
+      );
+      // A minimum-wage earner whose prior pay was itself taxable needs
+      // period-by-period wage analysis, not automatic annualization.
+      if (
+        certData.isMwe &&
+        (priorTaxableCents > 0n || priorWithheldCents > 0n)
+      ) {
+        throw new UnprocessableEntityException(
+          'BIR 2316 requires manual tax review for minimum-wage earners with prior-employer taxable income or withholding',
+        );
+      }
+      const combinedTaxableCents =
+        certData.partIVA.totalTaxableCompensationCents + priorTaxableCents;
+      const combinedWithheldCents =
+        certData.partIVA.totalTaxWithheldCents + priorWithheldCents;
+      const { totalAnnualTaxDueCents, taxAdjustmentCents: combinedAdjustment } =
+        annualizeTax(
+          combinedTaxableCents,
+          combinedWithheldCents,
+          certData.isMwe,
+        );
+      certData.partIVA.grossCompensationIncomeCents += priorGrossCents;
+      certData.partIVA.totalTaxableCompensationCents = combinedTaxableCents;
+      certData.partIVA.taxDueAnnualCents = totalAnnualTaxDueCents;
+      certData.partIVA.totalTaxWithheldCents = combinedWithheldCents;
+      certData.partIVA.taxAdjustmentCents = combinedAdjustment;
+      certData.partIVA.refundDueEmployeeCents =
+        combinedAdjustment < 0n ? -combinedAdjustment : 0n;
+      certData.partIVA.taxPayableByEmployeeCents =
+        combinedAdjustment > 0n ? combinedAdjustment : 0n;
+      priorEmployerTotals = {
+        employerCount: priorRecords.length,
+        grossCents: priorGrossCents,
+        taxableCents: priorTaxableCents,
+        withheldCents: priorWithheldCents,
+      };
+    }
+
     // The payslip ledger is not a year-end tax adjustment ledger: a difference
     // here is still due for collection/refund, not proof that it happened.
+    // A posted settlement zeroes only the amount it actually covered; later
+    // disbursed payslips change the recomputed adjustment, so the remaining
+    // balance is derived live instead of trusting the snapshot.
     const taxAdjustmentCents = certData.partIVA.taxAdjustmentCents;
+    const settlement = await prisma.yearEndTaxSettlement.findFirst({
+      where: { employeeId, organizationId, taxYear },
+      orderBy: { version: 'desc' },
+    });
+    const settledDelta = settlement
+      ? settlement.settlementType === 'DEFICIENCY_WITHHELD'
+        ? settlement.settledCents
+        : -settlement.settledCents
+      : 0n;
+    const remainingDifferenceCents = taxAdjustmentCents - settledDelta;
+    const isSettled = settlement !== null && remainingDifferenceCents === 0n;
     const reconciliationStatus:
       | 'BALANCED'
       | 'DEFICIENCY_REVIEW'
-      | 'REFUND_REVIEW' =
-      taxAdjustmentCents === 0n
+      | 'REFUND_REVIEW'
+      | 'SETTLED' = isSettled
+      ? 'SETTLED'
+      : taxAdjustmentCents === 0n
         ? 'BALANCED'
         : taxAdjustmentCents > 0n
           ? 'DEFICIENCY_REVIEW'
           : 'REFUND_REVIEW';
     const formattedDocument = formatBir2316TextDocument(certData);
+    const documentWithPrior = priorEmployerTotals
+      ? [
+          formattedDocument,
+          '------------------------------------------------------------------------------------------',
+          'PRIOR EMPLOYER INCOME (TRANSCRIBED 2316 FIGURES, SELF-REPORTED — NOT VERIFIED)',
+          `  Previous employers recorded ............................. ${priorEmployerTotals.employerCount}`,
+          `  Prior gross compensation ................................ PHP ${(Number(priorEmployerTotals.grossCents) / 100).toFixed(2)}`,
+          `  Prior taxable compensation .............................. PHP ${(Number(priorEmployerTotals.taxableCents) / 100).toFixed(2)}`,
+          `  Prior tax withheld ...................................... PHP ${(Number(priorEmployerTotals.withheldCents) / 100).toFixed(2)}`,
+          '  Combined totals above annualize these transcribed prior-employer',
+          '  figures with present-employer payroll per RR 11-2018 §2.79.',
+        ].join('\r\n')
+      : formattedDocument;
 
     return {
       certificate: certData,
       reconciliationStatus,
-      formattedDocument,
+      formattedDocument: documentWithPrior,
+      settlement,
+      remainingDifferenceCents,
+      isSettled,
+      priorEmployerTotals,
     };
   }
 

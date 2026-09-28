@@ -78,11 +78,17 @@ export class TimekeepingService {
     });
 
     // A full paid-leave day replaces the DTR for that date; it is not worked
-    // time, but it must not create an unpaid absence either. Without a shift
-    // calendar we support only whole Mon–Fri days whose count matches the
-    // approved request. Fail closed for fractional, overlapping or ambiguous
-    // schedules rather than silently overpaying.
+    // time, but it must not create an unpaid absence either. A half-day
+    // request (daysCount one half day short of the scheduled weekdays) names
+    // its partial date explicitly: that date keeps its real DTR — worked
+    // minutes up to half a standard shift still count as hours worked — and
+    // earns a half-day credit on top. Without a shift calendar only whole
+    // Mon–Fri days plus one explicit half day are supported. Fail closed for
+    // other fractions, overlapping or ambiguous schedules rather than
+    // silently overpaying.
+    const HALF_SHIFT_MINUTES = 240;
     const paidLeaveDates = new Set<number>();
+    const halfLeaveDates = new Set<number>();
     for (const leave of paidLeaves) {
       const start = leave.startDate.getTime();
       const end = leave.endDate.getTime();
@@ -91,20 +97,54 @@ export class TimekeepingService {
           'Paid leave date range requires manual reconciliation',
         );
       }
+      const daysCount = Number(leave.daysCount);
+      const partialTime = leave.partialDate?.getTime() ?? null;
       let workingDays = 0;
       for (let day = start; day <= end; day += 86_400_000) {
         const weekday = new Date(day).getUTCDay();
         if (weekday === 0 || weekday === 6) continue;
         workingDays += 1;
+        if (day === partialTime) continue;
         if (day < startDate.getTime() || day > endDate.getTime()) continue;
-        if (paidLeaveDates.has(day)) {
+        if (paidLeaveDates.has(day) || halfLeaveDates.has(day)) {
           throw new UnprocessableEntityException(
             'Overlapping paid leave requests cannot be processed twice',
           );
         }
         paidLeaveDates.add(day);
       }
-      if (workingDays === 0 || Number(leave.daysCount) !== workingDays) {
+      if (partialTime !== null) {
+        const partialWeekday = new Date(partialTime).getUTCDay();
+        if (
+          partialWeekday === 0 ||
+          partialWeekday === 6 ||
+          partialTime < start ||
+          partialTime > end
+        ) {
+          throw new UnprocessableEntityException(
+            'Half-day leave date must be a scheduled weekday inside the request range; reconcile manually',
+          );
+        }
+        if (daysCount !== workingDays - 0.5) {
+          throw new UnprocessableEntityException(
+            'Paid leave credits must match full scheduled workdays less one half day; reconcile partial days manually',
+          );
+        }
+        if (
+          paidLeaveDates.has(partialTime) ||
+          halfLeaveDates.has(partialTime)
+        ) {
+          throw new UnprocessableEntityException(
+            'Overlapping paid leave requests cannot be processed twice',
+          );
+        }
+        if (
+          partialTime >= startDate.getTime() &&
+          partialTime <= endDate.getTime()
+        ) {
+          halfLeaveDates.add(partialTime);
+        }
+      } else if (workingDays === 0 || daysCount !== workingDays) {
         throw new UnprocessableEntityException(
           'Paid leave credits must match full scheduled workdays; reconcile partial days manually',
         );
@@ -134,6 +174,28 @@ export class TimekeepingService {
         );
       }
     }
+    for (const day of halfLeaveDates) {
+      const record = recordsByDate.get(day);
+      if (!record || record.isAbsent) {
+        throw new UnprocessableEntityException(
+          'Half-day leave requires a worked attendance record for the partial date; reconcile attendance before payroll',
+        );
+      }
+      if (
+        (record.dayType !== 'REGULAR_WORKDAY' &&
+          record.dayType !== 'SPECIAL_WORKING_HOLIDAY') ||
+        record.actualWorkedMinutes > HALF_SHIFT_MINUTES ||
+        record.overtimeMinutes !== 0 ||
+        record.nightDiffMinutes !== 0 ||
+        record.restDayOTMinutes !== 0 ||
+        record.specialHolidayMinutes !== 0 ||
+        record.regularHolidayMinutes !== 0
+      ) {
+        throw new UnprocessableEntityException(
+          'Half-day leave conflicts with overtime, holiday premiums, or more than a half shift worked; reconcile attendance before payroll',
+        );
+      }
+    }
 
     const effectiveRecords = [
       ...records.filter((record) => !paidLeaveDates.has(record.date.getTime())),
@@ -149,9 +211,8 @@ export class TimekeepingService {
       })),
     ];
     const summary = summarizeAttendanceRecords(effectiveRecords);
-    return paidLeaveDates.size > 0
-      ? { ...summary, paidLeaveDays: paidLeaveDates.size }
-      : summary;
+    const paidLeaveDays = paidLeaveDates.size + halfLeaveDates.size * 0.5;
+    return paidLeaveDays > 0 ? { ...summary, paidLeaveDays } : summary;
   }
 
   async recordPunch(

@@ -13,6 +13,7 @@ const centsInput = z
   .regex(/^\d{1,15}$/)
   .transform(BigInt);
 const referenceInput = z.string().trim().min(1).max(160);
+const correctionReasonInput = z.string().trim().min(10).max(500);
 
 async function withEvidenceErrors<T>(request: () => Promise<T>): Promise<T> {
   try {
@@ -140,6 +141,114 @@ export function createComplianceRouter(ctx: RouterContext) {
         return record;
       }),
 
+    correctPriorEmployerDeclaration: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          hasPriorEmployer: z.boolean(),
+          sourceReference: referenceInput,
+          correctionReason: correctionReasonInput,
+          reviewerId: z.string().uuid(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.supersedePriorEmployerDeclaration({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'PriorEmployerDeclaration',
+          entityId: record.id,
+          previousValue: { supersedesId: record.supersedesId },
+          newValue: {
+            employeeId: input.employeeId,
+            taxYear: input.taxYear,
+            hasPriorEmployer: input.hasPriorEmployer,
+          },
+        });
+        return record;
+      }),
+
+    correctPreviousEmployerIncome: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          employerName: z.string().trim().min(1).max(200),
+          employerTin: z
+            .string()
+            .trim()
+            .regex(/^[0-9-]{9,20}$/),
+          periodStart: z.string().date(),
+          periodEnd: z.string().date(),
+          grossCompensationCents: centsInput,
+          taxableCompensationCents: centsInput,
+          taxWithheldCents: centsInput,
+          documentReference: referenceInput,
+          correctionReason: correctionReasonInput,
+          reviewerId: z.string().uuid(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.supersedePreviousEmployerIncome({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+            periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
+            periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'PreviousEmployerIncome',
+          entityId: record.id,
+          previousValue: { supersedesId: record.supersedesId },
+          newValue: { employeeId: input.employeeId, taxYear: input.taxYear },
+        });
+        return record;
+      }),
+
+    correctMonthlyTaxRemittance: hrProcedure
+      .input(
+        z.object({
+          taxYear: z.number().int().min(2023).max(2100),
+          month: z.number().int().min(1).max(12),
+          remittedCents: centsInput,
+          documentReference: referenceInput,
+          correctionReason: correctionReasonInput,
+          reviewerId: z.string().uuid(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.supersedeMonthlyTaxRemittance({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            recordedById: ctx.user.id,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'MonthlyTaxRemittanceEvidence',
+          entityId: record.id,
+          previousValue: { supersedesId: record.supersedesId },
+          newValue: { taxYear: input.taxYear, month: input.month },
+        });
+        return record;
+      }),
+
     exportBankTransmittal: payrollProcedure
       .input(
         z.object({
@@ -237,6 +346,81 @@ export function createComplianceRouter(ctx: RouterContext) {
           newValue: { taxYear: input.taxYear },
         });
         return result;
+      }),
+
+    recordYearEndSettlement: payrollProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          settlementDate: z.string().date(),
+          documentReference: referenceInput,
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.recordYearEndSettlement({
+            employeeId: input.employeeId,
+            organizationId: ctx.user.organizationId,
+            taxYear: input.taxYear,
+            settlementDate: new Date(`${input.settlementDate}T00:00:00.000Z`),
+            documentReference: input.documentReference,
+            recordedById: ctx.user.id,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'CREATE',
+          entityType: 'YearEndTaxSettlement',
+          entityId: record.id,
+          newValue: {
+            employeeId: input.employeeId,
+            taxYear: input.taxYear,
+            settlementType: record.settlementType,
+          },
+        });
+        return record;
+      }),
+
+    correctYearEndSettlement: payrollProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100),
+          settlementDate: z.string().date(),
+          documentReference: referenceInput,
+          correctionReason: correctionReasonInput,
+          reviewerId: z.string().uuid(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
+          complianceService.supersedeYearEndSettlement({
+            employeeId: input.employeeId,
+            organizationId: ctx.user.organizationId,
+            taxYear: input.taxYear,
+            settlementDate: new Date(`${input.settlementDate}T00:00:00.000Z`),
+            documentReference: input.documentReference,
+            correctionReason: input.correctionReason,
+            recordedById: ctx.user.id,
+            reviewerId: input.reviewerId,
+          }),
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'YearEndTaxSettlement',
+          entityId: record.id,
+          previousValue: { supersedesId: record.supersedesId },
+          newValue: {
+            employeeId: input.employeeId,
+            taxYear: input.taxYear,
+            settlementType: record.settlementType,
+          },
+        });
+        return record;
       }),
 
     exportDole13thMonth: payrollProcedure
