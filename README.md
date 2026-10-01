@@ -72,6 +72,37 @@ and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
 `CORS_ORIGIN` when deploying on different origins.
 
+## Attendance and DTR
+
+The staff portal now loads an employee's persisted DTR for an explicit date
+range (up to 366 calendar days), and supports manual additions/corrections.
+Missing dates are not assumed to be full attendance or absence. Punches are
+entered/displayed in **Asia/Manila (UTC+08:00)** regardless of the browser's
+local timezone; overnight shifts are supported within a 24-hour punch interval.
+Total worked minutes include overtime, and minute totals are not inferred from
+punches. Partial punches, inconsistent totals, absent days with worked time,
+double holidays, and legacy premium breakdowns require reconciliation.
+
+Corrections require all minute totals, explicit absence/approval flags, a reason
+of 10–500 characters, and the loaded `updatedAt` version (null for a new date).
+`timekeeping.adjustAttendance` no longer assumes a 480-minute shift or automatic
+approval. The attendance change and actor/reason/before/after audit entry commit
+in one serializable transaction. Stale/concurrent changes return a conflict,
+not an overwrite. New manual entries start unapproved in the UI; attendance
+approval is not payroll approval. Drafts are not saved to browser storage and
+remain mounted during background refresh failures.
+
+A date covered by any non-cancelled **regular payroll run in the tenant** is
+frozen for corrections, legacy punches, and per-day biometrics writes. Resolve
+payroll first; disbursed payroll cannot be cancelled. Corrections do not rewrite
+payslips or retroactively recalculate posted payroll. The existing approval and
+paid-leave reconciliation checks remain in effect.
+
+The staff UI is available to super admins, HR admins, and payroll specialists.
+The API retains its existing department-manager timekeeping role and employee
+self-read authorization; manager/employee attendance screens are not included
+in this pass. Biometrics import UI and batch-atomic import are separate work.
+
 ## Employee creation and profiles
 
 The API-backed portal supports HR/super-admin employee creation and read-only

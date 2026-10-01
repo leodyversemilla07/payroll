@@ -80,6 +80,8 @@ const EXPECTED_PROCEDURE_TYPES: Record<string, 'query' | 'mutation'> = {
   'employees.calculateFinalPay': 'query',
   'employees.getRegistrationOptions': 'query',
   'timekeeping.listRecent': 'query',
+  'timekeeping.getDTR': 'query',
+  'timekeeping.adjustAttendance': 'mutation',
   'timekeeping.importBiometricsCsv': 'mutation',
   'payroll.listRuns': 'query',
   'payroll.triggerRun': 'mutation',

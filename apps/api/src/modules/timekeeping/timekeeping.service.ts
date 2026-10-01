@@ -1,9 +1,10 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { type DailyTimeRecord, type Prisma, prisma } from '@workspace/db';
+import { type DailyTimeRecord, Prisma, prisma } from '@workspace/db';
 import type { AttendanceSummary } from '@workspace/payroll-engine';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class TimekeepingService {
     startDate: Date,
     endDate: Date,
   ) {
+    await this.assertEmployeeInOrganization(employeeId, organizationId);
     return prisma.dailyTimeRecord.findMany({
       where: {
         employeeId,
@@ -221,10 +223,30 @@ export class TimekeepingService {
     date: Date,
     timeIn?: Date,
     timeOut?: Date,
-  ) {
-    await this.assertEmployeeInOrganization(employeeId, organizationId);
+    database?: Prisma.TransactionClient,
+  ): Promise<DailyTimeRecord> {
+    if (!database) {
+      return prisma.$transaction(
+        (transaction) =>
+          this.recordPunch(
+            employeeId,
+            organizationId,
+            date,
+            timeIn,
+            timeOut,
+            transaction,
+          ),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    }
+    await this.assertEmployeeInOrganization(
+      employeeId,
+      organizationId,
+      database,
+    );
+    await this.assertAttendanceEditable(organizationId, date, database);
 
-    return prisma.dailyTimeRecord.upsert({
+    return database.dailyTimeRecord.upsert({
       where: {
         employeeId_date: { employeeId, date },
       },
@@ -238,33 +260,150 @@ export class TimekeepingService {
     });
   }
 
-  async adjustAttendanceRecord(data: {
-    employeeId: string;
-    organizationId: string;
-    date: Date;
-    dayType?:
-      | 'REGULAR_WORKDAY'
-      | 'REST_DAY'
-      | 'SPECIAL_NON_WORKING_HOLIDAY'
-      | 'SPECIAL_WORKING_HOLIDAY'
-      | 'REGULAR_HOLIDAY'
-      | 'DOUBLE_HOLIDAY';
-    timeIn?: Date;
-    timeOut?: Date;
-    actualWorkedMinutes: number;
-    tardinessMinutes?: number;
-    undertimeMinutes?: number;
-    overtimeMinutes?: number;
-    nightDiffMinutes?: number;
-    isAbsent?: boolean;
-    isApproved?: boolean;
-  }) {
+  async correctAttendanceRecord(
+    data: AttendanceCorrectionInput,
+    database: Prisma.TransactionClient,
+  ) {
     await this.assertEmployeeInOrganization(
       data.employeeId,
       data.organizationId,
+      database,
+    );
+    await this.assertAttendanceEditable(
+      data.organizationId,
+      data.date,
+      database,
+    );
+    const previous = await database.dailyTimeRecord.findUnique({
+      where: {
+        employeeId_date: { employeeId: data.employeeId, date: data.date },
+      },
+    });
+    if (
+      (previous?.updatedAt.getTime() ?? null) !==
+      (data.expectedUpdatedAt?.getTime() ?? null)
+    ) {
+      throw new ConflictException(
+        'Attendance changed since it was loaded. Reload the DTR before correcting it.',
+      );
+    }
+    if (
+      previous &&
+      (previous.dayType === 'DOUBLE_HOLIDAY' ||
+        previous.restDayOTMinutes ||
+        previous.specialHolidayMinutes ||
+        previous.regularHolidayMinutes)
+    ) {
+      throw new UnprocessableEntityException(
+        'Double holidays and legacy premium breakdowns require manual reconciliation; this correction form cannot replace them.',
+      );
+    }
+    const values = {
+      dayType: data.dayType,
+      timeIn: data.timeIn,
+      timeOut: data.timeOut,
+      actualWorkedMinutes: data.actualWorkedMinutes,
+      tardinessMinutes: data.tardinessMinutes,
+      undertimeMinutes: data.undertimeMinutes,
+      overtimeMinutes: data.overtimeMinutes,
+      nightDiffMinutes: data.nightDiffMinutes,
+      isAbsent: data.isAbsent,
+      isApproved: data.isApproved,
+    };
+    let record: DailyTimeRecord;
+    if (previous) {
+      const changed = await database.dailyTimeRecord.updateMany({
+        where: { id: previous.id, updatedAt: previous.updatedAt },
+        data: {
+          ...values,
+          updatedAt: new Date(
+            Math.max(Date.now(), previous.updatedAt.getTime() + 1),
+          ),
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException(
+          'Attendance changed since it was loaded. Reload the DTR before correcting it.',
+        );
+      record = await database.dailyTimeRecord.findUniqueOrThrow({
+        where: { id: previous.id },
+      });
+    } else {
+      record = await database.dailyTimeRecord.create({
+        data: {
+          employeeId: data.employeeId,
+          date: data.date,
+          ...values,
+        },
+      });
+    }
+    return { previous, record };
+  }
+
+  private async assertAttendanceEditable(
+    organizationId: string,
+    date: Date,
+    database: Prisma.TransactionClient,
+  ) {
+    const consumed = await database.payrollRun.findFirst({
+      where: {
+        organizationId,
+        cutoffSequence: { in: ['FIRST_CUTOFF', 'SECOND_CUTOFF'] },
+        cutoffStartDate: { lte: date },
+        cutoffEndDate: { gte: date },
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true, status: true },
+    });
+    if (consumed) {
+      throw new ConflictException(
+        'This date is covered by a non-cancelled regular payroll run. Resolve payroll before changing attendance; disbursed payroll cannot be cancelled.',
+      );
+    }
+  }
+
+  async adjustAttendanceRecord(
+    data: {
+      employeeId: string;
+      organizationId: string;
+      date: Date;
+      dayType?:
+        | 'REGULAR_WORKDAY'
+        | 'REST_DAY'
+        | 'SPECIAL_NON_WORKING_HOLIDAY'
+        | 'SPECIAL_WORKING_HOLIDAY'
+        | 'REGULAR_HOLIDAY'
+        | 'DOUBLE_HOLIDAY';
+      timeIn?: Date;
+      timeOut?: Date;
+      actualWorkedMinutes: number;
+      tardinessMinutes?: number;
+      undertimeMinutes?: number;
+      overtimeMinutes?: number;
+      nightDiffMinutes?: number;
+      isAbsent?: boolean;
+      isApproved?: boolean;
+    },
+    database?: Prisma.TransactionClient,
+  ): Promise<DailyTimeRecord> {
+    if (!database) {
+      return prisma.$transaction(
+        (transaction) => this.adjustAttendanceRecord(data, transaction),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    }
+    await this.assertEmployeeInOrganization(
+      data.employeeId,
+      data.organizationId,
+      database,
+    );
+    await this.assertAttendanceEditable(
+      data.organizationId,
+      data.date,
+      database,
     );
 
-    return prisma.dailyTimeRecord.upsert({
+    return database.dailyTimeRecord.upsert({
       where: {
         employeeId_date: { employeeId: data.employeeId, date: data.date },
       },
@@ -351,8 +490,9 @@ export class TimekeepingService {
   private async assertEmployeeInOrganization(
     employeeId: string,
     organizationId: string,
+    database: Pick<Prisma.TransactionClient, 'employee'> = prisma,
   ): Promise<void> {
-    const employee = await prisma.employee.findFirst({
+    const employee = await database.employee.findFirst({
       where: { id: employeeId, organizationId },
       select: { id: true },
     });
@@ -361,6 +501,23 @@ export class TimekeepingService {
       throw new NotFoundException('Employee not found');
     }
   }
+}
+
+export interface AttendanceCorrectionInput {
+  employeeId: string;
+  organizationId: string;
+  date: Date;
+  expectedUpdatedAt: Date | null;
+  dayType: Exclude<DailyTimeRecord['dayType'], 'DOUBLE_HOLIDAY'>;
+  timeIn: Date | null;
+  timeOut: Date | null;
+  actualWorkedMinutes: number;
+  tardinessMinutes: number;
+  undertimeMinutes: number;
+  overtimeMinutes: number;
+  nightDiffMinutes: number;
+  isAbsent: boolean;
+  isApproved: boolean;
 }
 
 export function summarizeAttendanceRecords(

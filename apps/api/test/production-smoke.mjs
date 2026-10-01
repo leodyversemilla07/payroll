@@ -31,21 +31,27 @@ child.stderr.on("data", (chunk) => {
 try {
   let response;
 
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  // Cold startup on slower machines can exceed four seconds. Keep the
+  // overall wait bounded, and also bound each health request.
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`API exited with code ${child.exitCode}.\n${output}`);
     }
 
     try {
-      response = await fetch(`http://127.0.0.1:${port}/`);
-      break;
+      response = await fetch(`http://127.0.0.1:${port}/`, {
+        signal: AbortSignal.timeout(1_000),
+      });
+      if (response.ok) break;
     } catch {
-      await delay(100);
+      // Retry while the process is starting, up to the overall deadline.
     }
+    await delay(100);
   }
 
   if (!response?.ok) {
-    throw new Error(`API did not become healthy.\n${output}`);
+    throw new Error(`API did not become healthy within 30 seconds.\n${output}`);
   }
 
   const body = await response.text();

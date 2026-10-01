@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { EmployeesSection } from "./employees-section";
 import { RunLifecycleActions, TriggerRunForms } from "./payroll-run-actions";
+import { TimekeepingSection } from "./timekeeping-section";
 import { YearEndTaxSection } from "./year-end-tax";
 
 const staffRoles = ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"];
@@ -179,6 +180,10 @@ function StaffPortal({
 
   return (
     <>
+      <TimekeepingSection
+        employees={staffEmployees}
+        employeeListFailed={employees.isError}
+      />
       <YearEndTaxSection employees={staffEmployees} />
       <TriggerRunForms />
       <div className="grid gap-6 md:grid-cols-2">
