@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { EmployeesSection } from "./employees-section";
 import { RunLifecycleActions, TriggerRunForms } from "./payroll-run-actions";
 import { YearEndTaxSection } from "./year-end-tax";
 
@@ -101,6 +102,10 @@ export function PayrollPortal() {
             )}
             {staffRoles.includes(me.data.role) ? (
               <StaffPortal
+                key={me.data.id}
+                canCreateEmployees={
+                  me.data.role === "SUPER_ADMIN" || me.data.role === "HR_ADMIN"
+                }
                 selectedRun={selectedRun}
                 setSelectedRun={(id) => {
                   setSelectedRun(id);
@@ -143,11 +148,13 @@ export function PayrollPortal() {
 }
 
 function StaffPortal({
+  canCreateEmployees,
   selectedRun,
   setSelectedRun,
   selectedSlip,
   setSelectedSlip,
 }: {
+  canCreateEmployees: boolean;
   selectedRun: string | null;
   setSelectedRun: (id: string | null) => void;
   selectedSlip: string | null;
@@ -175,47 +182,7 @@ function StaffPortal({
       <YearEndTaxSection employees={staffEmployees} />
       <TriggerRunForms />
       <div className="grid gap-6 md:grid-cols-2">
-        <Card role="region" aria-label="Employees">
-          <CardHeader>
-            <CardTitle>Employees</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {employees.isPending ? (
-              <p role="status">Loading employees…</p>
-            ) : employees.isError ? (
-              <p role="alert">
-                Could not load employees.{" "}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void employees.refetch()}
-                >
-                  Retry
-                </Button>
-              </p>
-            ) : employees.data.length === 0 ? (
-              <p>No employees found.</p>
-            ) : (
-              <ul className="space-y-2">
-                {employees.data.map((employee) => (
-                  <li key={employee.id}>
-                    <Card size="sm">
-                      <CardContent className="py-3">
-                        <strong>
-                          {employee.firstName} {employee.lastName}
-                        </strong>
-                        <span className="block text-sm text-slate-400">
-                          {employee.employeeNumber} ·{" "}
-                          {employee.employmentStatus}
-                        </span>
-                      </CardContent>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <EmployeesSection canCreate={canCreateEmployees} />
         <Card role="region" aria-label="Payroll runs">
           <CardHeader>
             <CardTitle>Payroll runs</CardTitle>

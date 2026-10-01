@@ -23,8 +23,11 @@ export interface AuditEntry {
 
 @Injectable()
 export class AuditService {
-  async record(entry: AuditEntry): Promise<void> {
-    await prisma.auditLog.create({
+  async record(
+    entry: AuditEntry,
+    client: Pick<Prisma.TransactionClient, 'auditLog'> = prisma,
+  ): Promise<void> {
+    await client.auditLog.create({
       data: {
         organizationId: entry.user.organizationId,
         userId: entry.user.id,

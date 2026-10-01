@@ -1,37 +1,38 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { prisma } from '@workspace/db';
+import { type Prisma, prisma } from '@workspace/db';
 
 export interface RegisterEmployeeInput {
   organizationId: string;
-  branchId?: string;
-  departmentId?: string;
+  branchId: string;
+  departmentId: string;
   firstName: string;
   lastName: string;
   email: string;
-  contactNumber?: string;
-  residentialAddress?: string;
-  gender?: string;
-  civilStatus?: string;
-  dateOfBirth?: string;
-  tin?: string;
-  sssNo?: string;
-  philhealthNo?: string;
-  pagibigNo?: string;
-  hireDate?: string;
-  employmentType?:
+  contactNumber: string;
+  residentialAddress: string;
+  gender: string;
+  civilStatus: string;
+  dateOfBirth: string;
+  tin: string;
+  sssNo: string;
+  philhealthNo: string;
+  pagibigNo: string;
+  hireDate: string;
+  employmentType:
     | 'REGULAR'
     | 'PROBATIONARY'
     | 'CONTRACTUAL'
     | 'PROJECT_BASED'
     | 'PART_TIME';
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankAccountName?: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
   monthlyBasicRatePesos: number;
   isTaxExempt?: boolean;
   isManagerial?: boolean;
@@ -69,8 +70,27 @@ export class EmployeesService {
     });
   }
 
-  async registerEmployee(input: RegisterEmployeeInput) {
-    const organization = await prisma.organization.findUnique({
+  async getRegistrationOptions(organizationId: string) {
+    const [branches, departments] = await Promise.all([
+      prisma.branch.findMany({
+        where: { organizationId },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.department.findMany({
+        where: { organizationId },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    return { branches, departments };
+  }
+
+  async registerEmployee(
+    input: RegisterEmployeeInput,
+    client: Prisma.TransactionClient = prisma,
+  ) {
+    const organization = await client.organization.findUnique({
       where: { id: input.organizationId },
       select: { id: true },
     });
@@ -78,40 +98,27 @@ export class EmployeesService {
       throw new BadRequestException('Organization not found');
     }
 
-    const branch = input.branchId
-      ? await prisma.branch.findFirst({
-          where: { id: input.branchId, organizationId: input.organizationId },
-        })
-      : await prisma.branch.findFirst({
-          where: { organizationId: input.organizationId },
-          orderBy: { createdAt: 'asc' },
-        });
+    const branch = await client.branch.findFirst({
+      where: { id: input.branchId, organizationId: input.organizationId },
+    });
     if (!branch) {
       throw new BadRequestException(
         'A branch belonging to the organization is required',
       );
     }
 
-    const department = input.departmentId
-      ? await prisma.department.findFirst({
-          where: {
-            id: input.departmentId,
-            organizationId: input.organizationId,
-          },
-        })
-      : await prisma.department.findFirst({
-          where: { organizationId: input.organizationId },
-          orderBy: { createdAt: 'asc' },
-        });
+    const department = await client.department.findFirst({
+      where: { id: input.departmentId, organizationId: input.organizationId },
+    });
     if (!department) {
       throw new BadRequestException(
         'A department belonging to the organization is required',
       );
     }
 
-    // Generate unique employee number
-    const count = await prisma.employee.count();
-    const employeeNumber = `EMP-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
+    // Count-based numbers race during concurrent creation and can be reused
+    // after deletions. Existing references stay unchanged; new ones use UUIDs.
+    const employeeNumber = `EMP-${new Date().getUTCFullYear()}-${randomUUID()}`;
 
     // 3. Compute Centavos
     const monthlyRateCents = BigInt(
@@ -120,7 +127,7 @@ export class EmployeesService {
     const dailyRateCents = (monthlyRateCents * 12n) / 261n;
     const hourlyRateCents = dailyRateCents / 8n;
 
-    return prisma.employee.create({
+    return client.employee.create({
       data: {
         organizationId: input.organizationId,
         branchId: branch.id,
@@ -129,24 +136,21 @@ export class EmployeesService {
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
-        contactNumber: input.contactNumber || 'N/A',
-        residentialAddress:
-          input.residentialAddress || 'Metro Manila, Philippines',
-        gender: input.gender || 'Not Specified',
-        civilStatus: input.civilStatus || 'Single',
-        dateOfBirth: input.dateOfBirth
-          ? new Date(input.dateOfBirth)
-          : new Date('1995-01-01'),
-        tin: input.tin || '000-000-000-000',
-        sssNo: input.sssNo || '00-0000000-0',
-        philhealthNo: input.philhealthNo || '00-000000000-0',
-        pagibigNo: input.pagibigNo || '0000-0000-0000',
-        hireDate: input.hireDate ? new Date(input.hireDate) : new Date(),
-        employmentType: input.employmentType || 'REGULAR',
-        bankName: input.bankName || 'BDO',
-        bankAccountNumber: input.bankAccountNumber || '0000000000',
-        bankAccountName:
-          input.bankAccountName || `${input.firstName} ${input.lastName}`,
+        contactNumber: input.contactNumber,
+        residentialAddress: input.residentialAddress,
+        gender: input.gender,
+        civilStatus: input.civilStatus,
+        dateOfBirth: new Date(input.dateOfBirth),
+        tin: input.tin,
+        sssNo: input.sssNo,
+        philhealthNo: input.philhealthNo,
+        pagibigNo: input.pagibigNo,
+        hireDate: new Date(input.hireDate),
+        employmentType: input.employmentType,
+        payBasis: 'MONTHLY',
+        bankName: input.bankName,
+        bankAccountNumber: input.bankAccountNumber,
+        bankAccountName: input.bankAccountName,
         isManagerial: input.isManagerial ?? false,
         compensation: {
           create: {

@@ -72,6 +72,33 @@ and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
 `CORS_ORIGIN` when deploying on different origins.
 
+## Employee creation and profiles
+
+The API-backed portal supports HR/super-admin employee creation and read-only
+employee details for authorized payroll/HR staff. Branch and department choices
+come from the current tenant; creation requires explicit choices and a complete
+personal, employment, statutory, and bank profile. The `employees.create` API
+now requires these fields instead of inserting fictional dates, addresses,
+identifiers, or bank accounts. Missing organization setup blocks creation.
+Draft onboarding and employee editing are not implemented in this workflow.
+
+Creation currently supports **monthly-paid employees only**. Rates are accepted
+in PHP to at most two decimal places and stored in centavos; the existing
+261-day/year and 8-hour/day derived-rate convention is unchanged and still
+requires independent validation. Tax-exempt and managerial flags require
+verified legal eligibility, not inference from a job title or salary.
+Government/bank identifiers are masked in the detail view, but entered
+identifiers are not independently verified. Form data is not saved to browser
+storage. Employee creation does not create a login account or transfer funds.
+
+The employee, compensation, and creation audit record commit in one database
+transaction. New employee references use a UUID rather than a count-based
+sequence to avoid concurrent-registration/deletion collisions; existing
+references are unchanged. Duplicate records are rejected without overwriting
+an employee. Browser tests mock tRPC; dedicated PostgreSQL integration tests
+also verify persistence, tenant isolation, concurrent registration, and rollback
+when audit persistence fails.
+
 ## Compliance previews (not filing documents)
 
 `compliance.listYearEndReconciliations` provides a tenant-scoped, read-only
