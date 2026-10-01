@@ -11,6 +11,8 @@ This is a verification checklist, **not** legal, tax, or bank-format approval. I
 - `compliance.recordYearEndSettlement` records an attestation of deficiency withheld/refund paid with disbursed payroll. Active employees settle with December pay; separated employees settle with termination-month pay. Deficiencies above the month's disbursed net pay are rejected. Reconciliation recomputes remaining balances after later payments/evidence changes. This record does not transfer money or independently verify the stated payment.
 - `compliance.issueBir2316` records an HR-controlled, versioned issuance snapshot after a conclusive, fully settled reconciliation. Void/re-issue preserves history and the deadline is informational. The snapshot/worksheet is **not a validated official form**, filing acknowledgment, or substituted-filing eligibility verdict.
 
+- Leave management reads recorded balances without granting default credits, files explicit requests, and atomically audits paid approval/debit or pending rejection. Self-approval, overlapping approvals and processed regular cutoffs are blocked. Recorded credits (including legacy defaults), leave eligibility, holiday treatment and nonstandard schedules still require independent policy/statutory verification; this workflow does not provision or certify entitlements.
+
 ## Primary references inspected
 
 - [BIR RR 11-2018, §2.79(B)(5)(b)](https://bir-cdn.bir.gov.ph/local/pdf/Digest%20RR%2011-2018.pdf): annualized year-end and termination tax, prior employers, final-pay deduction and refund timing. The 2023-onwards annual table is in this regulation; its [Annex E](https://bir-cdn.bir.gov.ph/local/pdf/Annex%20E%20RR%2011-2018.pdf) is the periodic withholding table.
@@ -22,6 +24,7 @@ This is a verification checklist, **not** legal, tax, or bank-format approval. I
 All release gates below remain **open**:
 
 - [ ] Independently sign off 2026 rules/thresholds (including later amendments), de minimis classification, statutory contribution rates, benefits/minimum-wage earnings, and tax fixtures with a tax professional. Unit tests validate arithmetic, not regulatory approval.
+- [ ] Verify recorded leave credits and their provenance, statutory/company eligibility, supported work schedules, public holidays, half-day treatment and paid-leave/DTR reconciliation. Reading or approving a recorded balance is not proof of entitlement; legacy default allocations must not be treated as independently verified.
 - [ ] Verify previous-employer 2316 figures, monthly remittance references, and no-previous-employer declarations against source documents/BIR acknowledgments. Validate prior-employer annualization and all applicable tax credits. Reconcile monthly 1601-C, annual 1604-C, and each employee's adjusted withholding; do not infer remittance from payslips or entered references.
 - [ ] Add access-controlled, durable source-document storage and verify the correction/reviewer workflow against supporting evidence. A reference string and a different reviewer ID are not themselves document verification.
 - [ ] Independently reconcile recorded settlements against actual withholding/refund payments. Validate December/termination timing, insufficient final pay, follow-up collection/refund handling, and later evidence corrections; do not certify a computed-but-unpaid refund.

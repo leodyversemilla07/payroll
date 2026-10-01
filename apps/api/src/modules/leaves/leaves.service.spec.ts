@@ -6,7 +6,12 @@ jest.mock('@workspace/db', () => ({
   prisma: {
     $transaction: jest.fn(),
     employee: { findFirst: jest.fn() },
-    leaveRequest: { create: jest.fn() },
+    leaveRequest: { create: jest.fn(), findFirst: jest.fn() },
+    leaveBalance: {
+      findMany: jest.fn(),
+      upsert: jest.fn(),
+      findUnique: jest.fn(),
+    },
   },
   Prisma: {
     Decimal: jest.fn((value: number) => value),
@@ -21,6 +26,8 @@ function mockApproval(
     paid?: boolean;
     missing?: boolean;
     lostRace?: boolean;
+    processed?: boolean;
+    overlap?: boolean;
   } = {},
 ) {
   let status = options.status ?? 'PENDING';
@@ -31,14 +38,29 @@ function mockApproval(
     employeeId: 'employee-1',
     leaveType: 'SIL',
     startDate: new Date('2026-09-10'),
+    endDate: new Date('2026-09-11'),
+    partialDate: null,
     daysCount: 2,
     isPaid: options.paid ?? true,
     status,
     approvedById,
   });
   const transaction = {
+    payrollRun: {
+      findFirst: jest.fn(async () =>
+        options.processed ? { id: 'run-1' } : null,
+      ),
+    },
     leaveRequest: {
-      findFirst: jest.fn(async () => (options.missing ? null : request())),
+      findFirst: jest.fn(async (args: { select?: unknown }) =>
+        options.missing
+          ? null
+          : args.select
+            ? options.overlap
+              ? { id: 'other-leave' }
+              : null
+            : request(),
+      ),
       updateMany: jest.fn(
         async (args: {
           where: { status: string };
@@ -171,6 +193,51 @@ describe('LeavesService approval', () => {
     expect(transaction.leaveBalance.updateMany).not.toHaveBeenCalled();
   });
 
+  it('rolls back approval and debit if its audit callback fails', async () => {
+    const { getBalance, getStatus } = mockApproval();
+    const audit = jest.fn().mockRejectedValue(new Error('audit unavailable'));
+    await expect(
+      new LeavesService().approveLeaveRequest(
+        'request-1',
+        'org-1',
+        'admin-1',
+        audit,
+      ),
+    ).rejects.toThrow('audit unavailable');
+    expect(getBalance()).toBe(5);
+    expect(getStatus()).toBe('PENDING');
+  });
+
+  it.each([{ processed: true }, { overlap: true }])(
+    'does not approve after payroll or overlapping approval: %j',
+    async (options) => {
+      const { getBalance, getStatus } = mockApproval(options);
+      await expect(
+        new LeavesService().approveLeaveRequest(
+          'request-1',
+          'org-1',
+          'admin-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(getBalance()).toBe(5);
+      expect(getStatus()).toBe('PENDING');
+    },
+  );
+
+  it('does not allow an approver to approve their own linked employee leave', async () => {
+    const { getBalance } = mockApproval();
+    await expect(
+      new LeavesService().approveLeaveRequest(
+        'request-1',
+        'org-1',
+        'admin-1',
+        undefined,
+        'employee-1',
+      ),
+    ).rejects.toThrow('cannot approve your own');
+    expect(getBalance()).toBe(5);
+  });
+
   it('rejects a different-tenant or missing request', async () => {
     mockApproval({ missing: true });
     await expect(
@@ -185,6 +252,7 @@ describe('LeavesService filing', () => {
     jest.mocked(prisma.employee.findFirst).mockResolvedValue({
       id: 'employee-1',
     } as never);
+    jest.mocked(prisma.leaveRequest.findFirst).mockResolvedValue(null);
     (prisma.leaveRequest.create as unknown as jest.Mock).mockImplementation(
       (args: { data: object }) =>
         Promise.resolve({ id: 'leave-1', ...args.data }),
@@ -305,6 +373,40 @@ describe('LeavesService filing', () => {
         daysCount: 1,
       }),
     ).rejects.toThrow('valid range');
+  });
+
+  it('rejects ancient dates rather than normalizing year 0090 into 1990', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        startDate: new Date('0090-09-10'),
+        endDate: new Date('0090-09-10'),
+        daysCount: 1,
+      }),
+    ).rejects.toThrow('between 1900 and 2100');
+    expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cross-year request rather than debiting only the starting year', async () => {
+    await expect(
+      new LeavesService().fileLeaveRequest({
+        ...base,
+        startDate: new Date('2026-12-31'),
+        endDate: new Date('2027-01-01'),
+        daysCount: 2,
+      }),
+    ).rejects.toThrow('split cross-year');
+    expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects overlapping pending or approved requests before filing', async () => {
+    jest
+      .mocked(prisma.leaveRequest.findFirst)
+      .mockResolvedValue({ id: 'existing' } as never);
+    await expect(
+      new LeavesService().fileLeaveRequest({ ...base, daysCount: 1 }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
   });
 
   it('rejects filing for another tenant’s employee', async () => {

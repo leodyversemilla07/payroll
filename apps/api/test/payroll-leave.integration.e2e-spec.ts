@@ -267,8 +267,8 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
           data: {
             employeeId,
             leaveType: 'SIL',
-            startDate: new Date(Date.UTC(2026, 9, 1 + day * 3)),
-            endDate: new Date(Date.UTC(2026, 9, 2 + day * 3)),
+            startDate: new Date(Date.UTC(2026, 9, 1 + day * 4)),
+            endDate: new Date(Date.UTC(2026, 9, 2 + day * 4)),
             daysCount: new Prisma.Decimal(2),
             isPaid: true,
             reason: 'Concurrent leave test',

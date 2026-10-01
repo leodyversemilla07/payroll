@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { EmployeesSection } from "./employees-section";
+import { LeavesSection } from "./leaves-section";
 import { RunLifecycleActions, TriggerRunForms } from "./payroll-run-actions";
 import { TimekeepingSection } from "./timekeeping-section";
 import { YearEndTaxSection } from "./year-end-tax";
@@ -104,6 +105,7 @@ export function PayrollPortal() {
             {staffRoles.includes(me.data.role) ? (
               <StaffPortal
                 key={me.data.id}
+                actorEmployeeId={me.data.employeeId}
                 canCreateEmployees={
                   me.data.role === "SUPER_ADMIN" || me.data.role === "HR_ADMIN"
                 }
@@ -149,12 +151,14 @@ export function PayrollPortal() {
 }
 
 function StaffPortal({
+  actorEmployeeId,
   canCreateEmployees,
   selectedRun,
   setSelectedRun,
   selectedSlip,
   setSelectedSlip,
 }: {
+  actorEmployeeId?: string;
   canCreateEmployees: boolean;
   selectedRun: string | null;
   setSelectedRun: (id: string | null) => void;
@@ -183,6 +187,12 @@ function StaffPortal({
       <TimekeepingSection
         employees={staffEmployees}
         employeeListFailed={employees.isError}
+      />
+      <LeavesSection
+        employees={staffEmployees}
+        employeeListFailed={employees.isError}
+        canDecide={canCreateEmployees}
+        actorEmployeeId={actorEmployeeId}
       />
       <YearEndTaxSection employees={staffEmployees} />
       <TriggerRunForms />

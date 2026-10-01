@@ -72,6 +72,42 @@ and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
 `CORS_ORIGIN` when deploying on different origins.
 
+## Leave balances, requests and decisions
+
+The real staff portal loads an employee's recorded balances and up to 100 most
+recent requests for an explicit year/status. Balance reads are read-only: they
+no longer create assumed SIL, vacation or sick credits. Existing balances,
+including legacy defaults, are **not verified entitlements**. Verified credit
+allocation/adjustment UI is not included; absent credits block paid approval.
+SIL cash-conversion previews also require a recorded balance and cannot exceed it.
+
+Staff can file requests with explicit paid/unpaid treatment, a reason, and
+Monday–Friday calendar dates (1900–2100). Whole days or one named half weekday
+are supported; split cross-year requests. Other schedules/fractions, overlapping
+half-day pairing, holidays and eligibility require manual reconciliation. Filing
+does not reserve or debit credits; pending/approved date overlaps are rejected.
+
+HR/super admins can approve or reject pending requests in the portal. The API
+retains department-manager approval rights and linked employee self-read/filing;
+manager/employee leave screens are not included. A linked approver cannot approve
+their own employee leave. Approval checks recorded available credits and existing
+approved overlaps, and any non-cancelled regular payroll cutoff covering the
+dates blocks approval. Decisions do not rewrite payslips. Rejection requires a
+10–500-character reason and cannot reverse approved leave or refund credits.
+
+Filing and its audit commit together. Approval, any paid-credit debit, and the
+before/after audit also commit together, as do rejection, actor/reason and its
+audit. Concurrent decisions cannot overdraw or replace each other; replays retain
+the original decision and do not debit/audit twice. Unpaid approval does not
+write absence DTRs; reconcile attendance explicitly. Drafts are not stored in the
+browser and survive background refresh failures. Browser tests mock tRPC;
+PostgreSQL tests cover persistence, tenant isolation, audit rollback and races.
+
+Deploy migration `20261002000000_leave_rejection` with `pnpm db:migrate:deploy`
+before using the updated API. It adds nullable rejection provenance columns and
+does not replace existing leave records or allocate credits. Do not run seeding
+against populated databases.
+
 ## Attendance and DTR
 
 The staff portal now loads an employee's persisted DTR for an explicit date

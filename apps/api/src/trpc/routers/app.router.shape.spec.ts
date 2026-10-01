@@ -66,6 +66,8 @@ const EXPECTED_PROCEDURES = [
   'compliance.getBir2316Issuance',
   'compliance.exportDole13thMonth',
   'leaves.getBalances',
+  'leaves.listRequests',
+  'leaves.reject',
   'leaves.request',
   'leaves.approve',
   'leaves.monetizeSil',
@@ -105,6 +107,9 @@ const EXPECTED_PROCEDURE_TYPES: Record<string, 'query' | 'mutation'> = {
   'compliance.exportBankTransmittal': 'mutation',
   'compliance.listYearEndReconciliations': 'query',
   'leaves.getBalances': 'query',
+  'leaves.listRequests': 'query',
+  'leaves.request': 'mutation',
+  'leaves.reject': 'mutation',
   'leaves.approve': 'mutation',
   'leaves.monetizeSil': 'query',
 };
