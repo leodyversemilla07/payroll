@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { type LeaveRequest, Prisma, prisma } from '@workspace/db';
 import { calculateSilCashConversion } from '@workspace/payroll-engine';
+import {
+  type CreditAudit,
+  type LeaveCreditInput,
+  listEmployeeCreditChanges,
+  setEmployeeLeaveCredits,
+} from './leave-credits';
 
 export interface LeaveRequestInput {
   employeeId: string;
@@ -27,6 +33,18 @@ type DecisionAudit = (data: {
 
 @Injectable()
 export class LeavesService {
+  setEmployeeLeaveCredits(input: LeaveCreditInput, audit: CreditAudit) {
+    return setEmployeeLeaveCredits(input, audit);
+  }
+
+  listEmployeeCreditChanges(
+    employeeId: string,
+    organizationId: string,
+    year: number,
+  ) {
+    return listEmployeeCreditChanges(employeeId, organizationId, year);
+  }
+
   // Reads must not create guessed statutory/company entitlements.
   async getEmployeeLeaveBalances(
     employeeId: string,
@@ -176,6 +194,7 @@ export class LeavesService {
           data: {
             usedCredits: { increment: request.daysCount },
             balance: { decrement: request.daysCount },
+            revision: { increment: 1 },
           },
         });
         if (deducted.count !== 1)

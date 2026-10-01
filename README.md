@@ -59,7 +59,10 @@ latter mock Prisma). `pnpm test:e2e` also runs PostgreSQL-backed tRPC
 integration tests for tenant authorization, leave approval transactions, and
 payroll loan reversal. Run e2e tests with `NODE_ENV=test` and a **disposable,
 migrated test database** in `DATABASE_URL`; they create and clean up their own
-tenant fixtures. CI provides PostgreSQL 16 and applies migrations before testing.
+tenant fixtures. Suites run sequentially against the shared disposable database
+to avoid unrelated fixture setup/teardown causing serializable predicate conflicts;
+concurrency tests still run their competing operations in parallel. CI provides
+PostgreSQL 16 and applies migrations before testing.
 The browser test runs against the built Next.js app with mocked tRPC responses;
 it verifies the sign-in, staff lists, payslip detail, sign-out and demo separation.
 The portal reads persisted data via the API (requires a running API and a staff
@@ -77,9 +80,40 @@ and API so the development session cookie is sent to both; set
 The real staff portal loads an employee's recorded balances and up to 100 most
 recent requests for an explicit year/status. Balance reads are read-only: they
 no longer create assumed SIL, vacation or sick credits. Existing balances,
-including legacy defaults, are **not verified entitlements**. Verified credit
-allocation/adjustment UI is not included; absent credits block paid approval.
-SIL cash-conversion previews also require a recorded balance and cannot exceed it.
+including legacy defaults, are **not verified entitlements**. Absent credits
+block paid approval. SIL cash-conversion previews also require a recorded balance
+and cannot exceed it.
+
+HR/super admins can explicitly allocate or adjust annual credits after reviewing
+policy and employee eligibility. `leaves.setCredits` requires an exact leave
+code, a whole/half-day total (0–999.5), a source reference, a 10–500-character
+reason, a loaded revision (null for a new balance), and an operation UUID. New
+codes are uppercase; existing codes cannot be renamed or duplicated by casing.
+The amount is a **new total**, not an increment. Usage is never reset/refunded;
+availability is total less used credits. New allocations open with zero recorded
+usage; approved paid requests without a balance block allocation rather than
+inventing zero usage. Importing prior/external usage is not supported by this
+form and requires manual reconciliation first. Totals below usage and inconsistent
+legacy balances are rejected for manual reconciliation. Self-credit changes are
+blocked for linked administrators; department managers/payroll specialists cannot
+allocate credits.
+
+Balance updates, append-only `LeaveCreditChange` provenance and the before/after
+audit commit together. Paid approval also increments the balance revision, so a
+stale adjustment cannot overwrite a debit. Identical committed operation replays
+return the original change without another write/audit; changed payloads or actors
+cannot reuse that operation ID. Keep the same draft/operation ID when retrying an
+uncertain response. After a conflict, explicitly discard/reload before starting
+a fresh adjustment. The editor retains its loaded snapshot during background
+refresh failures and blocks employee/year switching until save or explicit cancel.
+
+`leaves.listCreditChanges` exposes up to 100 most recent allocation/adjustment
+attestations per employee/year, with actor, source, reason and numeric snapshots.
+Approval debits remain in audit records separately. Existing balances are not
+backfilled as verified ledger entries. Unchanged totals may be explicitly recorded
+with a fresh source/reason, but neither that history nor a reference string proves
+statutory eligibility or source authenticity. Automatic accrual, carryover, leave
+usage corrections and durable source-document storage are not implemented.
 
 Staff can file requests with explicit paid/unpaid treatment, a reason, and
 Monday–Friday calendar dates (1900–2100). Whole days or one named half weekday
@@ -103,10 +137,11 @@ write absence DTRs; reconcile attendance explicitly. Drafts are not stored in th
 browser and survive background refresh failures. Browser tests mock tRPC;
 PostgreSQL tests cover persistence, tenant isolation, audit rollback and races.
 
-Deploy migration `20261002000000_leave_rejection` with `pnpm db:migrate:deploy`
-before using the updated API. It adds nullable rejection provenance columns and
-does not replace existing leave records or allocate credits. Do not run seeding
-against populated databases.
+Deploy migrations `20261002000000_leave_rejection` and
+`20261002010000_leave_credit_changes` with `pnpm db:migrate:deploy` before using
+the updated API. They add rejection provenance, a balance revision and the credit
+change table; existing credit amounts/usage remain unchanged, and no entitlement
+or verified history is fabricated. Do not run seeding against populated databases.
 
 ## Attendance and DTR
 

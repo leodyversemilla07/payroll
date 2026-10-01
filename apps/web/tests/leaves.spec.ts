@@ -43,11 +43,26 @@ async function mockLeaves(
     conflict?: boolean;
     refreshFailure?: boolean;
     blockDecision?: Promise<void>;
+    blockCredits?: Promise<void>;
+    initialUsed?: number;
+    creditConflict?: boolean;
+    commitThenError?: boolean;
+    historyFailures?: number;
   } = {},
 ) {
   let signedIn = false;
   let rows = options.empty ? [] : [{ ...original }];
-  let balanceValue = "5";
+  let totalValue = "5";
+  let usedValue = String(options.initialUsed ?? 0);
+  let balanceValue = String(Number(totalValue) - Number(usedValue));
+  let revision = 0;
+  let hasBalance = !options.empty;
+  let leaveTypeValue = "SIL";
+  let creditConflict = options.creditConflict ?? false;
+  let commitThenError = options.commitThenError ?? false;
+  let historyFailures = options.historyFailures ?? 0;
+  const changes: Record<string, unknown>[] = [];
+  const operations = new Map<string, Record<string, unknown>>();
   let balanceFailures = options.balanceFailures ?? 0;
   let requestFailures = options.requestFailures ?? 0;
   let saveFailure = options.saveFailure ?? false;
@@ -76,6 +91,20 @@ async function mockLeaves(
       options.blockDecision
     )
       await options.blockDecision;
+    if (paths.includes("leaves.setCredits") && options.blockCredits)
+      await options.blockCredits;
+    function creditBalance() {
+      return {
+        id: "balance-1",
+        employeeId: employee.id,
+        leaveType: leaveTypeValue,
+        year: 2026,
+        totalCredits: totalValue,
+        usedCredits: usedValue,
+        balance: balanceValue,
+        revision,
+      };
+    }
     const results = paths.map((path, index) => {
       calls.push(path);
       if (path === "auth.login") {
@@ -99,20 +128,13 @@ async function mockLeaves(
             (options.refreshFailure && balanceReads > 1)
           )
             return apiError("INTERNAL_SERVER_ERROR", "Read failed");
-          const balances = options.empty
-            ? []
-            : [
-                {
-                  id: "balance-1",
-                  employeeId: employee.id,
-                  leaveType: "SIL",
-                  year: 2026,
-                  totalCredits: "5",
-                  usedCredits: String(5 - Number(balanceValue)),
-                  balance: balanceValue,
-                },
-              ];
+          const balances = hasBalance ? [creditBalance()] : [];
           return { result: { data: { json: balances } } };
+        }
+        if (path === "leaves.listCreditChanges") {
+          if (historyFailures-- > 0)
+            return apiError("INTERNAL_SERVER_ERROR", "History failed");
+          return { result: { data: { json: changes } } };
         }
         requestReads++;
         if (
@@ -129,6 +151,65 @@ async function mockLeaves(
             },
           },
         };
+      }
+      if (path === "leaves.setCredits") {
+        const payload = request.postDataJSON()[String(index)].json;
+        saves.push({ path, payload });
+        const replay = operations.get(payload.operationId);
+        if (replay)
+          return {
+            result: {
+              data: {
+                json: { ...replay, replayed: true, balance: creditBalance() },
+              },
+            },
+          };
+        if (saveFailure) {
+          saveFailure = false;
+          return apiError("INTERNAL_SERVER_ERROR", "Private credit failure");
+        }
+        if (creditConflict) {
+          creditConflict = false;
+          usedValue = "1";
+          balanceValue = String(Number(totalValue) - 1);
+          revision++;
+          return apiError(
+            "CONFLICT",
+            "Leave credits changed. Reload balances before starting another adjustment.",
+          );
+        }
+        const change = {
+          id: payload.operationId,
+          kind: hasBalance ? "ADJUSTMENT" : "ALLOCATION",
+          previousTotalCredits: hasBalance ? totalValue : null,
+          totalCredits: String(payload.totalCredits),
+          usedCredits: usedValue,
+          availableBalance: String(
+            Number(payload.totalCredits) - Number(usedValue),
+          ),
+          sourceReference: payload.sourceReference,
+          reason: payload.reason,
+          actorId: user.id,
+          balance: { leaveType: payload.leaveType, year: payload.year },
+          createdAt: "2026-09-10T08:00:00.000Z",
+          revision: revision + 1,
+        };
+        totalValue = String(payload.totalCredits);
+        balanceValue = change.availableBalance;
+        leaveTypeValue = String(payload.leaveType);
+        revision++;
+        hasBalance = true;
+        changes.push(change);
+        const result = { balance: creditBalance(), change, replayed: false };
+        operations.set(payload.operationId, result);
+        if (commitThenError) {
+          commitThenError = false;
+          return apiError(
+            "INTERNAL_SERVER_ERROR",
+            "Successful commit response was lost",
+          );
+        }
+        return { result: { data: { json: result } } };
       }
       if (
         ["leaves.request", "leaves.approve", "leaves.reject"].includes(path)
@@ -173,8 +254,11 @@ async function mockLeaves(
                 rejectionReason: String(payload.rejectionReason),
                 rejectedById: user.id,
               };
-        if (path === "leaves.approve")
+        if (path === "leaves.approve") {
           balanceValue = String(Number(balanceValue) - Number(old.daysCount));
+          usedValue = String(Number(usedValue) + Number(old.daysCount));
+          revision++;
+        }
         rows = rows.map((row) => (row.id === saved.id ? saved : row));
         return { result: { data: { json: saved } } };
       }
@@ -577,6 +661,280 @@ test("mobile leave cards fit without horizontal overflow and status filters reac
       ),
     )
     .toBeTruthy();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+async function creditEditor(page: Page, allocate = false) {
+  const section = page.getByRole("region", {
+    name: "Leave management",
+    exact: true,
+  });
+  if (allocate)
+    await section
+      .getByRole("button", { name: "Allocate leave credits", exact: true })
+      .click();
+  else {
+    await section
+      .getByLabel("Recorded balance to adjust")
+      .selectOption("balance-1");
+    await section
+      .getByRole("button", { name: "Adjust recorded credits", exact: true })
+      .click();
+  }
+  const editor = page.getByRole("region", {
+    name: "Leave credit editor",
+    exact: true,
+  });
+  if (allocate) await editor.getByLabel("Credit leave type").fill("VACATION");
+  await editor.getByLabel("Credit source reference").fill("POLICY-2026-REVIEW");
+  await editor
+    .getByLabel("Credit adjustment reason")
+    .fill("Private eligibility review draft");
+  return editor;
+}
+test("HR records explicit allocation with provenance and no default amount", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { empty: true });
+  const section = await load(page);
+  const editor = await creditEditor(page, true);
+  await expect(editor.getByLabel("Total credited days")).toHaveValue("");
+  await editor.getByLabel("Total credited days").fill("5.5");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(
+    section.getByText("Leave credits recorded. Used credits were not reset."),
+  ).toBeVisible();
+  await expect(
+    section.getByText("5.5 available · 0 used · 5.5 credited day(s)"),
+  ).toBeVisible();
+  expect(saves[0]?.payload).toMatchObject({
+    employeeId: employee.id,
+    year: 2026,
+    leaveType: "VACATION",
+    totalCredits: 5.5,
+    expectedRevision: null,
+    sourceReference: "POLICY-2026-REVIEW",
+    reason: "Private eligibility review draft",
+  });
+  expect(String(saves[0]?.payload.operationId)).toMatch(/^[0-9a-f-]{36}$/);
+  await section
+    .getByRole("button", { name: "Credit change history", exact: true })
+    .click();
+  await expect(
+    section.getByText("VACATION · ALLOCATION", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Source reference: POLICY-2026-REVIEW"),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      JSON.stringify({
+        local: { ...localStorage },
+        session: { ...sessionStorage },
+      }),
+    ),
+  ).not.toContain("Private eligibility review draft");
+});
+test("adjustment keeps recorded usage and submits the loaded revision", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { initialUsed: 2.5 });
+  const section = await load(page);
+  const editor = await creditEditor(page);
+  await expect(editor.getByLabel("Credit leave type")).toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await editor.getByLabel("Total credited days").fill("4.5");
+  await expect(editor.getByText(/Available after save: 2 day/)).toBeVisible();
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(
+    section.getByText("2 available · 2.5 used · 4.5 credited day(s)"),
+  ).toBeVisible();
+  expect(saves[0]?.payload).toMatchObject({
+    expectedRevision: 0,
+    totalCredits: 4.5,
+    leaveType: "SIL",
+  });
+  expect(saves[0]?.payload).not.toHaveProperty("usedCredits");
+});
+test("credit totals below usage or finer than half-days do not submit", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { initialUsed: 2.5 });
+  await load(page);
+  const editor = await creditEditor(page);
+  for (const value of ["1", "3.25"]) {
+    await editor.getByLabel("Total credited days").fill(value);
+    await editor
+      .getByRole("button", { name: "Record leave credits", exact: true })
+      .click();
+    expect(saves).toHaveLength(0);
+  }
+});
+test("credit changes are hidden for payroll specialists and linked HR self-records", async ({
+  page,
+}) => {
+  await mockLeaves(page, { role: "PAYROLL_SPECIALIST" });
+  let section = await load(page);
+  await expect(
+    section.getByRole("button", {
+      name: "Allocate leave credits",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    section.getByRole("button", {
+      name: "Adjust recorded credits",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.unroute("**/trpc/**");
+  await mockLeaves(page, { self: true });
+  section = await load(page);
+  await expect(
+    section.getByRole("button", {
+      name: "Allocate leave credits",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
+test("lost successful credit responses retry the same operation without a duplicate", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { commitThenError: true });
+  const section = await load(page);
+  const editor = await creditEditor(page);
+  await editor.getByLabel("Total credited days").fill("6");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(editor.getByText(/outcome is uncertain/)).toBeVisible();
+  await expect(editor.getByLabel("Credit adjustment reason")).toHaveValue(
+    "Private eligibility review draft",
+  );
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(
+    section.getByText(
+      "Previously recorded credit change confirmed; no duplicate adjustment was created.",
+    ),
+  ).toBeVisible();
+  expect(saves).toHaveLength(2);
+  expect(saves[0]?.payload.operationId).toBe(saves[1]?.payload.operationId);
+  await section
+    .getByRole("button", { name: "Credit change history", exact: true })
+    .click();
+  await expect(
+    section.getByText("SIL · ADJUSTMENT", { exact: true }),
+  ).toHaveCount(1);
+});
+test("credit conflicts require explicit discard and reload before a new adjustment", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { creditConflict: true });
+  const section = await load(page);
+  let editor = await creditEditor(page);
+  await editor.getByLabel("Total credited days").fill("6");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(
+    editor.getByText(
+      "Leave credits changed. Reload balances before starting another adjustment.",
+    ),
+  ).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Record leave credits", exact: true }),
+  ).toBeDisabled();
+  await expect(section.getByLabel("Leave year")).toBeDisabled();
+  await editor
+    .getByRole("button", {
+      name: "Discard draft and reload balances",
+      exact: true,
+    })
+    .click();
+  await expect(
+    section.getByText("4 available · 1 used · 5 credited day(s)"),
+  ).toBeVisible();
+  editor = await creditEditor(page);
+  await editor.getByLabel("Total credited days").fill("6");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(section.getByText(/Leave credits recorded/)).toBeVisible();
+  expect(saves[1]?.payload.expectedRevision).toBe(1);
+  expect(saves[1]?.payload.operationId).not.toBe(saves[0]?.payload.operationId);
+});
+test("background balance failures leave the credit snapshot and draft intact", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { refreshFailure: true });
+  const section = await load(page);
+  const editor = await creditEditor(page);
+  await editor.getByLabel("Total credited days").fill("6");
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(section.getByText(/Balance refresh failed/)).toBeVisible();
+  await expect(editor.getByLabel("Credit source reference")).toHaveValue(
+    "POLICY-2026-REVIEW",
+  );
+  await expect(editor.getByLabel("Total credited days")).toHaveValue("6");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(section.getByText(/Leave credits recorded/)).toBeVisible();
+  expect(saves[0]?.payload.expectedRevision).toBe(0);
+});
+test("saving credits disables cancellation and prevents switching to leave decisions", async ({
+  page,
+}) => {
+  let release: () => void = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await mockLeaves(page, { blockCredits: blocked });
+  const section = await load(page);
+  const editor = await creditEditor(page);
+  await editor.getByLabel("Total credited days").fill("6");
+  await editor
+    .getByRole("button", { name: "Record leave credits", exact: true })
+    .click();
+  await expect(
+    editor.getByRole("button", { name: "Cancel credit editor", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    section.getByRole("button", { name: "Review approval", exact: true }),
+  ).toBeDisabled();
+  await expect(editor.getByLabel("Credit source reference")).toBeDisabled();
+  release();
+  await expect(section.getByText(/Leave credits recorded/)).toBeVisible();
+});
+test("mobile credit history has retry and fits without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockLeaves(page, { historyFailures: 1 });
+  const section = await load(page);
+  await section
+    .getByRole("button", { name: "Credit change history", exact: true })
+    .click();
+  await section
+    .getByRole("button", { name: "Retry credit history", exact: true })
+    .click();
+  await expect(
+    section.getByText("No credit changes are recorded in this history."),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

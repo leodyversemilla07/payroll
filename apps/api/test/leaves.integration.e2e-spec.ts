@@ -430,4 +430,267 @@ describe('PostgreSQL-backed leave management and decisions', () => {
         .status,
     ).toBe('DISBURSED');
   });
+
+  const creditInput = (
+    leaveType = 'VACATION',
+    totalCredits = 5.5,
+    expectedRevision: number | null = null,
+  ) => ({
+    operationId: randomUUID(),
+    employeeId: own.employee.id,
+    leaveType,
+    year: 2027,
+    totalCredits,
+    expectedRevision,
+    sourceReference: 'POLICY-2027-TEST',
+    reason: 'Reviewed test policy and employee eligibility',
+  });
+  const creditBalance = (leaveType = 'VACATION') =>
+    prisma.leaveBalance.findUniqueOrThrow({
+      where: {
+        employeeId_leaveType_year: {
+          employeeId: own.employee.id,
+          year: 2027,
+          leaveType,
+        },
+      },
+    });
+
+  it('restricts credits to HR/super-admin, blocks self changes and foreign records', async () => {
+    for (const role of [
+      Role.EMPLOYEE,
+      Role.PAYROLL_SPECIALIST,
+      Role.DEPARTMENT_MANAGER,
+    ])
+      await expect(
+        caller({
+          ...own.user,
+          role,
+          employeeId: own.employee.id,
+        }).leaves.setCredits(creditInput()),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      caller({ ...own.user, employeeId: own.employee.id }).leaves.setCredits(
+        creditInput(),
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      caller(foreign.user).leaves.setCredits(creditInput()),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      caller(foreign.user).leaves.listCreditChanges({
+        employeeId: own.employee.id,
+        year: 2027,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+  it('does not hide orphaned legacy paid usage behind a new zero-used allocation', async () => {
+    await prisma.leaveRequest.create({
+      data: {
+        employeeId: own.employee.id,
+        leaveType: 'IMPORTED',
+        startDate: new Date('2028-01-03'),
+        endDate: new Date('2028-01-03'),
+        daysCount: new Prisma.Decimal(1),
+        isPaid: true,
+        status: 'APPROVED',
+        reason: 'Legacy approved usage without a configured balance',
+      },
+    });
+    await expect(
+      caller(own.user).leaves.setCredits({
+        ...creditInput('IMPORTED', 2),
+        year: 2028,
+      }),
+    ).rejects.toMatchObject({ code: 'UNPROCESSABLE_CONTENT' });
+    expect(
+      await prisma.leaveBalance.findFirst({
+        where: {
+          employeeId: own.employee.id,
+          year: 2028,
+          leaveType: 'IMPORTED',
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('allocates explicit credits with provenance and idempotent response-loss replay', async () => {
+    const input = creditInput();
+    const result = await caller(own.user).leaves.setCredits(input);
+    expect(result).toMatchObject({
+      replayed: false,
+      balance: {
+        totalCredits: '5.5',
+        usedCredits: '0',
+        balance: '5.5',
+        revision: 1,
+      },
+      change: {
+        kind: 'ALLOCATION',
+        previousTotalCredits: null,
+        actorId: own.user.id,
+        sourceReference: input.sourceReference,
+      },
+    });
+    expect(() => superjson.stringify(result)).not.toThrow();
+    expect((await caller(own.user).leaves.setCredits(input)).replayed).toBe(
+      true,
+    );
+    expect(
+      await prisma.leaveCreditChange.count({
+        where: { balanceId: result.balance.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: result.balance.id, action: 'CREATE' },
+      }),
+    ).toBe(1);
+    await expect(
+      caller(own.user).leaves.setCredits({
+        ...input,
+        reason: 'Changed operation contents must not overwrite provenance',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(
+      await caller(own.user).leaves.listCreditChanges({
+        employeeId: own.employee.id,
+        year: 2026,
+      }),
+    ).toEqual([]);
+  });
+  it('bumps revision on approval and adjusts totals without resetting consumed credits', async () => {
+    const request = await caller(own.user).leaves.request({
+      employeeId: own.employee.id,
+      leaveType: 'VACATION',
+      startDate: '2027-01-04',
+      endDate: '2027-01-05',
+      daysCount: 1.5,
+      partialDate: '2027-01-05',
+      isPaid: true,
+      reason: 'Verified two-day schedule with a half-day',
+    });
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    expect((await creditBalance()).revision).toBe(2);
+    await expect(
+      caller(own.user).leaves.setCredits(creditInput('VACATION', 6, 1)),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const forged = {
+      ...creditInput('VACATION', 3.5, 2),
+      usedCredits: 0,
+      organizationId: foreign.org.id,
+    };
+    const result = await caller(own.user).leaves.setCredits(forged);
+    expect(result.balance).toMatchObject({
+      totalCredits: '3.5',
+      usedCredits: '1.5',
+      balance: '2',
+      revision: 3,
+    });
+    expect(result.change).toMatchObject({
+      previousTotalCredits: '5.5',
+      previousBalance: '4',
+      usedCredits: '1.5',
+      totalCredits: '3.5',
+      actorId: own.user.id,
+    });
+    await expect(
+      caller(own.user).leaves.setCredits(creditInput('VACATION', 1, 3)),
+    ).rejects.toMatchObject({ code: 'UNPROCESSABLE_CONTENT' });
+    const history = await caller({
+      ...own.user,
+      role: Role.EMPLOYEE,
+      employeeId: own.employee.id,
+    }).leaves.listCreditChanges({ employeeId: own.employee.id, year: 2027 });
+    expect(history).toHaveLength(2);
+    expect(history[0].kind).toBe('ADJUSTMENT');
+    expect(history[0].usedCredits).toBe('1.5');
+  });
+  it('rolls back allocation and adjustment if audit or provenance persistence fails', async () => {
+    jest
+      .spyOn(audit, 'record')
+      .mockRejectedValueOnce(new Error('Audit unavailable'));
+    await expect(
+      caller(own.user).leaves.setCredits(creditInput('SICK', 2)),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+    expect(
+      await prisma.leaveBalance.findFirst({
+        where: { employeeId: own.employee.id, year: 2027, leaveType: 'SICK' },
+      }),
+    ).toBeNull();
+    const existing = await creditBalance();
+    const count = await prisma.leaveCreditChange.count({
+      where: { balanceId: existing.id },
+    });
+    jest
+      .spyOn(audit, 'record')
+      .mockRejectedValueOnce(new Error('Audit unavailable'));
+    await expect(
+      caller(own.user).leaves.setCredits(creditInput('VACATION', 8, 3)),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+    // A real ledger primary-key failure after the balance update must also roll back.
+    const foreignOperation = {
+      ...creditInput('FOREIGN_TEST', 1),
+      employeeId: foreign.employee.id,
+    };
+    await caller(foreign.user).leaves.setCredits(foreignOperation);
+    await expect(
+      caller(own.user).leaves.setCredits({
+        ...creditInput('VACATION', 8, 3),
+        operationId: foreignOperation.operationId,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect((await creditBalance()).totalCredits.toString()).toBe('3.5');
+    expect((await creditBalance()).revision).toBe(3);
+    expect(
+      await prisma.leaveCreditChange.count({
+        where: { balanceId: existing.id },
+      }),
+    ).toBe(count);
+  });
+  it('allows only one concurrent allocation and one adjustment of the same loaded revision', async () => {
+    const allocations = await Promise.allSettled(
+      [creditInput('SICK', 2), creditInput('SICK', 2)].map((input) =>
+        caller(own.user).leaves.setCredits(input),
+      ),
+    );
+    expect(
+      allocations.filter((entry) => entry.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const adjustments = await Promise.allSettled(
+      [creditInput('VACATION', 4.5, 3), creditInput('VACATION', 5.5, 3)].map(
+        (input) => caller(own.user).leaves.setCredits(input),
+      ),
+    );
+    expect(
+      adjustments.filter((entry) => entry.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const recorded = await creditBalance();
+    expect(recorded.usedCredits.toString()).toBe('1.5');
+    expect(
+      recorded.balance.equals(
+        recorded.totalCredits.minus(recorded.usedCredits),
+      ),
+    ).toBe(true);
+  });
+  it('preserves consumed credits when adjustment races paid approval', async () => {
+    const request = await caller(own.user).leaves.request({
+      employeeId: own.employee.id,
+      leaveType: 'SICK',
+      startDate: '2027-02-01',
+      endDate: '2027-02-01',
+      daysCount: 1,
+      isPaid: true,
+      reason: 'Concurrent approval and credit adjustment verification',
+    });
+    const [adjustment, approval] = await Promise.allSettled([
+      caller(own.user).leaves.setCredits(creditInput('SICK', 3, 1)),
+      caller(own.user).leaves.approve({ requestId: request.id }),
+    ]);
+    expect(approval.status).toBe('fulfilled');
+    const recorded = await creditBalance('SICK');
+    expect(recorded.usedCredits.toString()).toBe('1');
+    expect(recorded.balance.equals(recorded.totalCredits.minus(1))).toBe(true);
+    expect(recorded.revision).toBe(adjustment.status === 'fulfilled' ? 3 : 2);
+  });
 });

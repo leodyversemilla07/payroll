@@ -48,6 +48,8 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
   const fileLeaveRequest = jest.fn();
   const approveLeaveRequest = jest.fn();
   const rejectLeaveRequest = jest.fn();
+  const setEmployeeLeaveCredits = jest.fn();
+  const listEmployeeCreditChanges = jest.fn();
   const record = jest.fn();
   const database = {} as Prisma.TransactionClient;
   const router = createLeavesRouter(
@@ -58,6 +60,8 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         fileLeaveRequest,
         approveLeaveRequest,
         rejectLeaveRequest,
+        setEmployeeLeaveCredits,
+        listEmployeeCreditChanges,
       },
       auditService: { record },
     } as unknown as RouterServices),
@@ -68,6 +72,41 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
     status: 'PENDING',
     daysCount: new Prisma.Decimal(0.5),
   };
+  const creditInput = {
+    operationId: requestId,
+    employeeId,
+    leaveType: 'SIL',
+    year: 2026,
+    totalCredits: 5.5,
+    expectedRevision: null,
+    sourceReference: 'POLICY-2026',
+    reason: 'Reviewed source and eligibility',
+  };
+  const creditBalance = {
+    id: requestId,
+    employeeId,
+    leaveType: 'SIL',
+    year: 2026,
+    totalCredits: new Prisma.Decimal(5.5),
+    usedCredits: new Prisma.Decimal(0),
+    balance: new Prisma.Decimal(5.5),
+    revision: 1,
+  };
+  const creditChange = {
+    id: requestId,
+    balanceId: requestId,
+    kind: 'ALLOCATION',
+    previousTotalCredits: null,
+    totalCredits: new Prisma.Decimal(5.5),
+    usedCredits: new Prisma.Decimal(0),
+    previousBalance: null,
+    availableBalance: new Prisma.Decimal(5.5),
+    previousRevision: null,
+    revision: 1,
+    actorId: 'user-1',
+    sourceReference: creditInput.sourceReference,
+    reason: creditInput.reason,
+  };
   beforeEach(() => {
     jest.resetAllMocks();
     jest
@@ -77,6 +116,27 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           database,
         ),
       );
+    listEmployeeCreditChanges.mockResolvedValue([
+      { ...creditChange, balance: { leaveType: 'SIL', year: 2026 } },
+    ]);
+    setEmployeeLeaveCredits.mockImplementation(
+      async (
+        _input,
+        audit: Parameters<LeavesService['setEmployeeLeaveCredits']>[1],
+      ) => {
+        await audit({
+          previous: null,
+          balance: creditBalance as never,
+          change: creditChange as never,
+          transaction: database,
+        });
+        return {
+          balance: creditBalance,
+          change: creditChange,
+          replayed: false,
+        };
+      },
+    );
     getEmployeeLeaveBalances.mockResolvedValue([]);
     listEmployeeLeaveRequests.mockResolvedValue([saved]);
     fileLeaveRequest.mockResolvedValue(saved);
@@ -254,6 +314,80 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
+  it.each([
+    null,
+    Role.EMPLOYEE,
+    Role.DEPARTMENT_MANAGER,
+    Role.PAYROLL_SPECIALIST,
+  ])('denies credit management to %s', async (role) => {
+    await expect(
+      router.createCaller(context(role, employeeId)).setCredits(creditInput),
+    ).rejects.toMatchObject({ code: role ? 'FORBIDDEN' : 'UNAUTHORIZED' });
+    expect(setEmployeeLeaveCredits).not.toHaveBeenCalled();
+  });
+  it.each([Role.HR_ADMIN, Role.SUPER_ADMIN])(
+    'permits %s explicit credits with session-derived actor/tenant and atomic audit',
+    async (role) => {
+      const result = await router
+        .createCaller(context(role))
+        .setCredits(creditInput);
+      expect(result).toMatchObject({
+        balance: { balance: '5.5', usedCredits: '0', revision: 1 },
+        change: {
+          totalCredits: '5.5',
+          availableBalance: '5.5',
+          previousTotalCredits: null,
+        },
+      });
+      expect(setEmployeeLeaveCredits).toHaveBeenCalledWith(
+        {
+          ...creditInput,
+          organizationId: 'org-1',
+          actorId: 'user-1',
+          actorEmployeeId: undefined,
+        },
+        expect.any(Function),
+      );
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'LeaveBalance',
+          action: 'CREATE',
+          newValue: { balance: creditBalance, change: creditChange },
+        }),
+        database,
+      );
+    },
+  );
+  it('requires bounded half-day totals, revision and source/reason before allocating', async () => {
+    const caller = router.createCaller(context(Role.HR_ADMIN));
+    for (const totalCredits of [-1, 0.25, 1000])
+      await expect(
+        caller.setCredits({ ...creditInput, totalCredits }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller.setCredits({
+        ...creditInput,
+        expectedRevision: undefined,
+      } as unknown as typeof creditInput),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller.setCredits({ ...creditInput, sourceReference: '  ' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(setEmployeeLeaveCredits).not.toHaveBeenCalled();
+  });
+  it('reads decimal-string credit history only for authorized linked employee records', async () => {
+    const caller = router.createCaller(context(Role.EMPLOYEE, employeeId));
+    expect(
+      (await caller.listCreditChanges({ employeeId, year: 2026 }))[0],
+    ).toMatchObject({ totalCredits: '5.5', usedCredits: '0' });
+    await expect(
+      caller.listCreditChanges({
+        employeeId: '33333333-3333-4333-8333-333333333333',
+        year: 2026,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('maps missing employees and audit failures to safe errors', async () => {
     getEmployeeLeaveBalances.mockRejectedValue(
       new NotFoundException('Employee not found'),

@@ -29,6 +29,7 @@ import { type FormEvent, useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { leaveSchedule } from "@/lib/leave-schedule";
 import { trpc } from "@/lib/trpc";
+import { LeaveCreditTools } from "./leave-credits";
 
 type Outputs = inferRouterOutputs<AppRouter>["leaves"];
 type Balance = Outputs["getBalances"][number];
@@ -73,6 +74,7 @@ export function LeavesSection({
     year: number;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [creditEditing, setCreditEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const year = Number(yearText);
@@ -104,7 +106,7 @@ export function LeavesSection({
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={load}>
-          <FieldSet disabled={busy}>
+          <FieldSet disabled={busy || creditEditing}>
             <FieldLegend>Load employee leave records</FieldLegend>
             <Field>
               <FieldLabel htmlFor="leave-employee">Leave employee</FieldLabel>
@@ -145,7 +147,10 @@ export function LeavesSection({
               </FieldDescription>
             )}
             {validationError && <FieldError>{validationError}</FieldError>}
-            <Button type="submit" disabled={busy || employeeListFailed}>
+            <Button
+              type="submit"
+              disabled={busy || creditEditing || employeeListFailed}
+            >
               Load leave records
             </Button>
           </FieldSet>
@@ -163,6 +168,7 @@ export function LeavesSection({
             canDecide={canDecide}
             canApproveOwn={loaded.employeeId !== actorEmployeeId}
             onBusy={setBusy}
+            onCreditEditing={setCreditEditing}
           />
         ) : (
           <p>Select an employee and load their leave year.</p>
@@ -179,6 +185,7 @@ function EmployeeLeaves({
   canDecide,
   canApproveOwn,
   onBusy,
+  onCreditEditing,
 }: {
   employeeId: string;
   year: number;
@@ -186,9 +193,11 @@ function EmployeeLeaves({
   canDecide: boolean;
   canApproveOwn: boolean;
   onBusy: (busy: boolean) => void;
+  onCreditEditing: (editing: boolean) => void;
 }) {
   const [status, setStatus] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
+  const [creditEditing, setCreditEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [decision, setDecision] = useState<{
@@ -265,8 +274,8 @@ function EmployeeLeaves({
               {balances.data.length === 0 ? (
                 <p>
                   No leave balances are recorded. Paid approval requires
-                  verified credits to be configured; this screen does not
-                  allocate entitlements.
+                  verified credits to be recorded by HR/admin. No entitlements
+                  are granted automatically.
                 </p>
               ) : (
                 <ul className="space-y-3">
@@ -289,10 +298,30 @@ function EmployeeLeaves({
           )}
         </CardContent>
       </Card>
+      <LeaveCreditTools
+        employeeId={employeeId}
+        year={year}
+        balances={balances.data}
+        readFailed={balances.isError}
+        canManage={canDecide && canApproveOwn}
+        disabled={busy || !!decision || showForm}
+        onBusy={setPending}
+        onEditing={(editing) => {
+          setCreditEditing(editing);
+          onCreditEditing(editing);
+        }}
+        onRecorded={(replayed) =>
+          setNotice(
+            replayed
+              ? "Previously recorded credit change confirmed; no duplicate adjustment was created."
+              : "Leave credits recorded. Used credits were not reset.",
+          )
+        }
+      />
       <Button
         type="button"
         variant="outline"
-        disabled={busy || !!decision}
+        disabled={busy || !!decision || creditEditing}
         aria-expanded={showForm}
         aria-controls="leave-request-form"
         onClick={() => {
@@ -423,7 +452,12 @@ function EmployeeLeaves({
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  disabled={busy || !!decision || showForm}
+                                  disabled={
+                                    busy ||
+                                    !!decision ||
+                                    showForm ||
+                                    creditEditing
+                                  }
                                   onClick={() => {
                                     setDecision({ request, kind: "approve" });
                                     setNotice(null);
@@ -440,7 +474,12 @@ function EmployeeLeaves({
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={busy || !!decision || showForm}
+                                disabled={
+                                  busy ||
+                                  !!decision ||
+                                  showForm ||
+                                  creditEditing
+                                }
                                 onClick={() => {
                                   setDecision({ request, kind: "reject" });
                                   setNotice(null);
