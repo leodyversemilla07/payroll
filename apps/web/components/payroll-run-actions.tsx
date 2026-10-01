@@ -15,6 +15,10 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -91,15 +95,19 @@ export function TriggerRunForms() {
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="run-cutoff">Cutoff</FieldLabel>
-                <select
+                <NativeSelect
                   id="run-cutoff"
                   value={sequence}
                   onChange={(event) => setSequence(event.currentTarget.value)}
-                  className="w-full rounded border border-slate-700 bg-slate-900 p-2"
+                  className="w-full"
                 >
-                  <option value="FIRST_CUTOFF">First cutoff</option>
-                  <option value="SECOND_CUTOFF">Second cutoff</option>
-                </select>
+                  <NativeSelectOption value="FIRST_CUTOFF">
+                    First cutoff
+                  </NativeSelectOption>
+                  <NativeSelectOption value="SECOND_CUTOFF">
+                    Second cutoff
+                  </NativeSelectOption>
+                </NativeSelect>
               </Field>
               <Field>
                 <FieldLabel htmlFor="run-cutoff-start">

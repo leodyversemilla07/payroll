@@ -916,9 +916,7 @@ export class ComplianceService {
               ? {
                   employerCount: preview.priorEmployerTotals.employerCount,
                   grossCents: cents(preview.priorEmployerTotals.grossCents),
-                  taxableCents: cents(
-                    preview.priorEmployerTotals.taxableCents,
-                  ),
+                  taxableCents: cents(preview.priorEmployerTotals.taxableCents),
                   withheldCents: cents(
                     preview.priorEmployerTotals.withheldCents,
                   ),
@@ -972,7 +970,7 @@ export class ComplianceService {
       },
       orderBy: { version: 'desc' },
     });
-    if (!current || current.status !== 'ISSUED') {
+    if (current?.status !== 'ISSUED') {
       throw new NotFoundException(
         'No issued certificate exists to void for this employee-year',
       );
@@ -1530,8 +1528,7 @@ export class ComplianceService {
       refundReviewCount: rows.filter((row) => row.status === 'REFUND_REVIEW')
         .length,
       settledCount: rows.filter((row) => row.status === 'SETTLED').length,
-      issuedCount: rows.filter((row) => row.issuanceStatus === 'ISSUED')
-        .length,
+      issuedCount: rows.filter((row) => row.issuanceStatus === 'ISSUED').length,
       missingRemittanceMonths,
       mismatchedRemittanceMonths,
       remittanceEvidenceIsUnverified: true as const,

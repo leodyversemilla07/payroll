@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
+import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
   Field,
   FieldDescription,
@@ -15,6 +16,10 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select";
 import { Separator } from "@workspace/ui/components/separator";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -120,13 +125,13 @@ export function YearEndTaxSection({
         ) : queue.isError ? (
           <p role="alert">
             Could not load the review queue.{" "}
-            <button
+            <Button
               type="button"
-              className="underline"
+              variant="outline"
               onClick={() => void queue.refetch()}
             >
               Retry
-            </button>
+            </Button>
           </p>
         ) : rows.length === 0 ? (
           <p>No reconciliation rows for {taxYear}.</p>
@@ -158,19 +163,21 @@ export function YearEndTaxSection({
         <div>
           <Field>
             <FieldLabel htmlFor="tax-employee">Employee</FieldLabel>
-            <select
+            <NativeSelect
               id="tax-employee"
               value={employeeId}
               onChange={(event) => setEmployeeId(event.currentTarget.value)}
-              className="w-full rounded border border-slate-700 bg-slate-900 p-2"
+              className="w-full"
             >
-              <option value="">Select an employee</option>
+              <NativeSelectOption value="">
+                Select an employee
+              </NativeSelectOption>
               {employees.map((entry) => (
-                <option key={entry.id} value={entry.id}>
+                <NativeSelectOption key={entry.id} value={entry.id}>
                   {entry.firstName} {entry.lastName} · {entry.employeeNumber}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </div>
         {selected && taxYearValid && (
@@ -208,13 +215,13 @@ function EmployeeTaxDetail({
       ) : evidence.isError ? (
         <p role="alert">
           Could not load tax evidence.{" "}
-          <button
+          <Button
             type="button"
-            className="underline"
+            variant="outline"
             onClick={() => void evidence.refetch()}
           >
             Retry
-          </button>
+          </Button>
         </p>
       ) : !evidence.data ? (
         <p>No tax evidence found.</p>
@@ -392,18 +399,15 @@ function DeclarationForms({
       <CardContent>
         <form onSubmit={submit}>
           <FieldGroup>
-            <Field>
-              <label htmlFor="declaration-has-prior">
-                <input
-                  id="declaration-has-prior"
-                  type="checkbox"
-                  checked={hasPriorEmployer}
-                  onChange={(event) =>
-                    setHasPriorEmployer(event.currentTarget.checked)
-                  }
-                />{" "}
+            <Field orientation="horizontal">
+              <Checkbox
+                id="declaration-has-prior"
+                checked={hasPriorEmployer}
+                onCheckedChange={setHasPriorEmployer}
+              />
+              <FieldLabel htmlFor="declaration-has-prior">
                 Has prior employer this year
-              </label>
+              </FieldLabel>
             </Field>
             <Field>
               <FieldLabel htmlFor="declaration-reference">
@@ -440,18 +444,15 @@ function DeclarationForms({
             {showCorrect && (
               <form onSubmit={submitCorrection} className="mt-3">
                 <FieldGroup>
-                  <Field>
-                    <label htmlFor="declaration-correct-has-prior">
-                      <input
-                        id="declaration-correct-has-prior"
-                        type="checkbox"
-                        checked={correctHasPrior}
-                        onChange={(event) =>
-                          setCorrectHasPrior(event.currentTarget.checked)
-                        }
-                      />{" "}
+                  <Field orientation="horizontal">
+                    <Checkbox
+                      id="declaration-correct-has-prior"
+                      checked={correctHasPrior}
+                      onCheckedChange={setCorrectHasPrior}
+                    />
+                    <FieldLabel htmlFor="declaration-correct-has-prior">
                       Has prior employer this year
-                    </label>
+                    </FieldLabel>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="declaration-correct-reference">

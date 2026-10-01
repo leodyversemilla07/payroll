@@ -166,6 +166,14 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
     yearEnd.getByRole("button", { name: /Ana Santos/ }),
   ).toContainText("DEFICIENCY REVIEW");
 
+  await yearEnd
+    .getByLabel("Employee", { exact: true })
+    .selectOption(employee.id);
+  await expect(
+    yearEnd.getByRole("button", { name: /Ana Santos/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await yearEnd.getByLabel("Employee", { exact: true }).selectOption("");
+  await expect(yearEnd.getByText("Prior-employer declaration:")).toHaveCount(0);
   await yearEnd.getByRole("button", { name: /Ana Santos/ }).click();
   await expect(yearEnd.getByText("Prior-employer declaration:")).toContainText(
     "has prior employer",
@@ -182,7 +190,37 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
   await expect(settlement.getByText("Settlement posted.")).toBeVisible();
   expect(mutations).toContain("compliance.recordYearEndSettlement");
 
+  const declarationCheckbox = yearEnd.getByRole("checkbox", {
+    name: "Has prior employer this year",
+  });
+  await expect(declarationCheckbox).not.toBeChecked();
+  await declarationCheckbox.focus();
+  await page.keyboard.press("Space");
+  await expect(declarationCheckbox).toBeChecked();
+  await yearEnd.locator('label[for="declaration-has-prior"]').click();
+  await expect(declarationCheckbox).not.toBeChecked();
+  await declarationCheckbox.check();
+  await yearEnd.getByLabel("Source reference").fill("HR-DECL-2026");
+  const declarationRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().includes("compliance.recordPriorEmployerDeclaration"),
+  );
+  await yearEnd.getByRole("button", { name: "Record declaration" }).click();
+  await expect(yearEnd.getByText("Declaration recorded.")).toBeVisible();
+  expect((await declarationRequest).postDataJSON()["0"].json).toMatchObject({
+    employeeId: employee.id,
+    hasPriorEmployer: true,
+    sourceReference: "HR-DECL-2026",
+  });
+
   await yearEnd.getByRole("button", { name: "Correct declaration" }).click();
+  await yearEnd
+    .getByRole("checkbox", {
+      name: "Has prior employer this year",
+    })
+    .nth(1)
+    .check();
   await yearEnd.getByLabel("Source reference").nth(1).fill("HR-DECL-2026-v2");
   await yearEnd
     .getByLabel(/Correction reason/)
@@ -190,9 +228,19 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
   await yearEnd
     .getByLabel(/Reviewer user ID/)
     .fill("11111111-1111-4111-8111-111111111111");
+  const correctionRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().includes("compliance.correctPriorEmployerDeclaration"),
+  );
   await yearEnd.getByRole("button", { name: "Record correction" }).click();
   await expect(yearEnd.getByText("Correction recorded.")).toBeVisible();
   expect(mutations).toContain("compliance.correctPriorEmployerDeclaration");
+  expect((await correctionRequest).postDataJSON()["0"].json).toMatchObject({
+    employeeId: employee.id,
+    hasPriorEmployer: true,
+    sourceReference: "HR-DECL-2026-v2",
+  });
 });
 
 // Exercise certificate issuance against mocked tRPC: a settled employee can

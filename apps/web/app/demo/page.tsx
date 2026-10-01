@@ -24,6 +24,7 @@ import {
 import { Button } from "@workspace/ui/components/button";
 import { Card } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
+import { Separator } from "@workspace/ui/components/separator";
 import {
   Sidebar,
   SidebarContent,
@@ -33,15 +34,14 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarInput,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
   SidebarProvider,
-  SidebarInset,
+  SidebarRail,
   SidebarTrigger,
 } from "@workspace/ui/components/sidebar";
-import { Separator } from "@workspace/ui/components/separator";
 import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import {
   Banknote,
@@ -865,7 +865,9 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                       PH
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-semibold">Payroll demo</span>
+                      <span className="truncate font-semibold">
+                        Payroll demo
+                      </span>
                       <span className="truncate text-xs text-sidebar-foreground/60">
                         Acme Philippines
                       </span>
@@ -916,20 +918,36 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   {
                     title: "Workspace",
                     items: [
-                      { id: "overview", label: "Overview & Metrics", icon: TrendingUp },
+                      {
+                        id: "overview",
+                        label: "Overview & Metrics",
+                        icon: TrendingUp,
+                      },
                       {
                         id: "employees",
                         label: `Employees (${employees.length})`,
                         icon: Users,
                       },
-                      { id: "timekeeping", label: "DTR & Attendance", icon: Clock },
-                      { id: "leaves-sil", label: "Leaves & SIL", icon: CalendarDays },
+                      {
+                        id: "timekeeping",
+                        label: "DTR & Attendance",
+                        icon: Clock,
+                      },
+                      {
+                        id: "leaves-sil",
+                        label: "Leaves & SIL",
+                        icon: CalendarDays,
+                      },
                     ],
                   },
                   {
                     title: "Payroll operations",
                     items: [
-                      { id: "payroll-wizard", label: "Payroll Run Wizard", icon: Banknote },
+                      {
+                        id: "payroll-wizard",
+                        label: "Payroll Run Wizard",
+                        icon: Banknote,
+                      },
                       {
                         id: "compliance",
                         label: "Bank & Tax Exports",
@@ -939,7 +957,13 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                   },
                   {
                     title: "Employee self-service",
-                    items: [{ id: "ess-portal", label: "ESS Digital Payslip", icon: Lock }],
+                    items: [
+                      {
+                        id: "ess-portal",
+                        label: "ESS Digital Payslip",
+                        icon: Lock,
+                      },
+                    ],
                   },
                 ] as const
               ).map((section) => (
@@ -1005,1016 +1029,1054 @@ EMP-2026-003,2026-08-25 23:00:00,CHECK_OUT`);
                 </span>
               </header>
 
-        {/* ========================================================================= */}
-        {/* TAB 1: OVERVIEW & METRICS */}
-        {/* ========================================================================= */}
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="bg-slate-900/80 border-slate-800 p-5">
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">
-                    Gross Payroll (Cutoff)
-                  </span>
-                  <Banknote className="size-4 text-emerald-400" />
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  {formatPHP(totalGrossCents)}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Basic + Overtime + De Minimis
-                </p>
-              </Card>
-
-              <Card className="bg-slate-900/80 border-slate-800 p-5">
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Net Take-Home Pay</span>
-                  <CreditCard className="size-4 text-blue-400" />
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  {formatPHP(totalNetCents)}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Disbursement batch total
-                </p>
-              </Card>
-
-              <Card className="bg-slate-900/80 border-slate-800 p-5">
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">
-                    Statutory Deductions (EE)
-                  </span>
-                  <ShieldCheck className="size-4 text-amber-400" />
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  {formatPHP(totalDeductionsCents)}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  SSS, PhilHealth, Pag-IBIG, Tax
-                </p>
-              </Card>
-
-              <Card className="bg-slate-900/80 border-slate-800 p-5">
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">
-                    Employer Contributions (ER)
-                  </span>
-                  <Building2 className="size-4 text-purple-400" />
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  {formatPHP(totalEmployerCostCents)}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Mandatory ER Share + EC + WISP
-                </p>
-              </Card>
-            </div>
-
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-base font-semibold text-white">
-                    Philippine Statutory Mandates Status
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Current schedules and contribution ceilings applied
-                  </p>
-                </div>
-                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full flex items-center gap-1.5">
-                  <ShieldCheck className="size-3.5" /> All Rates Up-to-Date
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-blue-400">
-                    SSS & WISP
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    15.0% Contribution
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    10% ER / 5% EE | MSC Cap: ₱35,000
-                  </div>
-                </div>
-                <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-emerald-400">
-                    PhilHealth
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    5.0% Premium Rate
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    2.5% ER / 2.5% EE | Ceiling: ₱100,000
-                  </div>
-                </div>
-                <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-amber-400">
-                    Pag-IBIG Fund
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    2.0% + 2.0% Rate
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    Base Cap: ₱10,000 | ₱200 EE / ₱200 ER
-                  </div>
-                </div>
-                <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
-                  <div className="text-xs font-semibold text-purple-400">
-                    BIR TRAIN Law Tax
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    Graduated Rates (0-35%)
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    ₱0 tax under ₱10,417 / semi-monthly
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 2: EMPLOYEES DIRECTORY */}
-        {/* ========================================================================= */}
-        {activeTab === "employees" && (
-          <Card className="bg-slate-900/80 border-slate-800 p-6 space-y-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  Employee Master Directory
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Manage compensation structures, bank accounts, and statutory
-                  numbers
-                </p>
-              </div>
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <Input
-                  type="text"
-                  placeholder="Search employee by name, ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full md:w-64"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => setIsAddEmployeeOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-500 text-white shrink-0"
-                >
-                  <Plus className="size-3.5 mr-1" /> Add Employee
-                </Button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                  <tr>
-                    <th className="py-3.5 px-4">Employee</th>
-                    <th className="py-3.5 px-4">Department & Role</th>
-                    <th className="py-3.5 px-4">Monthly Basic Rate</th>
-                    <th className="py-3.5 px-4">Tax Status</th>
-                    <th className="py-3.5 px-4">SIL Balance</th>
-                    <th className="py-3.5 px-4">Active Loan</th>
-                    <th className="py-3.5 px-4">Disbursement Bank</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                  {employees
-                    .filter(
-                      (e) =>
-                        e.name
-                          .toLowerCase()
-                          .includes(searchQuery.toLowerCase()) ||
-                        e.employeeNo
-                          .toLowerCase()
-                          .includes(searchQuery.toLowerCase()),
-                    )
-                    .map((emp) => (
-                      <tr
-                        key={emp.id}
-                        className="hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="py-3 px-4 font-medium text-white">
-                          <div>{emp.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            {emp.employeeNo}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div>{emp.role}</div>
-                          <div className="text-[11px] text-slate-500">
-                            {emp.department}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-emerald-400">
-                          {formatPHP(emp.monthlyBasicRateCents)}
-                        </td>
-                        <td className="py-3 px-4">
-                          {emp.isMinimumWageEarner ? (
-                            <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
-                              Minimum Wage (Tax Exempt)
-                            </span>
-                          ) : (
-                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
-                              TRAIN Graduated
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 font-mono">
-                          <span className="text-purple-400 font-semibold">
-                            {emp.silBalanceDays.toFixed(1)} Days
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-[11px]">
-                          {emp.activeLoanCents > 0n ? (
-                            <span className="text-amber-400 font-medium">
-                              {formatPHP(emp.activeLoanCents)} Bal
-                            </span>
-                          ) : (
-                            <span className="text-slate-500">None</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-200">
-                            {emp.bankName}
-                          </div>
-                          <div className="font-mono text-[11px] text-slate-500">
-                            {emp.bankAccount}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              onClick={() => {
-                                setLoanForm({
-                                  ...loanForm,
-                                  employeeId: emp.id,
-                                });
-                                setIsLoanModalOpen(true);
-                              }}
-                              className="border-slate-700 hover:bg-slate-800 text-xs"
-                            >
-                              Add Loan
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedFinalPayEmpId(emp.id);
-                                setIsFinalPayModalOpen(true);
-                              }}
-                              className="border-rose-900/60 text-rose-400 hover:bg-rose-950/40 text-xs"
-                            >
-                              Final Pay
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 3: DAILY TIME RECORDS (DTR) */}
-        {/* ========================================================================= */}
-        {activeTab === "timekeeping" && (
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  Daily Time Records & Attendance Logs
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Biometric clock punches, tardiness, overtime, and night shift
-                  differentials
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsBiometricsModalOpen(true)}
-                  className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
-                >
-                  <FileSpreadsheet className="size-3.5 mr-1.5" /> Import
-                  Biometrics CSV
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => setIsDtrModalOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
-                >
-                  <Plus className="size-3.5 mr-1" /> Record / Adjust Attendance
-                </Button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                  <tr>
-                    <th className="py-3.5 px-4">Employee</th>
-                    <th className="py-3.5 px-4">Regular Hours</th>
-                    <th className="py-3.5 px-4">Tardiness / Lates</th>
-                    <th className="py-3.5 px-4">Overtime Hours</th>
-                    <th className="py-3.5 px-4">Night Diff (10PM-6AM)</th>
-                    <th className="py-3.5 px-4 text-right">Approval Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                  {employees.map((emp) => (
-                    <tr
-                      key={emp.id}
-                      className="hover:bg-slate-800/40 transition-colors"
-                    >
-                      <td className="py-3 px-4 font-medium text-white">
-                        <div>{emp.name}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {emp.employeeNo}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {emp.attendance.regularHoursWorked} hrs
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {emp.attendance.tardinessMinutes > 0 ? (
-                          <span className="text-rose-400 font-semibold">
-                            {emp.attendance.tardinessMinutes} mins
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">0 mins</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {emp.attendance.regularOvertimeHours > 0 ? (
-                          <span className="text-emerald-400 font-semibold">
-                            +{emp.attendance.regularOvertimeHours} hrs (125%)
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">0 hrs</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {emp.attendance.regularNightDiffHours > 0 ? (
-                          <span className="text-purple-400 font-semibold">
-                            +{emp.attendance.regularNightDiffHours} hrs (+10%)
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">0 hrs</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
-                          Approved
+              {/* ========================================================================= */}
+              {/* TAB 1: OVERVIEW & METRICS */}
+              {/* ========================================================================= */}
+              {activeTab === "overview" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card className="bg-slate-900/80 border-slate-800 p-5">
+                      <div className="flex items-center justify-between text-slate-400 mb-2">
+                        <span className="text-xs font-medium">
+                          Gross Payroll (Cutoff)
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                        <Banknote className="size-4 text-emerald-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        {formatPHP(totalGrossCents)}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Basic + Overtime + De Minimis
+                      </p>
+                    </Card>
 
-        {/* ========================================================================= */}
-        {/* TAB 4: LEAVES & SIL MONETIZATION */}
-        {/* ========================================================================= */}
-        {activeTab === "leaves-sil" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
-                <div className="text-xs font-semibold text-purple-400 flex items-center justify-between">
-                  <span>Mandatory SIL (DOLE Art. 95)</span>
-                  <CalendarDays className="size-4" />
-                </div>
-                <div className="text-xl font-bold text-white mt-1">
-                  5 Days / Year
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Legally convertible to cash at year-end
-                </p>
-              </div>
+                    <Card className="bg-slate-900/80 border-slate-800 p-5">
+                      <div className="flex items-center justify-between text-slate-400 mb-2">
+                        <span className="text-xs font-medium">
+                          Net Take-Home Pay
+                        </span>
+                        <CreditCard className="size-4 text-blue-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        {formatPHP(totalNetCents)}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Disbursement batch total
+                      </p>
+                    </Card>
 
-              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
-                <div className="text-xs font-semibold text-blue-400 flex items-center justify-between">
-                  <span>Vacation Leave (VL)</span>
-                  <Calendar className="size-4" />
-                </div>
-                <div className="text-xl font-bold text-white mt-1">
-                  10 Days / Year
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Company-provided paid annual leave
-                </p>
-              </div>
+                    <Card className="bg-slate-900/80 border-slate-800 p-5">
+                      <div className="flex items-center justify-between text-slate-400 mb-2">
+                        <span className="text-xs font-medium">
+                          Statutory Deductions (EE)
+                        </span>
+                        <ShieldCheck className="size-4 text-amber-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        {formatPHP(totalDeductionsCents)}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        SSS, PhilHealth, Pag-IBIG, Tax
+                      </p>
+                    </Card>
 
-              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
-                <div className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
-                  <span>Sick Leave (SL)</span>
-                  <ShieldCheck className="size-4" />
-                </div>
-                <div className="text-xl font-bold text-white mt-1">
-                  5 Days / Year
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Medical recuperation & doctor certificate
-                </p>
-              </div>
+                    <Card className="bg-slate-900/80 border-slate-800 p-5">
+                      <div className="flex items-center justify-between text-slate-400 mb-2">
+                        <span className="text-xs font-medium">
+                          Employer Contributions (ER)
+                        </span>
+                        <Building2 className="size-4 text-purple-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        {formatPHP(totalEmployerCostCents)}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Mandatory ER Share + EC + WISP
+                      </p>
+                    </Card>
+                  </div>
 
-              <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
-                <div className="text-xs font-semibold text-amber-400 flex items-center justify-between">
-                  <span>BIR De Minimis Exemption</span>
-                  <Coins className="size-4" />
-                </div>
-                <div className="text-xl font-bold text-white mt-1">
-                  Max 12 Days
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  100% Tax-Exempt leave cash conversion
-                </p>
-              </div>
-            </div>
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="text-base font-semibold text-white">
+                          Philippine Statutory Mandates Status
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Current schedules and contribution ceilings applied
+                        </p>
+                      </div>
+                      <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full flex items-center gap-1.5">
+                        <ShieldCheck className="size-3.5" /> All Rates
+                        Up-to-Date
+                      </span>
+                    </div>
 
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-base font-semibold text-white">
-                    Leave Requests & Statutory Absence Ledger
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Track approved paid leaves, unpaid leave (LWOP), and SIL
-                    credits
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsSilModalOpen(true)}
-                    className="border-slate-700 hover:bg-slate-800 text-xs text-amber-400"
-                  >
-                    <Coins className="size-3.5 mr-1.5" /> Monetize Unused SIL to
-                    Cash
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setIsLeaveModalOpen(true)}
-                    className="bg-purple-600 hover:bg-purple-500 text-white"
-                  >
-                    <Plus className="size-3.5 mr-1" /> File Leave Request
-                  </Button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                    <tr>
-                      <th className="py-3.5 px-4">Employee</th>
-                      <th className="py-3.5 px-4">Leave Type</th>
-                      <th className="py-3.5 px-4">Inclusive Dates</th>
-                      <th className="py-3.5 px-4">Duration</th>
-                      <th className="py-3.5 px-4">Pay Status</th>
-                      <th className="py-3.5 px-4">Reason</th>
-                      <th className="py-3.5 px-4 text-right">
-                        Approval Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                    {leaveRequests.map((req) => (
-                      <tr
-                        key={req.id}
-                        className="hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="py-3 px-4 font-medium text-white">
-                          {req.employeeName}
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-purple-400">
-                          {req.leaveType}
-                        </td>
-                        <td className="py-3 px-4 font-mono text-slate-400">
-                          {req.startDate} to {req.endDate}
-                        </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-white">
-                          {req.daysCount} Day(s)
-                        </td>
-                        <td className="py-3 px-4">
-                          {req.isPaid ? (
-                            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
-                              Paid Leave
-                            </span>
-                          ) : (
-                            <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
-                              Unpaid (LWOP)
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-slate-400">
-                          {req.reason}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
-                            {req.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 5: PAYROLL RUN WIZARD */}
-        {/* ========================================================================= */}
-        {activeTab === "payroll-wizard" && (
-          <div className="space-y-6">
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-medium uppercase">
-                  Active Cutoff
-                </span>
-                <h2 className="text-lg font-bold text-white mt-1">
-                  {selectedCutoff === "FIRST_CUTOFF"
-                    ? "1st Cutoff (Aug 1 - 15, 2026)"
-                    : "2nd Cutoff (Aug 16 - 31, 2026)"}
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Statutory Deductions (SSS, PhilHealth, Pag-IBIG) & TRAIN Law
-                  Withholding Taxes will be applied.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => {
-                    setPayrollStatus("RUNNING");
-                    setTimeout(() => {
-                      setPayrollStatus("COMPLETED");
-                      showToast(
-                        "🎉 Payroll Run Finalized and ready for Bank Disbursement!",
-                      );
-                    }, 800);
-                  }}
-                  disabled={payrollStatus === "RUNNING"}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-                >
-                  <Play className="size-3.5 mr-1.5" />
-                  {payrollStatus === "RUNNING"
-                    ? "Computing Engine..."
-                    : "Finalize & Disburse Run"}
-                </Button>
-              </div>
-            </div>
-
-            {payrollStatus === "COMPLETED" && (
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-emerald-400 text-xs">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  <span>
-                    Payroll run finalized successfully! Payslips generated and
-                    ready for disbursement.
-                  </span>
-                </div>
-                <Button
-                  size="xs"
-                  onClick={() => setActiveTab("compliance")}
-                  variant="outline"
-                  className="border-emerald-500/30 text-emerald-300"
-                >
-                  View Bank Transmittal Files
-                </Button>
-              </div>
-            )}
-
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                    <tr>
-                      <th className="py-3 px-3">Employee</th>
-                      <th className="py-3 px-3">Basic Pay</th>
-                      <th className="py-3 px-3">Overtime / Premiums</th>
-                      <th className="py-3 px-3">De Minimis & SIL</th>
-                      <th className="py-3 px-3">Gross Pay</th>
-                      <th className="py-3 px-3">SSS & WISP</th>
-                      <th className="py-3 px-3">PhilHealth</th>
-                      <th className="py-3 px-3">Pag-IBIG</th>
-                      <th className="py-3 px-3">Withholding Tax</th>
-                      <th className="py-3 px-3">Net Take-Home</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                    {computedPayrollResults.map(({ employee, calc }) => (
-                      <tr
-                        key={employee.id}
-                        className="hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="py-3 px-3 font-medium text-white">
-                          {employee.name}
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {employee.employeeNo}
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 font-mono">
-                          {formatPHP(calc.basicPayForPeriodCents)}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-emerald-400">
-                          {calc.totalPremiumPayCents > 0n
-                            ? `+${formatPHP(calc.totalPremiumPayCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-purple-400">
-                          {calc.nonTaxableAllowancesCents > 0n
-                            ? `+${formatPHP(calc.nonTaxableAllowancesCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono font-semibold text-white">
-                          {formatPHP(calc.grossPayCents)}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-amber-400">
-                          {calc.sssContribution.employeeShareCents > 0n
-                            ? `-${formatPHP(calc.sssContribution.employeeShareCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-amber-400">
-                          {calc.philhealthContribution.employeeShareCents > 0n
-                            ? `-${formatPHP(calc.philhealthContribution.employeeShareCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-amber-400">
-                          {calc.pagibigContribution.employeeShareCents > 0n
-                            ? `-${formatPHP(calc.pagibigContribution.employeeShareCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-rose-400">
-                          {calc.withholdingTaxCents > 0n
-                            ? `-${formatPHP(calc.withholdingTaxCents)}`
-                            : "₱0.00"}
-                        </td>
-                        <td className="py-3 px-3 font-mono font-bold text-blue-400 bg-blue-500/5">
-                          {formatPHP(calc.netPayCents)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 6: GOVERNMENT & BANKING EXPORTS */}
-        {/* ========================================================================= */}
-        {activeTab === "compliance" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <CreditCard className="size-5 text-blue-400" />
-                <div>
-                  <h3 className="text-sm font-semibold text-white">
-                    Bank Batch Transmittals
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Export pre-formatted direct deposit transmittal files
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                {[
-                  {
-                    name: "BDO Electronic Payroll (.csv)",
-                    bank: "BDO",
-                    total: formatPHP(totalNetCents),
-                  },
-                  {
-                    name: "BPI ExpressLink / BizLink (.csv)",
-                    bank: "BPI",
-                    total: formatPHP(totalNetCents),
-                  },
-                  {
-                    name: "UnionBank The Portal (.csv)",
-                    bank: "UnionBank",
-                    total: formatPHP(totalNetCents),
-                  },
-                  {
-                    name: "Metrobank Direct Export (.csv)",
-                    bank: "Metrobank",
-                    total: formatPHP(totalNetCents),
-                  },
-                ].map((b) => (
-                  <div
-                    key={b.name}
-                    className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
-                  >
-                    <div>
-                      <div className="font-medium text-white">{b.name}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {employees.length} Records • Total {b.total}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
+                        <div className="text-xs font-semibold text-blue-400">
+                          SSS & WISP
+                        </div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          15.0% Contribution
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          10% ER / 5% EE | MSC Cap: ₱35,000
+                        </div>
+                      </div>
+                      <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
+                        <div className="text-xs font-semibold text-emerald-400">
+                          PhilHealth
+                        </div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          5.0% Premium Rate
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          2.5% ER / 2.5% EE | Ceiling: ₱100,000
+                        </div>
+                      </div>
+                      <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
+                        <div className="text-xs font-semibold text-amber-400">
+                          Pag-IBIG Fund
+                        </div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          2.0% + 2.0% Rate
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          Base Cap: ₱10,000 | ₱200 EE / ₱200 ER
+                        </div>
+                      </div>
+                      <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl">
+                        <div className="text-xs font-semibold text-purple-400">
+                          BIR TRAIN Law Tax
+                        </div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          Graduated Rates (0-35%)
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          ₱0 tax under ₱10,417 / semi-monthly
+                        </div>
                       </div>
                     </div>
-                    <Button
-                      size="xs"
-                      onClick={() => exportBankTransmittal(b.bank)}
-                      variant="outline"
-                      className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
-                    >
-                      <Download className="size-3 mr-1" /> Download
-                    </Button>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <FileCheck2 className="size-5 text-purple-400" />
-                <div>
-                  <h3 className="text-sm font-semibold text-white">
-                    Philippine Regulatory Returns
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Generate official BIR, SSS, PhilHealth & Pag-IBIG files
-                  </p>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2 pt-2">
-                {[
-                  {
-                    name: "BIR Form 1601-C Summary",
-                    desc: "Monthly Remittance Return of Income Taxes",
-                    action: () => exportBir1601C(),
-                  },
-                  {
-                    name: "Demo tax reconciliation (individual)",
-                    desc: "Illustrative annual totals only — not BIR Form 2316",
-                    action: () => setIsBir2316ModalOpen(true),
-                  },
-                  {
-                    name: "Demo annual tax summary (batch)",
-                    desc: "Illustrative data only — not a BIR certificate",
-                    action: () => {
-                      const text = [
-                        "DEMO ANNUAL TAX SUMMARY - NOT BIR FORM 2316 - DO NOT FILE",
-                        `Employer: Acme Philippines Technologies Inc. (TIN: 123-456-789-000)`,
-                        "----------------------------------------------------------------",
-                        ...computedPayrollResults.map(
-                          (r) =>
-                            `Employee: ${r.employee.name} | TIN: ${r.employee.tin} | Gross Annualized: ${formatPHP(r.employee.monthlyBasicRateCents * 12n)} | Tax Status: ${r.employee.isMinimumWageEarner ? "MWE (EXEMPT)" : "GRADUATED"}`,
-                        ),
-                      ].join("\r\n");
-                      downloadFile(
-                        "DEMO_Annual_Tax_Summary.txt",
-                        text,
-                        "text/plain;charset=utf-8;",
-                      );
-                      showToast("Downloaded demo-only tax summary");
-                    },
-                  },
-                  {
-                    name: "SSS R-3 Transmittal Summary",
-                    desc: "Monthly SSS Contribution Collection List",
-                    action: () => {
-                      const text = [
-                        "SSS R-3 MONTHLY COLLECTION LIST",
-                        "Employer SSS: 03-9876543-2 | Acme Philippines Technologies Inc.",
-                        "SS_Number,Employee_Name,EE_Share,ER_Share,EC_Share,Total",
-                        ...computedPayrollResults.map(
-                          (r) =>
-                            `"${r.employee.sssNo}","${r.employee.name}",${(Number(r.calc.sssContribution.employeeShareCents) / 100).toFixed(2)},${(Number(r.calc.sssContribution.employerShareCents) / 100).toFixed(2)},30.00,${(Number(r.calc.sssContribution.totalCents) / 100).toFixed(2)}`,
-                        ),
-                      ].join("\r\n");
-                      downloadFile("SSS_R3_Monthly_Collection.csv", text);
-                      showToast("📥 Exported SSS R-3 Collection Schedule!");
-                    },
-                  },
-                  {
-                    name: "DOLE 13th Month Pay Report (PD 851)",
-                    desc: "Mandatory Annual Compliance Report for DOLE BWC / ERS",
-                    action: () => setIs13thMonthModalOpen(true),
-                  },
-                ].map((g) => (
-                  <div
-                    key={g.name}
-                    className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
-                  >
+              {/* ========================================================================= */}
+              {/* TAB 2: EMPLOYEES DIRECTORY */}
+              {/* ========================================================================= */}
+              {activeTab === "employees" && (
+                <Card className="bg-slate-900/80 border-slate-800 p-6 space-y-4">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
-                      <div className="font-medium text-white">{g.name}</div>
-                      <div className="text-[11px] text-slate-500">{g.desc}</div>
+                      <h2 className="text-base font-semibold text-white">
+                        Employee Master Directory
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Manage compensation structures, bank accounts, and
+                        statutory numbers
+                      </p>
                     </div>
-                    <Button
-                      size="xs"
-                      onClick={g.action}
-                      variant="outline"
-                      className="border-slate-700 hover:bg-slate-800 text-xs text-purple-400"
-                    >
-                      <Download className="size-3 mr-1" /> Generate
-                    </Button>
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                      <Input
+                        type="text"
+                        placeholder="Search employee by name, ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full md:w-64"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => setIsAddEmployeeOpen(true)}
+                        className="bg-blue-600 hover:bg-blue-500 text-white shrink-0"
+                      >
+                        <Plus className="size-3.5 mr-1" /> Add Employee
+                      </Button>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* ========================================================================= */}
-        {/* TAB 7: EMPLOYEE SELF-SERVICE (ESS) */}
-        {/* ========================================================================= */}
-        {activeTab === "ess-portal" && (
-          <div className="max-w-2xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div>
-                <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">
-                  Employee Self-Service (ESS)
-                </span>
-                <h3 className="text-lg font-bold text-white mt-1">
-                  Digital Payslip Preview
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Pay Period: Aug 16 – 31, 2026
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl font-mono">
-                <Lock className="size-3 text-amber-400" /> Password: DOB
-                (MMDDYYYY)
-              </div>
-            </div>
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                        <tr>
+                          <th className="py-3.5 px-4">Employee</th>
+                          <th className="py-3.5 px-4">Department & Role</th>
+                          <th className="py-3.5 px-4">Monthly Basic Rate</th>
+                          <th className="py-3.5 px-4">Tax Status</th>
+                          <th className="py-3.5 px-4">SIL Balance</th>
+                          <th className="py-3.5 px-4">Active Loan</th>
+                          <th className="py-3.5 px-4">Disbursement Bank</th>
+                          <th className="py-3.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                        {employees
+                          .filter(
+                            (e) =>
+                              e.name
+                                .toLowerCase()
+                                .includes(searchQuery.toLowerCase()) ||
+                              e.employeeNo
+                                .toLowerCase()
+                                .includes(searchQuery.toLowerCase()),
+                          )
+                          .map((emp) => (
+                            <tr
+                              key={emp.id}
+                              className="hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td className="py-3 px-4 font-medium text-white">
+                                <div>{emp.name}</div>
+                                <div className="text-[11px] text-slate-500 font-mono">
+                                  {emp.employeeNo}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div>{emp.role}</div>
+                                <div className="text-[11px] text-slate-500">
+                                  {emp.department}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 font-mono font-semibold text-emerald-400">
+                                {formatPHP(emp.monthlyBasicRateCents)}
+                              </td>
+                              <td className="py-3 px-4">
+                                {emp.isMinimumWageEarner ? (
+                                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                                    Minimum Wage (Tax Exempt)
+                                  </span>
+                                ) : (
+                                  <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                                    TRAIN Graduated
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-mono">
+                                <span className="text-purple-400 font-semibold">
+                                  {emp.silBalanceDays.toFixed(1)} Days
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px]">
+                                {emp.activeLoanCents > 0n ? (
+                                  <span className="text-amber-400 font-medium">
+                                    {formatPHP(emp.activeLoanCents)} Bal
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500">None</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="font-medium text-slate-200">
+                                  {emp.bankName}
+                                </div>
+                                <div className="font-mono text-[11px] text-slate-500">
+                                  {emp.bankAccount}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setLoanForm({
+                                        ...loanForm,
+                                        employeeId: emp.id,
+                                      });
+                                      setIsLoanModalOpen(true);
+                                    }}
+                                    className="border-slate-700 hover:bg-slate-800 text-xs"
+                                  >
+                                    Add Loan
+                                  </Button>
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedFinalPayEmpId(emp.id);
+                                      setIsFinalPayModalOpen(true);
+                                    }}
+                                    className="border-rose-900/60 text-rose-400 hover:bg-rose-950/40 text-xs"
+                                  >
+                                    Final Pay
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
 
-            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
-              <div>
-                <div className="text-slate-500 text-[10px] uppercase">
-                  Employee Name
-                </div>
-                <div className="font-semibold text-white">Juan Dela Cruz</div>
-                <div className="text-slate-500 font-mono text-[11px]">
-                  EMP-2026-001
-                </div>
-              </div>
-              <div>
-                <div className="text-slate-500 text-[10px] uppercase">
-                  Department / Position
-                </div>
-                <div className="font-semibold text-white">
-                  Software Engineering
-                </div>
-                <div className="text-slate-400 text-[11px]">
-                  Senior Full-Stack Engineer
-                </div>
-              </div>
-            </div>
+              {/* ========================================================================= */}
+              {/* TAB 3: DAILY TIME RECORDS (DTR) */}
+              {/* ========================================================================= */}
+              {activeTab === "timekeeping" && (
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">
+                        Daily Time Records & Attendance Logs
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Biometric clock punches, tardiness, overtime, and night
+                        shift differentials
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsBiometricsModalOpen(true)}
+                        className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
+                      >
+                        <FileSpreadsheet className="size-3.5 mr-1.5" /> Import
+                        Biometrics CSV
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setIsDtrModalOpen(true)}
+                        className="bg-blue-600 hover:bg-blue-500 text-white"
+                      >
+                        <Plus className="size-3.5 mr-1" /> Record / Adjust
+                        Attendance
+                      </Button>
+                    </div>
+                  </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-                  Earnings
-                </h4>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">
-                    Basic Pay (Semi-Monthly)
-                  </span>
-                  <span className="font-mono text-white font-medium">
-                    ₱32,500.00
-                  </span>
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                        <tr>
+                          <th className="py-3.5 px-4">Employee</th>
+                          <th className="py-3.5 px-4">Regular Hours</th>
+                          <th className="py-3.5 px-4">Tardiness / Lates</th>
+                          <th className="py-3.5 px-4">Overtime Hours</th>
+                          <th className="py-3.5 px-4">Night Diff (10PM-6AM)</th>
+                          <th className="py-3.5 px-4 text-right">
+                            Approval Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                        {employees.map((emp) => (
+                          <tr
+                            key={emp.id}
+                            className="hover:bg-slate-800/40 transition-colors"
+                          >
+                            <td className="py-3 px-4 font-medium text-white">
+                              <div>{emp.name}</div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                {emp.employeeNo}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono">
+                              {emp.attendance.regularHoursWorked} hrs
+                            </td>
+                            <td className="py-3 px-4 font-mono">
+                              {emp.attendance.tardinessMinutes > 0 ? (
+                                <span className="text-rose-400 font-semibold">
+                                  {emp.attendance.tardinessMinutes} mins
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">0 mins</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono">
+                              {emp.attendance.regularOvertimeHours > 0 ? (
+                                <span className="text-emerald-400 font-semibold">
+                                  +{emp.attendance.regularOvertimeHours} hrs
+                                  (125%)
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">0 hrs</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono">
+                              {emp.attendance.regularNightDiffHours > 0 ? (
+                                <span className="text-purple-400 font-semibold">
+                                  +{emp.attendance.regularNightDiffHours} hrs
+                                  (+10%)
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">0 hrs</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                                Approved
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">
-                    Regular Overtime (4 hrs)
-                  </span>
-                  <span className="font-mono text-emerald-400 font-medium">
-                    +₱1,556.52
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">
-                    Rice Subsidy (De Minimis)
-                  </span>
-                  <span className="font-mono text-emerald-400 font-medium">
-                    +₱1,000.00
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs pt-2 border-t border-slate-800 font-bold">
-                  <span className="text-white">Gross Pay</span>
-                  <span className="font-mono text-white">₱35,056.52</span>
-                </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-                  Deductions
-                </h4>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">Tardiness (15 mins)</span>
-                  <span className="font-mono text-rose-400">-₱97.28</span>
-                </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">
-                    SSS Contribution & WISP
-                  </span>
-                  <span className="font-mono text-amber-400">-₱1,750.00</span>
-                </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">PhilHealth (2.5%)</span>
-                  <span className="font-mono text-amber-400">-₱1,625.00</span>
-                </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">Pag-IBIG Fund</span>
-                  <span className="font-mono text-amber-400">-₱200.00</span>
-                </div>
-                <div className="flex justify-between text-xs py-1">
-                  <span className="text-slate-300">SSS Salary Loan</span>
-                  <span className="font-mono text-slate-300">-₱500.00</span>
-                </div>
-                <div className="flex justify-between text-xs pt-2 border-t border-slate-800 font-bold">
-                  <span className="text-white">Total Deductions</span>
-                  <span className="font-mono text-rose-400">-₱4,172.28</span>
-                </div>
-              </div>
-            </div>
+              {/* ========================================================================= */}
+              {/* TAB 4: LEAVES & SIL MONETIZATION */}
+              {/* ========================================================================= */}
+              {activeTab === "leaves-sil" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                      <div className="text-xs font-semibold text-purple-400 flex items-center justify-between">
+                        <span>Mandatory SIL (DOLE Art. 95)</span>
+                        <CalendarDays className="size-4" />
+                      </div>
+                      <div className="text-xl font-bold text-white mt-1">
+                        5 Days / Year
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Legally convertible to cash at year-end
+                      </p>
+                    </div>
 
-            <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-blue-400 uppercase font-bold">
-                  Net Take-Home Pay
-                </span>
-                <div className="text-2xl font-black text-white font-mono">
-                  ₱30,884.24
+                    <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                      <div className="text-xs font-semibold text-blue-400 flex items-center justify-between">
+                        <span>Vacation Leave (VL)</span>
+                        <Calendar className="size-4" />
+                      </div>
+                      <div className="text-xl font-bold text-white mt-1">
+                        10 Days / Year
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Company-provided paid annual leave
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                      <div className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
+                        <span>Sick Leave (SL)</span>
+                        <ShieldCheck className="size-4" />
+                      </div>
+                      <div className="text-xl font-bold text-white mt-1">
+                        5 Days / Year
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Medical recuperation & doctor certificate
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+                      <div className="text-xs font-semibold text-amber-400 flex items-center justify-between">
+                        <span>BIR De Minimis Exemption</span>
+                        <Coins className="size-4" />
+                      </div>
+                      <div className="text-xl font-bold text-white mt-1">
+                        Max 12 Days
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        100% Tax-Exempt leave cash conversion
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-base font-semibold text-white">
+                          Leave Requests & Statutory Absence Ledger
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Track approved paid leaves, unpaid leave (LWOP), and
+                          SIL credits
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsSilModalOpen(true)}
+                          className="border-slate-700 hover:bg-slate-800 text-xs text-amber-400"
+                        >
+                          <Coins className="size-3.5 mr-1.5" /> Monetize Unused
+                          SIL to Cash
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setIsLeaveModalOpen(true)}
+                          className="bg-purple-600 hover:bg-purple-500 text-white"
+                        >
+                          <Plus className="size-3.5 mr-1" /> File Leave Request
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                          <tr>
+                            <th className="py-3.5 px-4">Employee</th>
+                            <th className="py-3.5 px-4">Leave Type</th>
+                            <th className="py-3.5 px-4">Inclusive Dates</th>
+                            <th className="py-3.5 px-4">Duration</th>
+                            <th className="py-3.5 px-4">Pay Status</th>
+                            <th className="py-3.5 px-4">Reason</th>
+                            <th className="py-3.5 px-4 text-right">
+                              Approval Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                          {leaveRequests.map((req) => (
+                            <tr
+                              key={req.id}
+                              className="hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td className="py-3 px-4 font-medium text-white">
+                                {req.employeeName}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-purple-400">
+                                {req.leaveType}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-slate-400">
+                                {req.startDate} to {req.endDate}
+                              </td>
+                              <td className="py-3 px-4 font-mono font-semibold text-white">
+                                {req.daysCount} Day(s)
+                              </td>
+                              <td className="py-3 px-4">
+                                {req.isPaid ? (
+                                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                                    Paid Leave
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-medium">
+                                    Unpaid (LWOP)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-slate-400">
+                                {req.reason}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                                  {req.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedBir2316EmpId(
-                      (employees[0] ?? INITIAL_EMPLOYEES[0]).id,
-                    );
-                    setIsBir2316ModalOpen(true);
-                  }}
-                  className="border-purple-500/30 text-purple-300 hover:bg-purple-950/40 text-xs"
-                >
-                  <FileText className="size-3.5 mr-1.5 text-purple-400" /> View
-                  BIR Form 2316
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const content = [
-                      "===========================================================",
-                      "            ACME PHILIPPINES TECHNOLOGIES INC.            ",
-                      "                OFFICIAL DIGITAL PAYSLIP                  ",
-                      "===========================================================",
-                      "Employee: Juan Dela Cruz (EMP-2026-001)",
-                      "Department: Software Engineering",
-                      "Pay Period: Aug 16 - 31, 2026",
-                      "PIN Security: Password Encrypted",
-                      "-----------------------------------------------------------",
-                      "EARNINGS:",
-                      "  Basic Pay: PHP 32,500.00",
-                      "  Overtime (4 hrs): PHP 1,556.52",
-                      "  De Minimis (Rice): PHP 1,000.00",
-                      "  GROSS PAY: PHP 35,056.52",
-                      "-----------------------------------------------------------",
-                      "DEDUCTIONS:",
-                      "  Tardiness (15m): PHP 97.28",
-                      "  SSS & WISP: PHP 1,750.00",
-                      "  PhilHealth: PHP 1,625.00",
-                      "  Pag-IBIG: PHP 200.00",
-                      "  SSS Salary Loan: PHP 500.00",
-                      "  TOTAL DEDUCTIONS: PHP 4,172.28",
-                      "-----------------------------------------------------------",
-                      "NET TAKE-HOME PAY: PHP 30,884.24",
-                      "===========================================================",
-                    ].join("\r\n");
-                    downloadFile(
-                      "Payslip_Juan_Dela_Cruz_Aug2026.txt",
-                      content,
-                      "text/plain;charset=utf-8;",
-                    );
-                    showToast("📥 Exported Official Payslip (Protected)!");
-                  }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
-                >
-                  <Download className="size-3.5 mr-1.5" /> Download Payslip
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
+
+              {/* ========================================================================= */}
+              {/* TAB 5: PAYROLL RUN WIZARD */}
+              {/* ========================================================================= */}
+              {activeTab === "payroll-wizard" && (
+                <div className="space-y-6">
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                      <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-medium uppercase">
+                        Active Cutoff
+                      </span>
+                      <h2 className="text-lg font-bold text-white mt-1">
+                        {selectedCutoff === "FIRST_CUTOFF"
+                          ? "1st Cutoff (Aug 1 - 15, 2026)"
+                          : "2nd Cutoff (Aug 16 - 31, 2026)"}
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Statutory Deductions (SSS, PhilHealth, Pag-IBIG) & TRAIN
+                        Law Withholding Taxes will be applied.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={() => {
+                          setPayrollStatus("RUNNING");
+                          setTimeout(() => {
+                            setPayrollStatus("COMPLETED");
+                            showToast(
+                              "🎉 Payroll Run Finalized and ready for Bank Disbursement!",
+                            );
+                          }, 800);
+                        }}
+                        disabled={payrollStatus === "RUNNING"}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+                      >
+                        <Play className="size-3.5 mr-1.5" />
+                        {payrollStatus === "RUNNING"
+                          ? "Computing Engine..."
+                          : "Finalize & Disburse Run"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {payrollStatus === "COMPLETED" && (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-emerald-400 text-xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-4 shrink-0" />
+                        <span>
+                          Payroll run finalized successfully! Payslips generated
+                          and ready for disbursement.
+                        </span>
+                      </div>
+                      <Button
+                        size="xs"
+                        onClick={() => setActiveTab("compliance")}
+                        variant="outline"
+                        className="border-emerald-500/30 text-emerald-300"
+                      >
+                        View Bank Transmittal Files
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                          <tr>
+                            <th className="py-3 px-3">Employee</th>
+                            <th className="py-3 px-3">Basic Pay</th>
+                            <th className="py-3 px-3">Overtime / Premiums</th>
+                            <th className="py-3 px-3">De Minimis & SIL</th>
+                            <th className="py-3 px-3">Gross Pay</th>
+                            <th className="py-3 px-3">SSS & WISP</th>
+                            <th className="py-3 px-3">PhilHealth</th>
+                            <th className="py-3 px-3">Pag-IBIG</th>
+                            <th className="py-3 px-3">Withholding Tax</th>
+                            <th className="py-3 px-3">Net Take-Home</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                          {computedPayrollResults.map(({ employee, calc }) => (
+                            <tr
+                              key={employee.id}
+                              className="hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td className="py-3 px-3 font-medium text-white">
+                                {employee.name}
+                                <div className="text-[10px] text-slate-500 font-mono">
+                                  {employee.employeeNo}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 font-mono">
+                                {formatPHP(calc.basicPayForPeriodCents)}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-emerald-400">
+                                {calc.totalPremiumPayCents > 0n
+                                  ? `+${formatPHP(calc.totalPremiumPayCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-purple-400">
+                                {calc.nonTaxableAllowancesCents > 0n
+                                  ? `+${formatPHP(calc.nonTaxableAllowancesCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono font-semibold text-white">
+                                {formatPHP(calc.grossPayCents)}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-amber-400">
+                                {calc.sssContribution.employeeShareCents > 0n
+                                  ? `-${formatPHP(calc.sssContribution.employeeShareCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-amber-400">
+                                {calc.philhealthContribution
+                                  .employeeShareCents > 0n
+                                  ? `-${formatPHP(calc.philhealthContribution.employeeShareCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-amber-400">
+                                {calc.pagibigContribution.employeeShareCents >
+                                0n
+                                  ? `-${formatPHP(calc.pagibigContribution.employeeShareCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-rose-400">
+                                {calc.withholdingTaxCents > 0n
+                                  ? `-${formatPHP(calc.withholdingTaxCents)}`
+                                  : "₱0.00"}
+                              </td>
+                              <td className="py-3 px-3 font-mono font-bold text-blue-400 bg-blue-500/5">
+                                {formatPHP(calc.netPayCents)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* TAB 6: GOVERNMENT & BANKING EXPORTS */}
+              {/* ========================================================================= */}
+              {activeTab === "compliance" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="size-5 text-blue-400" />
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">
+                          Bank Batch Transmittals
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Export pre-formatted direct deposit transmittal files
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      {[
+                        {
+                          name: "BDO Electronic Payroll (.csv)",
+                          bank: "BDO",
+                          total: formatPHP(totalNetCents),
+                        },
+                        {
+                          name: "BPI ExpressLink / BizLink (.csv)",
+                          bank: "BPI",
+                          total: formatPHP(totalNetCents),
+                        },
+                        {
+                          name: "UnionBank The Portal (.csv)",
+                          bank: "UnionBank",
+                          total: formatPHP(totalNetCents),
+                        },
+                        {
+                          name: "Metrobank Direct Export (.csv)",
+                          bank: "Metrobank",
+                          total: formatPHP(totalNetCents),
+                        },
+                      ].map((b) => (
+                        <div
+                          key={b.name}
+                          className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
+                        >
+                          <div>
+                            <div className="font-medium text-white">
+                              {b.name}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {employees.length} Records • Total {b.total}
+                            </div>
+                          </div>
+                          <Button
+                            size="xs"
+                            onClick={() => exportBankTransmittal(b.bank)}
+                            variant="outline"
+                            className="border-slate-700 hover:bg-slate-800 text-xs text-blue-400"
+                          >
+                            <Download className="size-3 mr-1" /> Download
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <FileCheck2 className="size-5 text-purple-400" />
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">
+                          Philippine Regulatory Returns
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Generate official BIR, SSS, PhilHealth & Pag-IBIG
+                          files
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      {[
+                        {
+                          name: "BIR Form 1601-C Summary",
+                          desc: "Monthly Remittance Return of Income Taxes",
+                          action: () => exportBir1601C(),
+                        },
+                        {
+                          name: "Demo tax reconciliation (individual)",
+                          desc: "Illustrative annual totals only — not BIR Form 2316",
+                          action: () => setIsBir2316ModalOpen(true),
+                        },
+                        {
+                          name: "Demo annual tax summary (batch)",
+                          desc: "Illustrative data only — not a BIR certificate",
+                          action: () => {
+                            const text = [
+                              "DEMO ANNUAL TAX SUMMARY - NOT BIR FORM 2316 - DO NOT FILE",
+                              `Employer: Acme Philippines Technologies Inc. (TIN: 123-456-789-000)`,
+                              "----------------------------------------------------------------",
+                              ...computedPayrollResults.map(
+                                (r) =>
+                                  `Employee: ${r.employee.name} | TIN: ${r.employee.tin} | Gross Annualized: ${formatPHP(r.employee.monthlyBasicRateCents * 12n)} | Tax Status: ${r.employee.isMinimumWageEarner ? "MWE (EXEMPT)" : "GRADUATED"}`,
+                              ),
+                            ].join("\r\n");
+                            downloadFile(
+                              "DEMO_Annual_Tax_Summary.txt",
+                              text,
+                              "text/plain;charset=utf-8;",
+                            );
+                            showToast("Downloaded demo-only tax summary");
+                          },
+                        },
+                        {
+                          name: "SSS R-3 Transmittal Summary",
+                          desc: "Monthly SSS Contribution Collection List",
+                          action: () => {
+                            const text = [
+                              "SSS R-3 MONTHLY COLLECTION LIST",
+                              "Employer SSS: 03-9876543-2 | Acme Philippines Technologies Inc.",
+                              "SS_Number,Employee_Name,EE_Share,ER_Share,EC_Share,Total",
+                              ...computedPayrollResults.map(
+                                (r) =>
+                                  `"${r.employee.sssNo}","${r.employee.name}",${(Number(r.calc.sssContribution.employeeShareCents) / 100).toFixed(2)},${(Number(r.calc.sssContribution.employerShareCents) / 100).toFixed(2)},30.00,${(Number(r.calc.sssContribution.totalCents) / 100).toFixed(2)}`,
+                              ),
+                            ].join("\r\n");
+                            downloadFile("SSS_R3_Monthly_Collection.csv", text);
+                            showToast(
+                              "📥 Exported SSS R-3 Collection Schedule!",
+                            );
+                          },
+                        },
+                        {
+                          name: "DOLE 13th Month Pay Report (PD 851)",
+                          desc: "Mandatory Annual Compliance Report for DOLE BWC / ERS",
+                          action: () => setIs13thMonthModalOpen(true),
+                        },
+                      ].map((g) => (
+                        <div
+                          key={g.name}
+                          className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs"
+                        >
+                          <div>
+                            <div className="font-medium text-white">
+                              {g.name}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {g.desc}
+                            </div>
+                          </div>
+                          <Button
+                            size="xs"
+                            onClick={g.action}
+                            variant="outline"
+                            className="border-slate-700 hover:bg-slate-800 text-xs text-purple-400"
+                          >
+                            <Download className="size-3 mr-1" /> Generate
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* TAB 7: EMPLOYEE SELF-SERVICE (ESS) */}
+              {/* ========================================================================= */}
+              {activeTab === "ess-portal" && (
+                <div className="max-w-2xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                    <div>
+                      <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">
+                        Employee Self-Service (ESS)
+                      </span>
+                      <h3 className="text-lg font-bold text-white mt-1">
+                        Digital Payslip Preview
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Pay Period: Aug 16 – 31, 2026
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl font-mono">
+                      <Lock className="size-3 text-amber-400" /> Password: DOB
+                      (MMDDYYYY)
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                    <div>
+                      <div className="text-slate-500 text-[10px] uppercase">
+                        Employee Name
+                      </div>
+                      <div className="font-semibold text-white">
+                        Juan Dela Cruz
+                      </div>
+                      <div className="text-slate-500 font-mono text-[11px]">
+                        EMP-2026-001
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 text-[10px] uppercase">
+                        Department / Position
+                      </div>
+                      <div className="font-semibold text-white">
+                        Software Engineering
+                      </div>
+                      <div className="text-slate-400 text-[11px]">
+                        Senior Full-Stack Engineer
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
+                        Earnings
+                      </h4>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          Basic Pay (Semi-Monthly)
+                        </span>
+                        <span className="font-mono text-white font-medium">
+                          ₱32,500.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          Regular Overtime (4 hrs)
+                        </span>
+                        <span className="font-mono text-emerald-400 font-medium">
+                          +₱1,556.52
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          Rice Subsidy (De Minimis)
+                        </span>
+                        <span className="font-mono text-emerald-400 font-medium">
+                          +₱1,000.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs pt-2 border-t border-slate-800 font-bold">
+                        <span className="text-white">Gross Pay</span>
+                        <span className="font-mono text-white">₱35,056.52</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1">
+                        Deductions
+                      </h4>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          Tardiness (15 mins)
+                        </span>
+                        <span className="font-mono text-rose-400">-₱97.28</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          SSS Contribution & WISP
+                        </span>
+                        <span className="font-mono text-amber-400">
+                          -₱1,750.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">
+                          PhilHealth (2.5%)
+                        </span>
+                        <span className="font-mono text-amber-400">
+                          -₱1,625.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">Pag-IBIG Fund</span>
+                        <span className="font-mono text-amber-400">
+                          -₱200.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-slate-300">SSS Salary Loan</span>
+                        <span className="font-mono text-slate-300">
+                          -₱500.00
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs pt-2 border-t border-slate-800 font-bold">
+                        <span className="text-white">Total Deductions</span>
+                        <span className="font-mono text-rose-400">
+                          -₱4,172.28
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-blue-400 uppercase font-bold">
+                        Net Take-Home Pay
+                      </span>
+                      <div className="text-2xl font-black text-white font-mono">
+                        ₱30,884.24
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedBir2316EmpId(
+                            (employees[0] ?? INITIAL_EMPLOYEES[0]).id,
+                          );
+                          setIsBir2316ModalOpen(true);
+                        }}
+                        className="border-purple-500/30 text-purple-300 hover:bg-purple-950/40 text-xs"
+                      >
+                        <FileText className="size-3.5 mr-1.5 text-purple-400" />{" "}
+                        View BIR Form 2316
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const content = [
+                            "===========================================================",
+                            "            ACME PHILIPPINES TECHNOLOGIES INC.            ",
+                            "                OFFICIAL DIGITAL PAYSLIP                  ",
+                            "===========================================================",
+                            "Employee: Juan Dela Cruz (EMP-2026-001)",
+                            "Department: Software Engineering",
+                            "Pay Period: Aug 16 - 31, 2026",
+                            "PIN Security: Password Encrypted",
+                            "-----------------------------------------------------------",
+                            "EARNINGS:",
+                            "  Basic Pay: PHP 32,500.00",
+                            "  Overtime (4 hrs): PHP 1,556.52",
+                            "  De Minimis (Rice): PHP 1,000.00",
+                            "  GROSS PAY: PHP 35,056.52",
+                            "-----------------------------------------------------------",
+                            "DEDUCTIONS:",
+                            "  Tardiness (15m): PHP 97.28",
+                            "  SSS & WISP: PHP 1,750.00",
+                            "  PhilHealth: PHP 1,625.00",
+                            "  Pag-IBIG: PHP 200.00",
+                            "  SSS Salary Loan: PHP 500.00",
+                            "  TOTAL DEDUCTIONS: PHP 4,172.28",
+                            "-----------------------------------------------------------",
+                            "NET TAKE-HOME PAY: PHP 30,884.24",
+                            "===========================================================",
+                          ].join("\r\n");
+                          downloadFile(
+                            "Payslip_Juan_Dela_Cruz_Aug2026.txt",
+                            content,
+                            "text/plain;charset=utf-8;",
+                          );
+                          showToast(
+                            "📥 Exported Official Payslip (Protected)!",
+                          );
+                        }}
+                        className="bg-blue-600 hover:bg-blue-500 text-white"
+                      >
+                        <Download className="size-3.5 mr-1.5" /> Download
+                        Payslip
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </main>
           </SidebarInset>
         </SidebarProvider>

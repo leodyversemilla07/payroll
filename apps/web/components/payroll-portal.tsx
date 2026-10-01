@@ -185,13 +185,13 @@ function StaffPortal({
             ) : employees.isError ? (
               <p role="alert">
                 Could not load employees.{" "}
-                <button
+                <Button
                   type="button"
-                  className="underline"
+                  variant="outline"
                   onClick={() => void employees.refetch()}
                 >
                   Retry
-                </button>
+                </Button>
               </p>
             ) : employees.data.length === 0 ? (
               <p>No employees found.</p>
@@ -226,13 +226,13 @@ function StaffPortal({
             ) : runs.isError ? (
               <p role="alert">
                 Could not load payroll runs.{" "}
-                <button
+                <Button
                   type="button"
-                  className="underline"
+                  variant="outline"
                   onClick={() => void runs.refetch()}
                 >
                   Retry
-                </button>
+                </Button>
               </p>
             ) : runs.data.length === 0 ? (
               <p>No payroll runs found.</p>
@@ -272,13 +272,13 @@ function StaffPortal({
             ) : details.isError ? (
               <p role="alert">
                 Could not load payslips.{" "}
-                <button
+                <Button
                   type="button"
-                  className="underline"
+                  variant="outline"
                   onClick={() => void details.refetch()}
                 >
                   Retry
-                </button>
+                </Button>
               </p>
             ) : !details.data ? (
               <p>Run not found.</p>

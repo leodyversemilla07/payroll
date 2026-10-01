@@ -167,14 +167,28 @@ test("trigger, approve, cancel and disburse payroll runs", async ({ page }) => {
   const processRegion = page.getByRole("region", {
     name: "Process payroll run",
   });
-  await processRegion.getByLabel("Regular run cutoff start").fill("2026-10-01");
-  await processRegion.getByLabel("Regular run cutoff end").fill("2026-10-15");
-  await processRegion.getByLabel("Regular run payment date").fill("2026-10-16");
+  await processRegion
+    .getByLabel("Cutoff", { exact: true })
+    .selectOption("SECOND_CUTOFF");
+  await processRegion.getByLabel("Regular run cutoff start").fill("2026-10-16");
+  await processRegion.getByLabel("Regular run cutoff end").fill("2026-10-31");
+  await processRegion.getByLabel("Regular run payment date").fill("2026-11-01");
+  const triggerRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().includes("payroll.triggerRun"),
+  );
   await processRegion
     .getByRole("button", { name: "Process regular run" })
     .click();
   await expect(processRegion.getByText("Run processed.")).toBeVisible();
   expect(mutations).toContain("payroll.triggerRun");
+  expect((await triggerRequest).postDataJSON()["0"].json).toMatchObject({
+    cutoffSequence: "SECOND_CUTOFF",
+    cutoffStartDate: "2026-10-16",
+    cutoffEndDate: "2026-10-31",
+    paymentDate: "2026-11-01",
+  });
 
   // The triggered run is newest-first in the mock list; open run details.
   await runsRegion.getByRole("button").first().click();

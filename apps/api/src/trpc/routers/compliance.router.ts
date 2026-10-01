@@ -394,7 +394,8 @@ export function createComplianceRouter(ctx: RouterContext) {
           reviewerId: z.string().uuid(),
         }),
       )
-      .mutation(async ({ input, ctx }) => {        const record = await withEvidenceErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        const record = await withEvidenceErrors(() =>
           complianceService.supersedeYearEndSettlement({
             employeeId: input.employeeId,
             organizationId: ctx.user.organizationId,

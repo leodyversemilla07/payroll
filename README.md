@@ -89,17 +89,19 @@ table computation per RR 11-2018 §2.79 (prior taxable taken as stated, never
 re-bucketed); minimum-wage earners with prior taxable income stay blocked for
 manual review. A computed tax difference is not a
 payment: `compliance.recordYearEndSettlement` posts a write-once
-`YearEndTaxSettlement` row recording that a deficiency was actually withheld
-from (or a refund actually paid with) disbursed payroll. Active employees
+`YearEndTaxSettlement` row recording the entered attestation that a deficiency
+was withheld from (or a refund paid with) disbursed payroll. This does not
+transfer money or independently verify the payment. Active employees
 settle against December payroll only; separated employees settle with
 termination-month pay, and a deficiency larger than that month's disbursed net
 pay is rejected instead of driving net pay negative. The preview and queue
 recompute the remaining balance live, so later disbursements surface a new
 balance due instead of trusting the settled snapshot. `compliance.issueBir2316`
-(HR only) issues an actual certificate, but only for a conclusive,
+(HR only) records an issuance snapshot, but only for a conclusive,
 fully-settled reconciliation — never a computed-but-unpaid difference — and
 freezes the reconciled figures into a `Bir2316Issuance` snapshot for audit.
-Certificates carry their January-31 statutory deadline as information and are
+This is not a validated official BIR form. Issuance records carry their
+January-31 statutory deadline as information and are
 voided, never deleted; a re-issue appends a new version. No filing-eligibility
 verdict (e.g. substituted filing) is made by the API. Previous-employer
 income, remittances, and the current official form layout still require
