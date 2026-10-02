@@ -5,25 +5,21 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Starting Philippine Payroll Database Seed...");
 
-  // 1. Clear existing records safely (development/demo environments only)
-  await prisma.authSession.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.loanPayment.deleteMany();
-  await prisma.payslip.deleteMany();
-  await prisma.bankTransmittalBatch.deleteMany();
-  await prisma.payrollRun.deleteMany();
-  await prisma.employeeLoan.deleteMany();
-  await prisma.dailyTimeRecord.deleteMany();
-  await prisma.employeeAllowance.deleteMany();
-  await prisma.compensation.deleteMany();
-  await prisma.leaveRequest.deleteMany();
-  await prisma.leaveBalance.deleteMany();
-  await prisma.overtimeRequest.deleteMany();
-  await prisma.employee.deleteMany();
-  await prisma.department.deleteMany();
-  await prisma.branch.deleteMany();
-  await prisma.organization.deleteMany();
+  // Bootstrap only: never erase an existing employee/payroll database.
+  const database = new URL(process.env.DATABASE_URL || "");
+  if (
+    process.env.NODE_ENV === "production" ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(database.hostname)
+  ) {
+    throw new Error(
+      "Bootstrap seeding is restricted to local non-production databases.",
+    );
+  }
+  if (await prisma.organization.count()) {
+    throw new Error(
+      "Refusing to seed a populated database. Use the additive sandbox seed instead.",
+    );
+  }
 
   // 2. Create Organization
   const org = await prisma.organization.create({

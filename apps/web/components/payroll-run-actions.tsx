@@ -19,6 +19,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -146,7 +147,17 @@ export function TriggerRunForms() {
                 />
               </Field>
               <MutationError error={trigger.error} />
-              {done && <p role="status">Run processed.</p>}
+              {done && (
+                <p role="status">
+                  Run processed.{" "}
+                  <Link
+                    href="/portal/payroll-runs"
+                    className="text-primary underline"
+                  >
+                    Review payroll runs
+                  </Link>
+                </p>
+              )}
               <Field>
                 <Button type="submit" disabled={trigger.isPending}>
                   {trigger.isPending ? "Processing…" : "Process regular run"}
@@ -206,7 +217,17 @@ export function TriggerRunForms() {
                 />
               </Field>
               <MutationError error={triggerThirteenth.error} />
-              {monthDone && <p role="status">13th-month run processed.</p>}
+              {monthDone && (
+                <p role="status">
+                  13th-month run processed.{" "}
+                  <Link
+                    href="/portal/payroll-runs"
+                    className="text-primary underline"
+                  >
+                    Review payroll runs
+                  </Link>
+                </p>
+              )}
               <Field>
                 <Button type="submit" disabled={triggerThirteenth.isPending}>
                   {triggerThirteenth.isPending
@@ -317,13 +338,13 @@ export function RunLifecycleActions({
           ))}
       </div>
       {status === "AUDITED" && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           Maker-checker: the approver must differ from the user who processed
           this run.
         </p>
       )}
       {status === "DISBURSED" && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           Disbursed runs cannot be cancelled. Disbursed money cannot be
           un-disbursed through this path.
         </p>

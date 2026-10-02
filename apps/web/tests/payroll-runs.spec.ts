@@ -161,8 +161,13 @@ test("trigger, approve, cancel and disburse payroll runs", async ({ page }) => {
   await page.getByLabel("Email").fill("admin@example.com");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Payroll navigation" });
+  await nav
+    .getByRole("link", { name: "Payroll runs & payslips", exact: true })
+    .click();
   const runsRegion = page.getByRole("region", { name: "Payroll runs" });
   await expect(runsRegion).toBeVisible();
+  await nav.getByRole("link", { name: "Process payroll", exact: true }).click();
 
   const processRegion = page.getByRole("region", {
     name: "Process payroll run",
@@ -191,6 +196,9 @@ test("trigger, approve, cancel and disburse payroll runs", async ({ page }) => {
   });
 
   // The triggered run is newest-first in the mock list; open run details.
+  await page
+    .getByRole("link", { name: "Review payroll runs", exact: true })
+    .click();
   await runsRegion.getByRole("button").first().click();
   const details = page.getByRole("region", { name: "Run details" });
   await expect(

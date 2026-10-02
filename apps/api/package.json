@@ -15,6 +15,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main.js",
     "auth:bootstrap:prod": "node dist/auth/bootstrap-admin.js",
+    "seed:sandbox": "node dist/sandbox/seed.js",
     "lint": "biome lint .",
     "test": "jest --runInBand",
     "test:smoke": "node test/production-smoke.mjs",

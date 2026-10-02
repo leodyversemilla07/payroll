@@ -17,7 +17,6 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -200,11 +199,6 @@ export function LoginForm() {
         >
           Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
           bank-file checks remain outstanding.
-        </p>
-        <p className="mt-3 text-center text-sm">
-          <Link href="/demo" className="underline underline-offset-4">
-            Try the separate demo
-          </Link>
         </p>
       </div>
     </main>

@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { Prisma, prisma } from '@workspace/db';
+import { type PayrollRun, Prisma, prisma } from '@workspace/db';
 import type {
   AllowanceInput,
   LoanDeductionInput,
@@ -27,6 +27,12 @@ import {
 import { TimekeepingService } from '../timekeeping/timekeeping.service';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
+
+export type PayrollMutationAudit = (data: {
+  previous: PayrollRun | null;
+  run: PayrollRun;
+  transaction: Prisma.TransactionClient;
+}) => Promise<void>;
 
 interface ExecutePayrollRunParams {
   organizationId: string;
@@ -137,12 +143,15 @@ export class PayrollService {
    * Approves an audited run for disbursement: the checker step of
    * maker-checker. The approver must differ from the processor.
    */
-  async approvePayrollRun(params: {
-    runId: string;
-    organizationId: string;
-    approvedById: string;
-  }) {
-    return prisma.$transaction(async (transaction) => {
+  async approvePayrollRun(
+    params: {
+      runId: string;
+      organizationId: string;
+      approvedById: string;
+    },
+    audit?: PayrollMutationAudit,
+  ) {
+    return this.runLifecycleTransaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
         where: { id: params.runId, organizationId: params.organizationId },
       });
@@ -155,17 +164,35 @@ export class PayrollService {
           'The approver must differ from the employee who processed the run (maker-checker)',
         );
       }
-      return transaction.payrollRun.update({
-        where: { id: run.id },
+      const changed = await transaction.payrollRun.updateMany({
+        where: {
+          id: run.id,
+          organizationId: params.organizationId,
+          status: 'AUDITED',
+          processedById: run.processedById,
+        },
         data: { status: 'APPROVED', approvedById: params.approvedById },
+      });
+      if (changed.count !== 1) {
+        throw new ConflictException(
+          'Payroll run changed before approval; reload the run',
+        );
+      }
+      const approved = await transaction.payrollRun.findUniqueOrThrow({
+        where: { id: run.id },
         include: { payslips: true },
       });
+      await audit?.({ previous: run, run: approved, transaction });
+      return approved;
     });
   }
 
   /** Disburses an approved run: the point of no return for cancellation. */
-  async disbursePayrollRun(params: { runId: string; organizationId: string }) {
-    return prisma.$transaction(async (transaction) => {
+  async disbursePayrollRun(
+    params: { runId: string; organizationId: string },
+    audit?: PayrollMutationAudit,
+  ) {
+    return this.runLifecycleTransaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
         where: { id: params.runId, organizationId: params.organizationId },
       });
@@ -173,12 +200,47 @@ export class PayrollService {
         throw new NotFoundException('Payroll run not found');
       }
       assertValidPayrollTransition(run.status, 'DISBURSE');
-      return transaction.payrollRun.update({
-        where: { id: run.id },
+      const changed = await transaction.payrollRun.updateMany({
+        where: {
+          id: run.id,
+          organizationId: params.organizationId,
+          status: 'APPROVED',
+        },
         data: { status: 'DISBURSED' },
+      });
+      if (changed.count !== 1) {
+        throw new ConflictException(
+          'Payroll run changed before disbursement; reload the run',
+        );
+      }
+      const disbursed = await transaction.payrollRun.findUniqueOrThrow({
+        where: { id: run.id },
         include: { payslips: true },
       });
+      await audit?.({ previous: run, run: disbursed, transaction });
+      return disbursed;
     });
+  }
+
+  private async runLifecycleTransaction<T>(
+    operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
+      try {
+        return await prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (isPrismaError(error, 'P2034')) {
+          if (attempt < PAYROLL_TRANSACTION_RETRIES) continue;
+          throw new ConflictException(
+            'Payroll run changed concurrently; reload and retry',
+          );
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('Payroll transition could not be completed');
   }
 
   /**
@@ -192,7 +254,10 @@ export class PayrollService {
    * (Bank transmittal batches, once persisted, must additionally be voided
    * here before the run row is removed.)
    */
-  async cancelPayrollRun(params: { runId: string; organizationId: string }) {
+  async cancelPayrollRun(
+    params: { runId: string; organizationId: string },
+    audit?: PayrollMutationAudit,
+  ) {
     for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
       try {
         return await prisma.$transaction(
@@ -202,6 +267,7 @@ export class PayrollService {
                 id: params.runId,
                 organizationId: params.organizationId,
               },
+              include: { payslips: true },
             });
             if (!run) {
               throw new NotFoundException('Payroll run not found');
@@ -250,6 +316,20 @@ export class PayrollService {
               );
             }
 
+            const claimed = await transaction.payrollRun.updateMany({
+              where: {
+                id: run.id,
+                organizationId: params.organizationId,
+                status: run.status,
+              },
+              data: { status: 'CANCELLED' },
+            });
+            if (claimed.count !== 1) {
+              throw new ConflictException(
+                'Payroll run changed before cancellation; reload the run',
+              );
+            }
+
             const loanPayments = await transaction.loanPayment.findMany({
               where: { payslip: { payrollRunId: run.id } },
               select: { loanId: true, amountPaidCents: true },
@@ -276,6 +356,14 @@ export class PayrollService {
             });
             await transaction.payrollRun.delete({ where: { id: run.id } });
 
+            // Preserve the run and payslip snapshot even though cancellation
+            // removes the posted rows. Audit failure rolls back reversals too.
+            await audit?.({
+              previous: run,
+              run: { ...run, status: 'CANCELLED' },
+              transaction,
+            });
+
             return { success: true, runId: run.id };
           },
           {
@@ -297,13 +385,17 @@ export class PayrollService {
     throw new ConflictException('Payroll run could not be cancelled');
   }
 
-  async executePayrollRun(params: ExecutePayrollRunParams) {
+  async executePayrollRun(
+    params: ExecutePayrollRunParams,
+    audit?: PayrollMutationAudit,
+  ) {
     const normalized = this.validateAndNormalizeRun(params);
 
     for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
       try {
         return await prisma.$transaction(
-          (transaction) => this.executeInTransaction(transaction, normalized),
+          (transaction) =>
+            this.executeInTransaction(transaction, normalized, audit),
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             maxWait: 10_000,
@@ -332,6 +424,7 @@ export class PayrollService {
   private async executeInTransaction(
     transaction: Prisma.TransactionClient,
     params: ExecutePayrollRunParams,
+    audit?: PayrollMutationAudit,
   ) {
     const existing = await transaction.payrollRun.findUnique({
       where: payrollRunKey(params),
@@ -702,7 +795,7 @@ export class PayrollService {
       runTotalEmployerCost += result.totalStatutoryEmployerCents;
     }
 
-    return transaction.payrollRun.update({
+    const completed = await transaction.payrollRun.update({
       where: { id: payrollRun.id },
       data: {
         totalGrossCents: runTotalGross,
@@ -713,6 +806,8 @@ export class PayrollService {
       },
       include: { payslips: true },
     });
+    await audit?.({ previous: null, run: completed, transaction });
+    return completed;
   }
 
   /**
@@ -729,7 +824,10 @@ export class PayrollService {
    * payout (managers included by company policy); the DOLE compliance report
    * separately limits statutory coverage to rank-and-file staff.
    */
-  async executeThirteenthMonthRun(params: ExecuteThirteenthMonthRunParams) {
+  async executeThirteenthMonthRun(
+    params: ExecuteThirteenthMonthRunParams,
+    audit?: PayrollMutationAudit,
+  ) {
     const normalized = {
       ...params,
       cutoffStartDate: normalizeDate(params.cutoffStartDate),
@@ -758,10 +856,14 @@ export class PayrollService {
       try {
         return await prisma.$transaction(
           (transaction) =>
-            this.executeThirteenthMonthInTransaction(transaction, {
-              ...normalized,
-              taxYear,
-            }),
+            this.executeThirteenthMonthInTransaction(
+              transaction,
+              {
+                ...normalized,
+                taxYear,
+              },
+              audit,
+            ),
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             maxWait: 10_000,
@@ -790,6 +892,7 @@ export class PayrollService {
   private async executeThirteenthMonthInTransaction(
     transaction: Prisma.TransactionClient,
     params: ExecuteThirteenthMonthRunParams & { taxYear: number },
+    audit?: PayrollMutationAudit,
   ) {
     const runKey = {
       organizationId: params.organizationId,
@@ -991,7 +1094,7 @@ export class PayrollService {
       );
     }
 
-    return transaction.payrollRun.update({
+    const completed = await transaction.payrollRun.update({
       where: { id: payrollRun.id },
       data: {
         totalGrossCents: runTotalGross,
@@ -1002,6 +1105,8 @@ export class PayrollService {
       },
       include: { payslips: true },
     });
+    await audit?.({ previous: null, run: completed, transaction });
+    return completed;
   }
 
   private validateAndNormalizeRun(

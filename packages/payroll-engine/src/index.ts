@@ -127,7 +127,7 @@ export function calculatePhilippinePayroll(
   // minimis excess plus any 13th-month/bonus payouts consume the remaining
   // cap; only the overflow stays taxable. Active only when the caller
   // supplies YTD usage — otherwise the excess remains fully taxable, exactly
-  // as before, for callers without YTD tracking (e.g. the interactive demo).
+  // as before, for callers without YTD tracking.
   const periodExcessCents = evaluatedAllowances.deMinimisExcessTaxableCents;
   let taxableAllowancesCents = evaluatedAllowances.taxableAllowancesCents;
   let nonTaxableAllowancesCents = evaluatedAllowances.nonTaxableAllowancesCents;

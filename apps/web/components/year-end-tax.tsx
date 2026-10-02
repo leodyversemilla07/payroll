@@ -143,11 +143,11 @@ export function YearEndTaxSection({
                   type="button"
                   aria-pressed={employeeId === row.employeeId}
                   variant="outline"
-                  className="h-auto w-full justify-start whitespace-normal p-3 text-left"
+                  className="h-auto w-full flex-col items-start whitespace-normal p-3 text-left"
                   onClick={() => setEmployeeId(row.employeeId)}
                 >
-                  <strong>{row.name}</strong>
-                  <span className="block text-sm text-slate-400">
+                  <strong className="max-w-full break-words">{row.name}</strong>
+                  <span className="max-w-full break-words text-sm text-muted-foreground">
                     {row.employeeNumber} · {statusLabel(row.status)}
                     {row.unsettledDifferenceCents != null &&
                     big(row.unsettledDifferenceCents) !== 0n
@@ -292,7 +292,7 @@ interface EvidenceData {
 
 function EvidenceSummary({ evidence }: { evidence: EvidenceData }) {
   return (
-    <div className="rounded border border-slate-700 p-4 text-sm">
+    <div className="rounded-xl border border-border p-4 text-sm">
       <h4 className="mb-2 font-semibold">Recorded evidence</h4>
       <p>
         Prior-employer declaration:{" "}
@@ -318,7 +318,7 @@ function EvidenceSummary({ evidence }: { evidence: EvidenceData }) {
           ? `${statusLabel(evidence.settlement.settlementType)} ${fmt(evidence.settlement.settledCents)}`
           : "none"}
       </p>
-      <p className="mt-1 text-slate-400">
+      <p className="mt-1 text-muted-foreground">
         All references are self-reported and unverified.
       </p>
     </div>
@@ -751,7 +751,7 @@ function PreviousIncomeForms({
           </FieldGroup>
         </form>
         {records.map((target) => (
-          <div key={target.id} className="rounded border border-slate-700 p-3">
+          <div key={target.id} className="rounded-xl border border-border p-3">
             <p className="text-sm">
               {target.employerName} · taxable{" "}
               {fmt(target.taxableCompensationCents)}
@@ -1001,7 +1001,7 @@ function RemittanceForms({
           </FieldGroup>
         </form>
         {records.map((target) => (
-          <div key={target.id} className="rounded border border-slate-700 p-3">
+          <div key={target.id} className="rounded-xl border border-border p-3">
             <p className="text-sm">
               Month {target.month} · {fmt(target.remittedCents)} ·{" "}
               {target.documentReference}
@@ -1170,7 +1170,7 @@ function PreviewCard({
                 taxable {fmt(result.priorEmployerTotals.taxableCents)}
               </p>
             )}
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-slate-700 p-3 text-xs">
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border p-3 text-xs">
               {result.formattedDocument}
             </pre>
             {remaining !== null && remaining !== 0n && (

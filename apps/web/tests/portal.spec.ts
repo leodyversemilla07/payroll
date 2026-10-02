@@ -124,12 +124,17 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Payroll", exact: true }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Signed in as")).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Payroll navigation" });
+  await nav.getByRole("link", { name: "Employees", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Employees" }).getByText("Ana Santos"),
   ).toBeVisible();
+  await nav
+    .getByRole("link", { name: "Payroll runs & payslips", exact: true })
+    .click();
   await page
     .getByRole("region", { name: "Payroll runs" })
     .getByRole("button")
@@ -153,11 +158,11 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await expect(page.getByText("Ana Santos")).toHaveCount(0);
 });
 
-test("demo is explicitly separate from persisted payroll", async ({ page }) => {
-  await page.goto("/demo");
-  await expect(page).toHaveTitle("Payroll");
-  await expect(page.getByText("Overview & Metrics").first()).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Return to portal" }),
-  ).toBeVisible();
+test("removed demo returns 404 and sign-in has no demo link", async ({
+  page,
+}) => {
+  const response = await page.goto("/demo");
+  expect(response?.status()).toBe(404);
+  await page.goto("/");
+  await expect(page.locator('a[href="/demo"]')).toHaveCount(0);
 });

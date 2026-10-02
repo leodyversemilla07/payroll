@@ -1,6 +1,16 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@workspace/api";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@workspace/ui/components/breadcrumb";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
@@ -10,43 +20,50 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@workspace/ui/components/sidebar";
+import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect } from "react";
+import { usePortalSection } from "@/lib/portal-navigation";
 import { trpc } from "@/lib/trpc";
-import { EmployeesSection } from "./employees-section";
-import { LeavesSection } from "./leaves-section";
-import { RunLifecycleActions, TriggerRunForms } from "./payroll-run-actions";
-import { TimekeepingSection } from "./timekeeping-section";
-import { YearEndTaxSection } from "./year-end-tax";
+import { PortalSidebar } from "./portal-sidebar";
 
 const staffRoles = ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"];
 
-function pesos(cents: bigint | number) {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-  }).format(Number(cents) / 100);
+type PortalUser = inferRouterOutputs<AppRouter>["auth"]["me"];
+const PortalUserContext = createContext<{
+  user: PortalUser;
+  canManageEmployees: boolean;
+} | null>(null);
+
+export function usePortalUser() {
+  const context = useContext(PortalUserContext);
+  if (!context)
+    throw new Error("Portal pages require an authenticated staff layout.");
+  return context;
 }
 
-function date(value: Date | string) {
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "UTC",
-    dateStyle: "medium",
-  }).format(new Date(value));
-}
-
-export function PayrollPortal() {
+export function PayrollPortal({
+  defaultSidebarOpen = true,
+  children,
+}: {
+  defaultSidebarOpen?: boolean;
+  children: ReactNode;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
-  const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
   const me = trpc.auth.me.useQuery(undefined, { retry: false });
   const signedOut = me.error?.data?.code === "UNAUTHORIZED";
+  const hasStaffNavigation =
+    !!me.data && !signedOut && staffRoles.includes(me.data.role);
+  const activeSection = usePortalSection();
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
-      setSelectedRun(null);
-      setSelectedSlip(null);
       queryClient.clear();
       void router.replace("/");
     },
@@ -59,318 +76,160 @@ export function PayrollPortal() {
   }, [router, signedOut]);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">Payroll</h1>
-            <p className="text-slate-400">
-              Payroll portal · API-backed records
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link className="text-blue-300 underline" href="/demo">
-              Try the separate demo
-            </Link>
-            {me.data && (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={logout.isPending}
-                onClick={() => logout.mutate()}
-              >
-                {logout.isPending ? "Signing out…" : "Sign out"}
-              </Button>
-            )}
-          </div>
-        </header>
-        <p
-          role="note"
-          className="rounded-lg border border-amber-700 bg-amber-950/50 p-3 text-sm text-amber-200"
-        >
-          Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
-          bank-file checks remain outstanding.
-        </p>
-        {me.isPending || signedOut ? (
-          <p role="status">Checking your session…</p>
-        ) : me.data ? (
-          <>
-            <p>
-              Signed in as <strong>{me.data.name}</strong> (
-              {me.data.role.replaceAll("_", " ")})
-            </p>
-            {logout.isError && (
-              <p role="alert">Sign out failed. Please retry.</p>
-            )}
-            {staffRoles.includes(me.data.role) ? (
-              <StaffPortal
-                key={me.data.id}
-                actorEmployeeId={me.data.employeeId}
-                canCreateEmployees={
-                  me.data.role === "SUPER_ADMIN" || me.data.role === "HR_ADMIN"
-                }
-                selectedRun={selectedRun}
-                setSelectedRun={(id) => {
-                  setSelectedRun(id);
-                  setSelectedSlip(null);
-                }}
-                selectedSlip={selectedSlip}
-                setSelectedSlip={setSelectedSlip}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>No staff records available</CardTitle>
-                  <CardDescription>
-                    Employee and payroll-run lists require a payroll or HR staff
-                    role.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            )}
-          </>
-        ) : (
-          <Card>
-            <CardContent className="pt-5">
-              <p role="alert">
-                Could not reach the payroll API. Check that it is running, then
-                retry.
-              </p>
-              <Link
-                className="mt-3 inline-block text-blue-300 underline"
-                href="/"
-              >
-                Return to sign in
-              </Link>
-            </CardContent>
-          </Card>
+    <TooltipProvider delay={150}>
+      <SidebarProvider
+        defaultOpen={defaultSidebarOpen}
+        className="text-foreground"
+      >
+        {hasStaffNavigation && me.data && (
+          <PortalSidebar
+            key={me.data.id}
+            user={me.data}
+            activeSection={activeSection.id}
+          />
         )}
-      </div>
-    </main>
-  );
-}
-
-function StaffPortal({
-  actorEmployeeId,
-  canCreateEmployees,
-  selectedRun,
-  setSelectedRun,
-  selectedSlip,
-  setSelectedSlip,
-}: {
-  actorEmployeeId?: string;
-  canCreateEmployees: boolean;
-  selectedRun: string | null;
-  setSelectedRun: (id: string | null) => void;
-  selectedSlip: string | null;
-  setSelectedSlip: (id: string | null) => void;
-}) {
-  const employees = trpc.employees.list.useQuery(undefined, { retry: false });
-  const runs = trpc.payroll.listRuns.useQuery(undefined, { retry: false });
-  const details = trpc.payroll.getRunDetails.useQuery(
-    { runId: selectedRun ?? "" },
-    { enabled: !!selectedRun, retry: false },
-  );
-  const slip = details.data?.payslips.find(
-    (entry) => entry.id === selectedSlip,
-  );
-  const staffEmployees = (employees.data ?? []).map((entry) => ({
-    id: entry.id,
-    firstName: entry.firstName,
-    lastName: entry.lastName,
-    employeeNumber: entry.employeeNumber,
-    employmentStatus: entry.employmentStatus,
-  }));
-
-  return (
-    <>
-      <TimekeepingSection
-        employees={staffEmployees}
-        employeeListFailed={employees.isError}
-      />
-      <LeavesSection
-        employees={staffEmployees}
-        employeeListFailed={employees.isError}
-        canDecide={canCreateEmployees}
-        actorEmployeeId={actorEmployeeId}
-      />
-      <YearEndTaxSection employees={staffEmployees} />
-      <TriggerRunForms />
-      <div className="grid gap-6 md:grid-cols-2">
-        <EmployeesSection canCreate={canCreateEmployees} />
-        <Card role="region" aria-label="Payroll runs">
-          <CardHeader>
-            <CardTitle>Payroll runs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {runs.isPending ? (
-              <p role="status">Loading payroll runs…</p>
-            ) : runs.isError ? (
-              <p role="alert">
-                Could not load payroll runs.{" "}
+        <SidebarInset className="min-w-0">
+          <a
+            href="#workspace-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:z-30 focus:rounded-md focus:bg-background focus:p-3 focus:text-foreground"
+          >
+            Skip to workspace content
+          </a>
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[height] ease-linear md:rounded-t-2xl md:group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+            <div className="flex min-w-0 items-center gap-2">
+              {hasStaffNavigation && (
+                <>
+                  <SidebarTrigger
+                    aria-label="Toggle navigation"
+                    className="-ml-1"
+                  />
+                  <Separator
+                    orientation="vertical"
+                    className="mr-2 data-vertical:h-4 data-vertical:self-auto"
+                  />
+                </>
+              )}
+              <span
+                className={
+                  hasStaffNavigation ? "sr-only" : "text-base font-semibold"
+                }
+              >
+                Payroll
+              </span>
+              {hasStaffNavigation && (
+                <Breadcrumb className="min-w-0">
+                  <BreadcrumbList className="flex-nowrap">
+                    <BreadcrumbItem className="hidden md:inline-flex">
+                      <BreadcrumbLink render={<Link href="/portal" />}>
+                        Payroll
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem className="min-w-0">
+                      <BreadcrumbPage className="truncate">
+                        {activeSection.label}
+                      </BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              {me.data && (
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => void runs.refetch()}
+                  variant="secondary"
+                  disabled={logout.isPending}
+                  onClick={() => logout.mutate()}
                 >
-                  Retry
+                  {logout.isPending ? "Signing out…" : "Sign out"}
                 </Button>
+              )}
+            </div>
+          </header>
+          <div
+            id="workspace-content"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-6xl scroll-mt-24 space-y-6 p-4 outline-none md:p-6"
+          >
+            <div className="space-y-4">
+              <p
+                role="note"
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200"
+              >
+                Not validated for live payroll. Regulatory, annual-tax/BIR 2316
+                and bank-file checks remain outstanding.
               </p>
-            ) : runs.data.length === 0 ? (
-              <p>No payroll runs found.</p>
-            ) : (
-              <ul className="space-y-2">
-                {runs.data.map((run) => (
-                  <li key={run.id}>
-                    <Button
-                      type="button"
-                      aria-pressed={selectedRun === run.id}
-                      variant="outline"
-                      className="h-auto w-full justify-start whitespace-normal p-3 text-left"
-                      onClick={() => setSelectedRun(run.id)}
-                    >
-                      <strong>{date(run.paymentDate)}</strong>
-                      <span className="block text-sm text-slate-400">
-                        {run.cutoffSequence.replaceAll("_", " ")} · {run.status}{" "}
-                        · {run._count.payslips} payslips ·{" "}
-                        {pesos(run.totalNetCents)} net
-                      </span>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      {selectedRun && (
-        <Card role="region" aria-label="Run details">
-          <CardHeader>
-            <CardTitle>Run details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {details.isPending ? (
-              <p role="status">Loading payslips…</p>
-            ) : details.isError ? (
-              <p role="alert">
-                Could not load payslips.{" "}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void details.refetch()}
-                >
-                  Retry
-                </Button>
-              </p>
-            ) : !details.data ? (
-              <p>Run not found.</p>
-            ) : (
-              <>
-                <p className="mb-4 text-slate-400">
-                  {date(details.data.cutoffStartDate)} –{" "}
-                  {date(details.data.cutoffEndDate)} · {details.data.status} ·
-                  Gross {pesos(details.data.totalGrossCents)} · Net{" "}
-                  {pesos(details.data.totalNetCents)}
+              {me.data && !signedOut && (
+                <p className="text-sm text-muted-foreground">
+                  Signed in as{" "}
+                  <strong className="font-medium text-foreground">
+                    {me.data.name}
+                  </strong>{" "}
+                  ({me.data.role.replaceAll("_", " ")})
                 </p>
-                <RunLifecycleActions
-                  runId={details.data.id}
-                  status={details.data.status}
-                  clearSelection={() => {
-                    setSelectedRun(null);
-                    setSelectedSlip(null);
-                  }}
-                />
-                {details.data.payslips.length === 0 ? (
-                  <p>No payslips in this run.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {details.data.payslips.map((entry) => (
-                      <li key={entry.id}>
-                        <Button
-                          type="button"
-                          aria-pressed={selectedSlip === entry.id}
-                          variant="outline"
-                          className="h-auto w-full justify-start whitespace-normal p-3 text-left"
-                          onClick={() => setSelectedSlip(entry.id)}
-                        >
-                          {entry.employee.firstName} {entry.employee.lastName} ·{" "}
-                          {entry.employee.employeeNumber}{" "}
-                          <span className="text-slate-400">
-                            — {pesos(entry.netPayCents)} net
-                          </span>
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
+              )}
+            </div>
+            {me.isPending || signedOut ? (
+              <p role="status">Checking your session…</p>
+            ) : me.data ? (
+              <>
+                {logout.isError && (
+                  <p role="alert">Sign out failed. Please retry.</p>
                 )}
-                {slip && (
-                  <article
-                    className="mt-6 rounded border border-blue-800 p-4"
-                    aria-label="Payslip detail"
+                {staffRoles.includes(me.data.role) ? (
+                  <PortalUserContext.Provider
+                    key={me.data.id}
+                    value={{
+                      user: me.data,
+                      canManageEmployees:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN",
+                    }}
                   >
-                    <h3 className="mb-3 text-lg font-semibold">
-                      Payslip · {slip.employee.firstName}{" "}
-                      {slip.employee.lastName}
-                    </h3>
-                    <p className="mb-2 text-sm text-slate-400">
-                      Amounts in Philippine pesos; read-only record (not a PDF
-                      or proof of disbursement).
-                    </p>
-                    <Separator className="mb-4" />
-                    <dl className="grid grid-cols-2 gap-2 text-sm">
-                      {(
-                        [
-                          ["Basic pay", slip.basicPayCents],
-                          [
-                            "Paid leave (included in basic)",
-                            slip.paidLeavePayCents,
-                          ],
-                          ["Overtime", slip.overtimePayCents],
-                          ["Night differential", slip.nightDiffPayCents],
-                          ["Holiday pay", slip.holidayPayCents],
-                          ["Rest day pay", slip.restDayPayCents],
-                          ["Taxable allowances", slip.taxableAllowancesCents],
-                          [
-                            "Non-taxable allowances",
-                            slip.nonTaxableAllowancesCents,
-                          ],
-                          [
-                            "13th month/bonus payout (included in gross)",
-                            slip.bonusPaidCents,
-                          ],
-                          ["Gross pay", slip.grossPayCents],
-                          ["Tardiness", slip.tardinessDeductionCents],
-                          ["Undertime", slip.undertimeDeductionCents],
-                          ["Absence", slip.absenceDeductionCents],
-                          ["SSS (including WISP)", slip.sssEmployeeCents],
-                          [
-                            "WISP (included in SSS above)",
-                            slip.sssWispEmployeeCents,
-                          ],
-                          ["PhilHealth", slip.philhealthEmployeeCents],
-                          ["Pag-IBIG", slip.pagibigEmployeeCents],
-                          ["Withholding tax", slip.withholdingTaxCents],
-                          ["Loans", slip.loanDeductionsCents],
-                          ["Other deductions", slip.otherDeductionsCents],
-                          ["Total deductions", slip.totalDeductionsCents],
-                          ["Net pay", slip.netPayCents],
-                        ] as const
-                      ).map(([label, amount]) => (
-                        <div key={label} className="contents">
-                          <dt>{label}</dt>
-                          <dd className="text-right font-medium">
-                            {pesos(amount)}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </article>
+                    <div className="space-y-6">
+                      <div className="space-y-1">
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                          {activeSection.label}
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                          {activeSection.description}
+                        </p>
+                      </div>
+                      {children}
+                    </div>
+                  </PortalUserContext.Provider>
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>No staff records available</CardTitle>
+                      <CardDescription>
+                        Employee and payroll-run lists require a payroll or HR
+                        staff role.
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
                 )}
               </>
+            ) : (
+              <Card>
+                <CardContent className="pt-5">
+                  <p role="alert">
+                    Could not reach the payroll API. Check that it is running,
+                    then retry.
+                  </p>
+                  <Link
+                    className="mt-3 inline-block text-primary underline"
+                    href="/"
+                  >
+                    Return to sign in
+                  </Link>
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
-      )}
-    </>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

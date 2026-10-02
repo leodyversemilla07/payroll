@@ -7,7 +7,7 @@ A pnpm/Turborepo monorepo for a Philippine payroll platform. It contains a Next.
 ## Requirements
 
 - Node.js 24.11 or newer (Node 24 LTS)
-- pnpm 10
+- pnpm 12.7.0 (the version pinned in `package.json`)
 - Docker Desktop or a PostgreSQL 16 instance
 
 ## Local setup
@@ -29,7 +29,6 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 Services are available at:
 
 - Web portal: http://localhost:3000 (sign in with a bootstrapped API account)
-- Separate in-memory demo: http://localhost:3000/demo (never persisted)
 - API: http://localhost:4000
 - tRPC: http://localhost:4000/trpc
 - MinIO console: http://localhost:9001
@@ -45,6 +44,7 @@ pnpm build
 pnpm test:smoke
 pnpm --filter web exec playwright install chromium # once per machine
 pnpm --filter web test:browser # after pnpm build
+pnpm --filter web test:browser:live # real API + disposable PostgreSQL; setup below
 ```
 
 Biome is the repository-wide formatter and linter. Use `pnpm check` to verify
@@ -63,17 +63,119 @@ tenant fixtures. Suites run sequentially against the shared disposable database
 to avoid unrelated fixture setup/teardown causing serializable predicate conflicts;
 concurrency tests still run their competing operations in parallel. CI provides
 PostgreSQL 16 and applies migrations before testing.
-The browser test runs against the built Next.js app with mocked tRPC responses;
-it verifies the sign-in, staff lists, payslip detail, sign-out and demo separation.
+`test:browser` runs against the built Next.js app with mocked tRPC responses;
+it verifies sign-in, staff pages, payslip detail, sign-out, routing and access controls.
+`test:browser:live` operates the actual built UI and API against disposable
+PostgreSQL, without request interception. It creates a synthetic employee through
+the UI, records 11 explicit approved attendance days, allocates/files/approves
+leave, processes payroll, signs in as a different checker, marks disbursement,
+reloads the persisted run, reads the payslip and verifies database/audit records.
+Only tenant setup and staff accounts are provisioned directly; the test cleans
+up only its own UUID-scoped tenant. This is integration verification, **not**
+regulatory validation or a real bank payment. CI runs both browser suites.
 The portal reads persisted data via the API (requires a running API and a staff
 account); its year-end tax section also records evidence, previews worksheets,
 posts settlements and files corrections through the API, and staff can
 trigger, approve, disburse and cancel payroll runs (maker-checker enforced by
-the API). It does not generate bank files. Use the separate `/demo`
-for simulated, in-memory workflows only. Use `localhost` consistently for web
+the API). It does not generate bank files. Use `localhost` consistently for web
 and API so the development session cookie is sent to both; set
 `NEXT_PUBLIC_API_URL` to the API's `/trpc` endpoint and allow the web origin in
 `CORS_ORIGIN` when deploying on different origins.
+
+### Real browser test on Windows (isolated database)
+
+Use a **new disposable database**, never an existing employee/payroll database.
+The live-browser configuration refuses non-local databases, database names other
+than `payroll_browser`/`payroll_test`, missing explicit opt-in, and an already-running
+API/web server on its ports. It does not reuse your `.env` database or seed/reset
+other organizations. PostgreSQL must have all migrations applied first.
+
+```powershell
+docker run --rm --name payroll-browser-test -e POSTGRES_PASSWORD=local-test-only -e POSTGRES_DB=payroll_browser -p 127.0.0.1:5544:5432 -d postgres:16-alpine
+$env:DATABASE_URL = 'postgresql://postgres:local-test-only@127.0.0.1:5544/payroll_browser?schema=public'
+$env:NODE_ENV = 'test'
+$env:PAYROLL_LIVE_TEST_DATABASE = '1'
+$env:NEXT_PUBLIC_API_URL = 'http://localhost:4000/trpc'
+pnpm db:migrate:deploy
+pnpm build
+pnpm --filter web test:browser:live
+docker stop payroll-browser-test
+```
+
+Wait for PostgreSQL startup before migrating. Ports **4000** (API) and **3101**
+(web) must be free. The public API URL is built into the web bundle; rebuild
+after changing it. Playwright starts/stops both app servers and retains traces
+and screenshots on failure. The disposable container is removed when stopped.
+Remove these shell environment overrides before starting your normal dev stack.
+
+## Portal sidebar navigation
+
+The real staff portal uses the existing [shadcn Base UI sidebar](https://ui.shadcn.com/docs/components/base/sidebar)
+with grouped workspace/payroll links, a desktop icon rail, Ctrl/Cmd+B toggle,
+mobile drawer. The server reads only the non-sensitive
+`sidebar_state` preference to restore desktop collapse. Each destination is a
+separate Next.js page inside a shared authenticated portal layout. Links support
+browser Back/Forward, direct URLs and reloads; only the current page's business
+queries/forms are mounted. Unsaved entries are not saved to browser storage or
+automatically submitted; reloads discard them. Navigation is hidden from anonymous and non-staff users;
+existing API role/tenant checks still govern every read and mutation.
+
+| Destination | URL |
+| --- | --- |
+| Overview | `/portal` |
+| Employees | `/portal/employees` |
+| Attendance & DTR | `/portal/attendance` |
+| Leave management | `/portal/leaves` |
+| Process payroll | `/portal/process-payroll` |
+| Payroll runs & payslips | `/portal/payroll-runs` |
+| Year-end tax | `/portal/year-end-tax` |
+
+Composition follows the configured **Base UI / Rhea** preset and the official
+[icon-collapse sidebar block](https://ui.shadcn.com/r/styles/base-rhea/sidebar-07.json):
+menu-based brand/account slots, an inset surface, and a section breadcrumb.
+Colors use semantic theme tokens. The mobile sheet overrides its side-specific
+width to honor the sidebar's `18rem` token, capped on very narrow screens.
+Browser regressions check light/dark surface alignment, collapsed icon geometry,
+account visibility, and drawer width at 320px, 390px and 700px viewports.
+
+## Large synthetic sandbox dataset
+
+The former in-memory demonstration page has been removed. Sample data now lives
+in PostgreSQL and is read through the real portal/API.
+
+`pnpm --filter @workspace/api seed:sandbox` adds a deterministic 2026 fixture
+dataset to the explicitly marked browser sandbox tenant, preserving existing
+employees, accounts and passwords. Build the API and its workspace dependencies
+first. The default adds **200 employees**, 5 branches, 8 departments,
+39,400 weekday attendance records from January 1 through October 2,
+18 regular cutoff runs (January–September),
+3,600 payslips, 600 leave balances/credit allocations, 1,200 varied leave requests,
+50 loans with matching installment ledgers, overtime, and clearly synthetic tax evidence.
+
+```powershell
+# DATABASE_URL must point to your migrated LOCAL payroll_browser/payroll_test.
+$env:NODE_ENV = 'test'
+$env:PAYROLL_SANDBOX_SEED = '1'
+$env:PAYROLL_SANDBOX_ORGANIZATION_ID = '<sandbox-organization-uuid>'
+$env:PAYROLL_SANDBOX_EMPLOYEES = '200' # optional; 20–500
+pnpm exec turbo build --filter=@workspace/api...
+pnpm --filter @workspace/api seed:sandbox
+```
+
+The target must be named `Payroll Browser Sandbox — Synthetic Records Only`,
+with existing `admin@sandbox.test` (SUPER_ADMIN) and `payroll@sandbox.test`
+(PAYROLL_SPECIALIST) accounts. Other tenants, remote databases, non-test database
+names, custom schemas and production mode are refused. Inserts and the completion
+marker share one transaction; failure rolls back the dataset. Re-running the same
+seed version is a no-op, and changing the employee count after seeding is rejected.
+Bootstrap `db:seed` also now refuses populated or remote/production databases rather
+than deleting them. Remove these shell environment overrides afterward.
+
+**These are fictional fixtures, not real employment history, legal leave entitlements,
+approved shifts, regulatory calculations, remittances or bank payments.** Historical
+DISBURSED/APPROVED states are synthetic display scenarios, with explicit seed audit
+labels. No certificates, settlement/payment attestations, bank files or new login
+accounts are generated. Existing live-payroll release gates remain open.
 
 ## Leave balances, requests and decisions
 
@@ -282,6 +384,19 @@ run with altered dates cannot pay that cutoff again, and the first and second
 cutoffs cannot overlap. Same-date retries return the existing run; cancel
 non-disbursed runs in reverse dependency order before
 recalculating.
+
+Regular and 13th-month run creation, approval, disbursement marking and
+cancellation now commit their payroll changes and audit record in the same
+database transaction. Audit persistence failures roll back payslips, loan
+collections/refunds and run changes. Approval/disbursement use conditional
+state transitions with serializable conflict retries: concurrent checkers cannot
+overwrite the winning approval, and only one disbursement transition succeeds.
+Repeated approval/disbursement requests return a conflict; reload the run after
+an uncertain response rather than assuming it failed. Identical run-creation
+retries return the existing run without another creation audit or loan debit.
+Cancellation retains the removed run/payslip snapshot in its transactional
+audit and refunds loans once; repeating cancellation for the removed ID returns
+not found. Marking a run `DISBURSED` does not send money or verify a bank transfer.
 
 13th-month runs pay one-twelfth of **disbursed regular basic earnings through
 the special cutoff**, less earlier disbursed 13th-month payments for that year.

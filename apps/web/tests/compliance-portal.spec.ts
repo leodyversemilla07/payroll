@@ -160,6 +160,10 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
   await page.getByLabel("Email").fill("hr@example.com");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Payroll navigation" })
+    .getByRole("link", { name: "Year-end tax", exact: true })
+    .click();
   const yearEnd = page.getByRole("region", { name: "Year-end tax" });
   await expect(yearEnd).toBeVisible();
   await expect(
@@ -345,6 +349,10 @@ test("issue and void a 2316 certificate", async ({ page }) => {
   await page.getByLabel("Email").fill("hr@example.com");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Payroll navigation" })
+    .getByRole("link", { name: "Year-end tax", exact: true })
+    .click();
   const yearEnd = page.getByRole("region", { name: "Year-end tax" });
   await expect(yearEnd).toBeVisible();
   await yearEnd.getByRole("button", { name: /Ana Santos/ }).click();

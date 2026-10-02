@@ -164,6 +164,8 @@ async function mockPortal(
   await page.getByLabel("Email", { exact: true }).fill(user.email);
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect(page.getByText("Signed in as")).toBeVisible();
+  await page.goto("/portal/employees");
   if (["HR_ADMIN", "SUPER_ADMIN", "PAYROLL_SPECIALIST"].includes(user.role)) {
     await expect(
       page.getByRole("region", { name: "Employees", exact: true }),
