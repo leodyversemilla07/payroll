@@ -60,6 +60,7 @@ function mockTransaction(
         {
           id: 'employee-1',
           employeeNumber: 'EMP-1',
+          hireDate: new Date('2025-01-01'),
           payBasis: 'MONTHLY',
           compensation: {
             basicRateMonthlyCents: 3000000n,
@@ -154,6 +155,8 @@ describe('PayrollService monthly tax reconciliation', () => {
       {
         id: 'loan-1',
         loanType: 'SSS_SALARY_LOAN',
+        startDate: new Date('2026-01-01'),
+        endDate: null,
         amortizationCents: 2000000n,
         balanceCents: 2500000n,
       },
@@ -304,5 +307,144 @@ describe('PayrollService monthly tax reconciliation', () => {
         paymentDate: new Date('2026-09-16'),
       }),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('PayrollService regular employment eligibility', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('selects only active employees hired through the last cutoff date', async () => {
+    const tx = mockTransaction([]);
+    const timekeeping = {
+      getCutoffAttendanceSummary: jest.fn().mockResolvedValue(attendance),
+    };
+    await new PayrollService(timekeeping as never).executePayrollRun(run);
+    expect(tx.employee.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: run.organizationId,
+          employmentStatus: 'ACTIVE',
+          hireDate: { lt: new Date('2026-10-01') },
+        },
+      }),
+    );
+  });
+
+  it('fails before creating a run when there are no eligible employees', async () => {
+    const tx = mockTransaction([]);
+    tx.employee.findMany.mockResolvedValue([]);
+    await expect(
+      new PayrollService({} as never).executePayrollRun(run),
+    ).rejects.toThrow('hired on or before the cutoff end date');
+    expect(tx.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks a monthly mid-cutoff hire until proration is supported', async () => {
+    const tx = mockTransaction([]);
+    const employee = (await tx.employee.findMany())[0];
+    employee.hireDate = new Date('2026-09-21');
+    const timekeeping = { getCutoffAttendanceSummary: jest.fn() };
+    await expect(
+      new PayrollService(timekeeping as never).executePayrollRun(run),
+    ).rejects.toThrow('Employee EMP-1 was hired on 2026-09-21');
+    expect(tx.payrollRun.create).not.toHaveBeenCalled();
+    expect(timekeeping.getCutoffAttendanceSummary).not.toHaveBeenCalled();
+    expect(tx.payslip.create).not.toHaveBeenCalled();
+    expect(tx.loanPayment.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts a monthly hire on the cutoff start civil date', async () => {
+    const tx = mockTransaction([]);
+    const employee = (await tx.employee.findMany())[0];
+    employee.hireDate = new Date('2026-09-16T14:00:00Z');
+    const timekeeping = {
+      getCutoffAttendanceSummary: jest.fn().mockResolvedValue(attendance),
+    };
+    await new PayrollService(timekeeping as never).executePayrollRun(run);
+    expect(timekeeping.getCutoffAttendanceSummary).toHaveBeenCalledWith(
+      employee.id,
+      run.organizationId,
+      run.cutoffStartDate,
+      run.cutoffEndDate,
+      tx,
+    );
+  });
+
+  it.each(['DAILY', 'HOURLY'])(
+    'clamps %s attendance to the hire date',
+    async (payBasis) => {
+      const tx = mockTransaction([]);
+      const employee = (await tx.employee.findMany())[0];
+      employee.payBasis = payBasis;
+      employee.hireDate = new Date('2026-09-21T08:00:00Z');
+      const timekeeping = {
+        getCutoffAttendanceSummary: jest
+          .fn()
+          .mockResolvedValue({ ...attendance, regularHoursWorked: 64 }),
+      };
+      await new PayrollService(timekeeping as never).executePayrollRun(run);
+      expect(timekeeping.getCutoffAttendanceSummary).toHaveBeenCalledWith(
+        employee.id,
+        run.organizationId,
+        new Date('2026-09-21'),
+        run.cutoffEndDate,
+        tx,
+      );
+    },
+  );
+
+  it.each([
+    ['2026-09-17', '2026-09-30', 'SECOND_CUTOFF'],
+    ['2026-09-16', '2026-09-29', 'SECOND_CUTOFF'],
+    ['2026-09-01', '2026-09-14', 'FIRST_CUTOFF'],
+    ['2026-09-16', '2026-09-30', 'FIRST_CUTOFF'],
+    ['2026-09-01', '2026-09-30', 'FIRST_CUTOFF'],
+  ] as const)(
+    'blocks custom monthly period %s–%s (%s)',
+    async (start, end, sequence) => {
+      const tx = mockTransaction([]);
+      await expect(
+        new PayrollService({} as never).executePayrollRun({
+          ...run,
+          cutoffStartDate: new Date(start),
+          cutoffEndDate: new Date(end),
+          cutoffSequence: sequence,
+        }),
+      ).rejects.toThrow('full standard cutoff');
+      expect(tx.payrollRun.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['2026-02-28', '2028-02-29', '2026-10-31'])(
+    'accepts month-end cutoff through %s',
+    async (end) => {
+      const tx = mockTransaction([]);
+      const timekeeping = {
+        getCutoffAttendanceSummary: jest.fn().mockResolvedValue(attendance),
+      };
+      await new PayrollService(timekeeping as never).executePayrollRun({
+        ...run,
+        cutoffStartDate: new Date(`${end.slice(0, 7)}-16`),
+        cutoffEndDate: new Date(end),
+        paymentDate: new Date(end),
+      });
+      expect(tx.payslip.create).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('identifies the employee in an attendance coverage failure', async () => {
+    const tx = mockTransaction([]);
+    const timekeeping = {
+      getCutoffAttendanceSummary: jest
+        .fn()
+        .mockRejectedValue(
+          new UnprocessableEntityException('Incomplete attendance: 2026-09-21'),
+        ),
+    };
+    await expect(
+      new PayrollService(timekeeping as never).executePayrollRun(run),
+    ).rejects.toThrow('Employee EMP-1: Incomplete attendance: 2026-09-21');
+    expect(tx.payslip.create).not.toHaveBeenCalled();
+    expect(tx.loanPayment.create).not.toHaveBeenCalled();
   });
 });

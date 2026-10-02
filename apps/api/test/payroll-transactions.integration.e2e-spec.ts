@@ -11,6 +11,7 @@ import { PayrollService } from '../src/modules/payroll/payroll.service';
 import { TimekeepingService } from '../src/modules/timekeeping/timekeeping.service';
 import { createApiRouter } from '../src/trpc/routers/app.router';
 import { type Context, TrpcService } from '../src/trpc/trpc.service';
+import { approvedWeekdayDtrs } from './fixtures/attendance';
 
 const audit = new AuditService();
 const timekeeping = new TimekeepingService();
@@ -158,13 +159,12 @@ describe('PostgreSQL payroll transitions and transactional auditing', () => {
       },
     });
     loanId = loan.id;
-    await prisma.dailyTimeRecord.create({
-      data: {
+    await prisma.dailyTimeRecord.createMany({
+      data: approvedWeekdayDtrs(
         employeeId,
-        date: new Date('2029-01-02'),
-        actualWorkedMinutes: 480,
-        isApproved: true,
-      },
+        input.cutoffStartDate,
+        input.cutoffEndDate,
+      ),
     });
     async function user(role: Role): Promise<User> {
       const created = await prisma.user.create({
@@ -213,6 +213,17 @@ describe('PostgreSQL payroll transitions and transactional auditing', () => {
     });
   const recordedLoan = () =>
     prisma.employeeLoan.findUniqueOrThrow({ where: { id: loanId } });
+  async function expectNoPayrollWrites() {
+    expect(await prisma.payrollRun.count({ where: { organizationId } })).toBe(
+      0,
+    );
+    expect(
+      await prisma.payslip.count({ where: { payrollRun: { organizationId } } }),
+    ).toBe(0);
+    expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(0);
+    expect((await recordedLoan()).balanceCents).toBe(100000n);
+    expect(await auditCount()).toBe(0);
+  }
   function failAfterAuditWrite() {
     const original = audit.record.bind(audit);
     return jest
@@ -222,6 +233,651 @@ describe('PostgreSQL payroll transitions and transactional auditing', () => {
         throw new Error('Simulated audit failure after insert');
       });
   }
+
+  it('rejects future-only employees without creating a run or collecting loans', async () => {
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: { hireDate: new Date('2029-02-01') },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining(
+        'hired on or before the cutoff end date',
+      ),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('excludes future hires even if their compensation and attendance are missing', async () => {
+    const {
+      id: _id,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...template
+    } = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId } });
+    const future = await prisma.employee.create({
+      data: {
+        ...template,
+        employeeNumber: `FUTURE-${randomUUID()}`,
+        email: `${randomUUID()}@test.invalid`,
+        hireDate: new Date('2029-01-16'),
+      },
+    });
+    const run = await trigger();
+    expect(run.payslips).toHaveLength(1);
+    expect(run.payslips[0]?.employeeId).toBe(employeeId);
+    expect(
+      await prisma.payslip.count({ where: { employeeId: future.id } }),
+    ).toBe(0);
+  });
+
+  it('blocks monthly mid-cutoff hires rather than paying a full half-month', async () => {
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: { hireDate: new Date('2029-01-08') },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining(
+        'monthly new-hire pay requires an approved proration policy',
+      ),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it.each(['DAILY', 'HOURLY'] as const)(
+    'pays %s hires only for approved post-hire work',
+    async (payBasis) => {
+      await prisma.employee.update({
+        where: { id: employeeId },
+        data: { hireDate: new Date('2029-01-08T12:00:00Z'), payBasis },
+      });
+      await prisma.compensation.update({
+        where: { employeeId },
+        data: { basicRateDailyCents: 100000n, basicRateHourlyCents: 12500n },
+      });
+      // Pre-hire leave must neither create pay nor conflict with pre-hire
+      // DTRs: both synthetic fixtures are outside the eligible window.
+      await prisma.leaveRequest.create({
+        data: {
+          employeeId,
+          leaveType: 'SIL',
+          startDate: new Date('2029-01-04'),
+          endDate: new Date('2029-01-04'),
+          daysCount: 1,
+          isPaid: true,
+          status: 'APPROVED',
+          approvedById: checker.id,
+          reason: 'Synthetic pre-hire exclusion fixture',
+        },
+      });
+      const run = await trigger();
+      const payableDays = approvedWeekdayDtrs(
+        employeeId,
+        '2029-01-08',
+        input.cutoffEndDate,
+      ).length;
+      expect(run.payslips[0]?.basicPayCents).toBe(
+        BigInt(payableDays) * 100000n,
+      );
+      expect(
+        await prisma.dailyTimeRecord.count({
+          where: { employeeId, date: { lt: new Date('2029-01-08') } },
+        }),
+      ).toBeGreaterThan(0);
+      expect(run.payslips[0]?.basicPayCents).toBeLessThan(1500000n);
+      expect(run.payslips[0]?.paidLeavePayCents).toBe(0n);
+    },
+  );
+
+  it('allows a monthly hire on the first cutoff date after complete attendance approval', async () => {
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: { hireDate: new Date(input.cutoffStartDate) },
+    });
+    const run = await trigger();
+    expect(run.payslips[0]?.basicPayCents).toBe(1500000n);
+  });
+
+  it('rejects a custom monthly cutoff without creating a payroll snapshot', async () => {
+    await expect(
+      caller(maker).payroll.triggerRun({
+        ...input,
+        cutoffStartDate: '2029-01-02',
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('full standard cutoff'),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('rolls back sparse attendance and succeeds after the missing DTRs are supplied', async () => {
+    await prisma.dailyTimeRecord.deleteMany({
+      where: { employeeId, date: { not: new Date('2029-01-02') } },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('complete approved weekday attendance'),
+    });
+    await expectNoPayrollWrites();
+    await prisma.dailyTimeRecord.createMany({
+      data: approvedWeekdayDtrs(
+        employeeId,
+        input.cutoffStartDate,
+        input.cutoffEndDate,
+      ),
+      skipDuplicates: true,
+    });
+    expect((await trigger()).status).toBe('AUDITED');
+    expect(await auditCount()).toBe(1);
+  });
+
+  it('does not use an approved zero-work placeholder as paid attendance', async () => {
+    await prisma.dailyTimeRecord.update({
+      where: { employeeId_date: { employeeId, date: new Date('2029-01-03') } },
+      data: { actualWorkedMinutes: 0, isAbsent: false },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('zero-work weekday DTR'),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('deducts an explicit approved monthly absence instead of paying for it', async () => {
+    await prisma.dailyTimeRecord.update({
+      where: { employeeId_date: { employeeId, date: new Date('2029-01-03') } },
+      data: { actualWorkedMinutes: 0, isAbsent: true },
+    });
+    const run = await trigger();
+    expect(run.payslips[0]?.absenceDeductionCents).toBe(137931n);
+    expect(run.payslips[0]?.grossPayCents).toBe(1500000n - 137931n);
+  });
+
+  it.each([
+    ['APPROVED', true, true],
+    ['PENDING', true, false],
+    ['REJECTED', true, false],
+    ['CANCELLED', true, false],
+    ['APPROVED', false, false],
+  ] as const)(
+    'uses only approved paid leave for missing DTRs (%s, paid=%s)',
+    async (status, isPaid, accepted) => {
+      const date = new Date('2029-01-03');
+      await prisma.dailyTimeRecord.delete({
+        where: { employeeId_date: { employeeId, date } },
+      });
+      await prisma.leaveRequest.create({
+        data: {
+          employeeId,
+          leaveType: 'SIL',
+          startDate: date,
+          endDate: date,
+          daysCount: 1,
+          reason: 'Synthetic coverage fixture',
+          status,
+          isPaid,
+          approvedById: status === 'APPROVED' ? checker.id : null,
+        },
+      });
+      if (accepted) {
+        const run = await trigger();
+        expect(run.payslips[0]?.grossPayCents).toBe(1500000n);
+        expect(run.payslips[0]?.absenceDeductionCents).toBe(0n);
+      } else {
+        await expect(trigger()).rejects.toMatchObject({
+          code: 'UNPROCESSABLE_CONTENT',
+          message: expect.stringContaining('1 missing date(s) (2029-01-03)'),
+        });
+        await expectNoPayrollWrites();
+      }
+    },
+  );
+
+  it('rolls back an otherwise payable employee when another employee has missing attendance', async () => {
+    const {
+      id: _id,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...template
+    } = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId } });
+    await prisma.employee.create({
+      data: {
+        ...template,
+        employeeNumber: `MISSING-${randomUUID()}`,
+        email: `${randomUUID()}@test.invalid`,
+        compensation: {
+          create: {
+            basicRateMonthlyCents: 3000000n,
+            basicRateDailyCents: 137931n,
+            basicRateHourlyCents: 17241n,
+          },
+        },
+      },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('without attendance records'),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('requires HR review of imported punches, then pays without phantom Manila deductions or premiums', async () => {
+    const date = new Date('2029-01-03');
+    await prisma.dailyTimeRecord.delete({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    const employee = await prisma.employee.findUniqueOrThrow({
+      where: { id: employeeId },
+    });
+    await caller(checker).timekeeping.importBiometricsCsv({
+      csvContent: `${employee.employeeNumber},2029-01-03 09:00:00,CHECK_IN\n${employee.employeeNumber},2029-01-03 18:00:00,CHECK_OUT`,
+    });
+    const imported = await prisma.dailyTimeRecord.findUniqueOrThrow({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    expect(imported).toMatchObject({
+      timeIn: new Date('2029-01-03T01:00:00Z'),
+      timeOut: new Date('2029-01-03T10:00:00Z'),
+      actualWorkedMinutes: 480,
+      undertimeMinutes: 0,
+      nightDiffMinutes: 0,
+      isApproved: false,
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('unapproved attendance'),
+    });
+    await expectNoPayrollWrites();
+    await caller(checker).timekeeping.adjustAttendance({
+      employeeId,
+      date: '2029-01-03',
+      expectedUpdatedAt: imported.updatedAt.toISOString(),
+      dayType: 'REGULAR_WORKDAY',
+      timeIn: '2029-01-03T01:00:00Z',
+      timeOut: '2029-01-03T10:00:00Z',
+      actualWorkedMinutes: 480,
+      tardinessMinutes: 0,
+      undertimeMinutes: 0,
+      overtimeMinutes: 0,
+      nightDiffMinutes: 0,
+      isAbsent: false,
+      isApproved: true,
+      correctionReason:
+        'Synthetic reviewed standard Manila shift and break only',
+    });
+    const run = await trigger();
+    expect(run.payslips[0]).toMatchObject({
+      basicPayCents: 1500000n,
+      tardinessDeductionCents: 0n,
+      undertimeDeductionCents: 0n,
+      nightDiffPayCents: 0n,
+    });
+  });
+
+  it.each(['MONTHLY', 'DAILY', 'HOURLY'] as const)(
+    'does not deduct a paid half day again for %s employees',
+    async (payBasis) => {
+      await prisma.employee.update({
+        where: { id: employeeId },
+        data: { payBasis },
+      });
+      await prisma.compensation.update({
+        where: { employeeId },
+        data: { basicRateDailyCents: 100000n, basicRateHourlyCents: 12500n },
+      });
+      const date = new Date('2029-01-03');
+      await prisma.dailyTimeRecord.update({
+        where: { employeeId_date: { employeeId, date } },
+        data: { actualWorkedMinutes: 240, undertimeMinutes: 240 },
+      });
+      await prisma.leaveRequest.create({
+        data: {
+          employeeId,
+          leaveType: 'SIL',
+          startDate: date,
+          endDate: date,
+          partialDate: date,
+          daysCount: 0.5,
+          reason: 'Synthetic half-day payroll fixture',
+          isPaid: true,
+          status: 'APPROVED',
+          approvedById: checker.id,
+        },
+      });
+      const run = await trigger();
+      const slip = run.payslips[0];
+      expect(slip?.undertimeDeductionCents).toBe(0n);
+      expect(slip?.tardinessDeductionCents).toBe(0n);
+      expect(slip?.paidLeavePayCents).toBe(
+        payBasis === 'MONTHLY' ? 0n : 50000n,
+      );
+      expect(slip?.basicPayCents).toBe(
+        payBasis === 'MONTHLY'
+          ? 1500000n
+          : BigInt(
+              approvedWeekdayDtrs(
+                employeeId,
+                input.cutoffStartDate,
+                input.cutoffEndDate,
+              ).length,
+            ) * 100000n,
+      );
+      expect(
+        (
+          await prisma.dailyTimeRecord.findUniqueOrThrow({
+            where: { employeeId_date: { employeeId, date } },
+          })
+        ).undertimeMinutes,
+      ).toBe(240);
+    },
+  );
+
+  it('preserves real monthly lateness after applying the paid half-day credit', async () => {
+    const date = new Date('2029-01-03');
+    await prisma.dailyTimeRecord.update({
+      where: { employeeId_date: { employeeId, date } },
+      data: {
+        actualWorkedMinutes: 210,
+        tardinessMinutes: 30,
+        undertimeMinutes: 240,
+      },
+    });
+    await prisma.leaveRequest.create({
+      data: {
+        employeeId,
+        leaveType: 'SIL',
+        startDate: date,
+        endDate: date,
+        partialDate: date,
+        daysCount: 0.5,
+        reason: 'Synthetic half-day shortfall fixture',
+        isPaid: true,
+        status: 'APPROVED',
+        approvedById: checker.id,
+      },
+    });
+    const run = await trigger();
+    expect(run.payslips[0]?.tardinessDeductionCents).toBe(287n * 30n);
+    expect(run.payslips[0]?.undertimeDeductionCents).toBe(0n);
+  });
+
+  it('blocks inconsistent half-day deductions without collecting loans or posting payroll', async () => {
+    const date = new Date('2029-01-03');
+    await prisma.dailyTimeRecord.update({
+      where: { employeeId_date: { employeeId, date } },
+      data: {
+        actualWorkedMinutes: 210,
+        tardinessMinutes: 0,
+        undertimeMinutes: 0,
+      },
+    });
+    await prisma.leaveRequest.create({
+      data: {
+        employeeId,
+        leaveType: 'SIL',
+        startDate: date,
+        endDate: date,
+        partialDate: date,
+        daysCount: 0.5,
+        reason: 'Synthetic unresolved half-day fixture',
+        isPaid: true,
+        status: 'APPROVED',
+        approvedById: checker.id,
+      },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining(
+        'Half-day attendance deductions do not reconcile',
+      ),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('conserves monthly allowance grants across cutoffs, replay and cancellation/recalculation', async () => {
+    await prisma.employeeAllowance.createMany({
+      data: [
+        {
+          employeeId,
+          name: 'Monthly transport',
+          type: 'TAXABLE',
+          frequency: 'MONTHLY',
+          amountCents: 100001n,
+        },
+        {
+          employeeId,
+          name: 'Monthly fixed',
+          type: 'NON_TAXABLE_FIXED',
+          frequency: 'MONTHLY',
+          amountCents: 60001n,
+        },
+        {
+          employeeId,
+          name: 'Monthly rice',
+          type: 'DE_MINIMIS',
+          deMinimisCategory: 'RICE_SUBSIDY',
+          frequency: 'MONTHLY',
+          amountCents: 250000n,
+        },
+        {
+          employeeId,
+          name: 'Cutoff transport',
+          type: 'TAXABLE',
+          frequency: 'PER_CUTOFF',
+          amountCents: 1001n,
+        },
+        {
+          employeeId,
+          name: 'Cutoff laundry',
+          type: 'DE_MINIMIS',
+          deMinimisCategory: 'LAUNDRY_ALLOWANCE',
+          frequency: 'PER_CUTOFF',
+          amountCents: 20000n,
+        },
+        {
+          employeeId,
+          name: 'Inactive allowance',
+          type: 'TAXABLE',
+          frequency: 'UNSUPPORTED',
+          amountCents: 900000n,
+          isActive: false,
+        },
+      ],
+    });
+    await prisma.employeeLoan.update({
+      where: { id: loanId },
+      data: { startDate: new Date('2029-01-16') },
+    });
+    await prisma.dailyTimeRecord.createMany({
+      data: approvedWeekdayDtrs(employeeId, '2029-01-16', '2029-01-31'),
+    });
+    const first = await trigger();
+    expect(first.payslips[0]).toMatchObject({
+      taxableAllowancesCents: 51001n,
+      nonTaxableAllowancesCents: 175000n,
+      deMinimisExcessCents: 0n,
+      loanDeductionsCents: 0n,
+    });
+    expect((await recordedLoan()).balanceCents).toBe(100000n);
+    const secondInput = {
+      ...input,
+      cutoffStartDate: '2029-01-16',
+      cutoffEndDate: '2029-01-31',
+      paymentDate: '2029-02-01',
+      cutoffSequence: 'SECOND_CUTOFF' as const,
+    };
+    const second = await caller(maker).payroll.triggerRun(secondInput);
+    expect(second.payslips[0]).toMatchObject({
+      taxableAllowancesCents: 51002n,
+      nonTaxableAllowancesCents: 175001n,
+      deMinimisExcessCents: 0n,
+      loanDeductionsCents: 100000n,
+    });
+    expect(
+      (first.payslips[0]?.taxableAllowancesCents ?? 0n) +
+        (second.payslips[0]?.taxableAllowancesCents ?? 0n),
+    ).toBe(100001n + 2n * 1001n);
+    expect(
+      (first.payslips[0]?.nonTaxableAllowancesCents ?? 0n) +
+        (second.payslips[0]?.nonTaxableAllowancesCents ?? 0n),
+    ).toBe(60001n + 250000n + 2n * 20000n);
+    expect((await caller(maker).payroll.triggerRun(secondInput)).id).toBe(
+      second.id,
+    );
+    expect((await trigger()).id).toBe(first.id);
+    expect(await auditCount()).toBe(2);
+    expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(1);
+    await caller(maker).payroll.cancelRun({ runId: second.id });
+    expect((await recordedLoan()).balanceCents).toBe(100000n);
+    const recalculated = await caller(maker).payroll.triggerRun(secondInput);
+    expect(recalculated.payslips[0]).toMatchObject({
+      taxableAllowancesCents: 51002n,
+      nonTaxableAllowancesCents: 175001n,
+      loanDeductionsCents: 100000n,
+    });
+    expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(1);
+    expect((await recordedLoan()).balanceCents).toBe(0n);
+    expect(await prisma.payslip.count({ where: { employeeId } })).toBe(2);
+  });
+
+  it.each(['WEEKLY', 'monthly', ''])(
+    'rolls back an unsupported active allowance frequency "%s"',
+    async (frequency) => {
+      await prisma.employeeAllowance.create({
+        data: {
+          employeeId,
+          name: 'Bad frequency',
+          type: 'TAXABLE',
+          frequency,
+          amountCents: 100000n,
+        },
+      });
+      await expect(trigger()).rejects.toMatchObject({
+        code: 'UNPROCESSABLE_CONTENT',
+        message: expect.stringContaining('unsupported frequency'),
+      });
+      await expectNoPayrollWrites();
+    },
+  );
+
+  it.each(['DAILY', 'HOURLY'] as const)(
+    'blocks monthly allowances on partial-cutoff %s new-hire payroll',
+    async (payBasis) => {
+      await prisma.employee.update({
+        where: { id: employeeId },
+        data: { payBasis, hireDate: new Date('2029-01-08') },
+      });
+      await prisma.employeeAllowance.create({
+        data: {
+          employeeId,
+          name: 'Monthly transport',
+          type: 'TAXABLE',
+          frequency: 'MONTHLY',
+          amountCents: 100000n,
+        },
+      });
+      await expect(trigger()).rejects.toMatchObject({
+        code: 'UNPROCESSABLE_CONTENT',
+        message: expect.stringContaining(
+          'partial-period allowance proration requires an approved policy',
+        ),
+      });
+      await expectNoPayrollWrites();
+    },
+  );
+
+  it.each([
+    ['2029-01-01', null, true],
+    ['2029-01-10', null, true],
+    ['2029-01-15T23:59:59Z', null, true],
+    ['2029-01-16', null, false],
+    ['2029-02-01', null, false],
+    ['2029-01-01', '2029-01-15', true],
+    ['2029-01-01', '2029-01-14T23:59:59Z', false],
+  ] as const)(
+    'applies the inclusive loan window %s–%s at cutoff end',
+    async (startDate, endDate, collected) => {
+      await prisma.employeeLoan.update({
+        where: { id: loanId },
+        data: {
+          startDate: new Date(startDate),
+          endDate: endDate ? new Date(endDate) : null,
+        },
+      });
+      const run = await trigger();
+      expect(run.payslips[0]?.loanDeductionsCents).toBe(
+        collected ? 100000n : 0n,
+      );
+      expect((await recordedLoan()).balanceCents).toBe(
+        collected ? 0n : 100000n,
+      );
+      expect((await recordedLoan()).isActive).toBe(!collected);
+      expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(
+        collected ? 1 : 0,
+      );
+      // Changing a date after posting must not change a replay or refund a
+      // loan that was never collected. The posted ledger is authoritative.
+      await prisma.employeeLoan.update({
+        where: { id: loanId },
+        data: { startDate: new Date('2029-01-01'), endDate: null },
+      });
+      expect((await trigger()).id).toBe(run.id);
+      expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(
+        collected ? 1 : 0,
+      );
+      await caller(maker).payroll.cancelRun({ runId: run.id });
+      expect((await recordedLoan()).balanceCents).toBe(100000n);
+      expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(0);
+    },
+  );
+
+  it('rejects an inverted repayment window at loan creation without storing a loan or audit', async () => {
+    const beforeAudit = await prisma.auditLog.count({
+      where: { organizationId, entityType: 'EmployeeLoan' },
+    });
+    await expect(
+      caller(maker).loans.create({
+        employeeId,
+        loanType: 'COMPANY_CASH_ADVANCE',
+        principalPesos: 1000,
+        totalAmountPesos: 1000,
+        amortizationPesos: 100,
+        startDate: '2029-02-01',
+        endDate: '2029-01-31',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(await prisma.employeeLoan.count({ where: { employeeId } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { organizationId, entityType: 'EmployeeLoan' },
+      }),
+    ).toBe(beforeAudit);
+  });
+
+  it('rolls back an inverted active loan repayment window', async () => {
+    await prisma.employeeLoan.update({
+      where: { id: loanId },
+      data: { endDate: new Date('2028-12-31') },
+    });
+    await expect(trigger()).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('repayment dates are invalid'),
+    });
+    await expectNoPayrollWrites();
+  });
+
+  it('ignores inactive loans even when their effective date is inside the cutoff', async () => {
+    await prisma.employeeLoan.update({
+      where: { id: loanId },
+      data: { isActive: false },
+    });
+    const run = await trigger();
+    expect(run.payslips[0]?.loanDeductionsCents).toBe(0n);
+    expect((await recordedLoan()).balanceCents).toBe(100000n);
+    expect(await prisma.loanPayment.count({ where: { loanId } })).toBe(0);
+  });
 
   it('rolls back regular creation, payslips, loan collection and audit on audit failure', async () => {
     failAfterAuditWrite();

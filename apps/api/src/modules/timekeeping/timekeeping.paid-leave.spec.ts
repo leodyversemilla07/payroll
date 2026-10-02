@@ -1,8 +1,8 @@
 import { UnprocessableEntityException } from '@nestjs/common';
 import { TimekeepingService } from './timekeeping.service';
 
-const cutoffStart = new Date('2026-09-01');
-const cutoffEnd = new Date('2026-09-15');
+const cutoffStart = new Date('2026-09-10');
+const cutoffEnd = new Date('2026-09-10');
 
 function mockDatabase() {
   const record = {
@@ -34,12 +34,16 @@ function mockDatabase() {
   return { db, record, leave };
 }
 
-function summary(db: ReturnType<typeof mockDatabase>['db']) {
+function summary(
+  db: ReturnType<typeof mockDatabase>['db'],
+  startDate = cutoffStart,
+  endDate = cutoffEnd,
+) {
   return new TimekeepingService().getCutoffAttendanceSummary(
     'employee-1',
     'org-1',
-    cutoffStart,
-    cutoffEnd,
+    startDate,
+    endDate,
     db as never,
   );
 }
@@ -116,6 +120,60 @@ describe('paid-leave payroll reconciliation', () => {
     });
   });
 
+  it.each([
+    [240, 0, 240, 0, 0],
+    [240, 240, 0, 0, 0],
+    [210, 30, 240, 30, 0],
+    [210, 270, 0, 30, 0],
+    [210, 0, 270, 0, 30],
+    [210, 30, 0, 30, 0],
+    [210, 0, 30, 0, 30],
+  ])(
+    'reconciles worked=%s, tardy=%s, undertime=%s without deducting the paid half day',
+    async (worked, tardy, undertime, expectedTardy, expectedUndertime) => {
+      const { db, record, leave } = mockDatabase();
+      leave.daysCount = 0.5;
+      leave.partialDate = new Date('2026-09-10');
+      Object.assign(record, {
+        actualWorkedMinutes: worked,
+        tardinessMinutes: tardy,
+        undertimeMinutes: undertime,
+        isAbsent: false,
+        isApproved: true,
+      });
+      expect(await summary(db)).toMatchObject({
+        paidLeaveDays: 0.5,
+        regularHoursWorked: worked / 60,
+        tardinessMinutes: expectedTardy,
+        undertimeMinutes: expectedUndertime,
+      });
+      expect(record.tardinessMinutes).toBe(tardy);
+      expect(record.undertimeMinutes).toBe(undertime);
+    },
+  );
+
+  it.each([
+    [210, 0, 0],
+    [240, 0, 300],
+    [210, 160, 110],
+    [240, -1, 241],
+  ])(
+    'blocks ambiguous or inconsistent half-day shortfalls (%s, %s, %s)',
+    async (worked, tardy, undertime) => {
+      const { db, record, leave } = mockDatabase();
+      leave.daysCount = 0.5;
+      leave.partialDate = new Date('2026-09-10');
+      Object.assign(record, {
+        actualWorkedMinutes: worked,
+        tardinessMinutes: tardy,
+        undertimeMinutes: undertime,
+        isAbsent: false,
+        isApproved: true,
+      });
+      await expect(summary(db)).rejects.toThrow(UnprocessableEntityException);
+    },
+  );
+
   it('credits one full day plus a half day across a two-day range', async () => {
     const { db, record, leave } = mockDatabase();
     leave.startDate = new Date('2026-09-07');
@@ -131,7 +189,7 @@ describe('paid-leave payroll reconciliation', () => {
         isApproved: true,
       },
     ]);
-    expect(await summary(db)).toMatchObject({
+    expect(await summary(db, leave.startDate, leave.endDate)).toMatchObject({
       paidLeaveDays: 1.5,
       regularHoursWorked: 4,
     });
@@ -142,6 +200,15 @@ describe('paid-leave payroll reconciliation', () => {
     leave.daysCount = 0.5;
     leave.partialDate = new Date('2026-09-10');
     db.dailyTimeRecord.findMany.mockResolvedValue([]);
+    await expect(summary(db)).rejects.toThrow('worked attendance record');
+  });
+
+  it('does not treat a zero-work DTR as a worked half shift', async () => {
+    const { db, record, leave } = mockDatabase();
+    leave.daysCount = 0.5;
+    leave.partialDate = new Date('2026-09-10');
+    record.isAbsent = false;
+    record.isApproved = true;
     await expect(summary(db)).rejects.toThrow('worked attendance record');
   });
 
@@ -200,7 +267,9 @@ describe('paid-leave payroll reconciliation', () => {
     leave.endDate = new Date('2026-09-14');
     leave.daysCount = 2;
     db.dailyTimeRecord.findMany.mockResolvedValue([]);
-    expect(await summary(db)).toMatchObject({ paidLeaveDays: 2 });
+    expect(await summary(db, leave.startDate, leave.endDate)).toMatchObject({
+      paidLeaveDays: 2,
+    });
   });
 
   it('preserves the normal unapproved-DTR guard on non-leave days', async () => {

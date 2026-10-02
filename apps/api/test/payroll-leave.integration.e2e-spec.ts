@@ -11,6 +11,7 @@ import { PayrollService } from '../src/modules/payroll/payroll.service';
 import { TimekeepingService } from '../src/modules/timekeeping/timekeeping.service';
 import { createApiRouter } from '../src/trpc/routers/app.router';
 import { type Context, TrpcService } from '../src/trpc/trpc.service';
+import { approvedWeekdayDtrs } from './fixtures/attendance';
 
 // Unlike the mocked service specs, these exercise real PostgreSQL transactions,
 // Prisma relations, tenant-scoped tRPC procedures, and audit persistence. Run
@@ -313,13 +314,8 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
         startDate: new Date('2026-09-01'),
       },
     });
-    await prisma.dailyTimeRecord.create({
-      data: {
-        employeeId,
-        date: new Date('2026-09-16'),
-        actualWorkedMinutes: 480,
-        isApproved: true,
-      },
+    await prisma.dailyTimeRecord.createMany({
+      data: approvedWeekdayDtrs(employeeId, '2026-09-16', '2026-09-30'),
     });
     const run = await callerFor(specialist).payroll.triggerRun({
       cutoffStartDate: '2026-09-16',
@@ -388,6 +384,11 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
     });
     await prisma.dailyTimeRecord.createMany({
       data: [
+        // Explicit synthetic absences preserve the original two payable dates
+        // while supplying complete cutoff coverage. Never infer these in payroll.
+        ...approvedWeekdayDtrs(employeeId, '2026-11-01', '2026-11-15')
+          .filter((row) => ![9, 10].includes((row.date as Date).getUTCDate()))
+          .map((row) => ({ ...row, actualWorkedMinutes: 0, isAbsent: true })),
         {
           employeeId,
           date: new Date('2026-11-09'),
@@ -457,13 +458,13 @@ describe('PostgreSQL-backed payroll and leave integration', () => {
       callerFor(specialist).payroll.cancelRun({ runId: first.id }),
     ).rejects.toThrow();
 
-    await prisma.dailyTimeRecord.create({
-      data: {
-        employeeId,
-        date: new Date('2026-11-25'),
-        actualWorkedMinutes: 480,
-        isApproved: true,
-      },
+    await prisma.dailyTimeRecord.createMany({
+      data: approvedWeekdayDtrs(employeeId, '2026-11-16', '2026-11-30').map(
+        (row) =>
+          (row.date as Date).getUTCDate() === 25
+            ? row
+            : { ...row, actualWorkedMinutes: 0, isAbsent: true },
+      ),
     });
     const second = await callerFor(specialist).payroll.triggerRun({
       cutoffStartDate: '2026-11-16',

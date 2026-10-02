@@ -323,6 +323,148 @@ describe('PostgreSQL-backed attendance corrections', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(await current()).toEqual(before);
   });
+  it('imports UTC/Manila punches on Manila dates without false deductions or automatic approval', async () => {
+    const number = own.employee.employeeNumber;
+    const result = await caller(own.user).timekeeping.importBiometricsCsv({
+      csvContent: `Employee_ID,Timestamp,Punch_Type\n${number},2026-09-21T01:00:00Z,CHECK_IN\n${number},2026-09-21T10:00:00Z,CHECK_OUT\n${number},2026-09-22,09:00:00,CHECK_IN\n${number},2026-09-22,18:00:00,CHECK_OUT`,
+    });
+    expect(result).toMatchObject({
+      totalPunchesParsed: 4,
+      daysImported: 2,
+      anomaliesDetected: 0,
+    });
+    const records = await prisma.dailyTimeRecord.findMany({
+      where: {
+        employeeId: own.employee.id,
+        date: { gte: new Date('2026-09-21'), lte: new Date('2026-09-22') },
+      },
+      orderBy: { date: 'asc' },
+    });
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      date: new Date('2026-09-21'),
+      timeIn: new Date('2026-09-21T01:00:00Z'),
+      timeOut: new Date('2026-09-21T10:00:00Z'),
+      actualWorkedMinutes: 480,
+      tardinessMinutes: 0,
+      undertimeMinutes: 0,
+      nightDiffMinutes: 0,
+      isApproved: false,
+    });
+    expect(records[1]?.timeIn?.toISOString()).toBe('2026-09-22T01:00:00.000Z');
+    await expect(
+      timekeeping.getCutoffAttendanceSummary(
+        own.employee.id,
+        own.org.id,
+        new Date('2026-09-21'),
+        new Date('2026-09-22'),
+      ),
+    ).rejects.toThrow('unapproved attendance');
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { organizationId: own.org.id, entityType: 'BiometricsCsv' },
+    });
+    expect(entry.newData).toMatchObject({
+      daysImported: 2,
+      anomaliesDetected: 0,
+    });
+  });
+
+  it('keeps a Manila midnight punch on its civil date and skips another tenant employee', async () => {
+    const result = await caller(own.user).timekeeping.importBiometricsCsv({
+      csvContent: `${own.employee.employeeNumber},2026-09-23T16:30:00Z,CHECK_IN\n${foreign.employee.employeeNumber},2026-09-24 09:00,CHECK_IN\n${foreign.employee.employeeNumber},2026-09-24 18:00,CHECK_OUT`,
+    });
+    expect(result.daysImported).toBe(1);
+    const row = await prisma.dailyTimeRecord.findUniqueOrThrow({
+      where: {
+        employeeId_date: {
+          employeeId: own.employee.id,
+          date: new Date('2026-09-24'),
+        },
+      },
+    });
+    expect(row).toMatchObject({
+      timeIn: new Date('2026-09-23T16:30:00Z'),
+      timeOut: null,
+      actualWorkedMinutes: 0,
+      isApproved: false,
+    });
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: foreign.employee.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('rejects malformed CSV before writing any attendance or import audit', async () => {
+    const count = await prisma.dailyTimeRecord.count({
+      where: { employeeId: own.employee.id },
+    });
+    const audits = await prisma.auditLog.count({
+      where: { organizationId: own.org.id, entityType: 'BiometricsCsv' },
+    });
+    await expect(
+      caller(own.user).timekeeping.importBiometricsCsv({
+        csvContent: `${own.employee.employeeNumber},2026-09-25 09:00,CHECK_IN\n${own.employee.employeeNumber},2026-02-30 18:00,CHECK_OUT`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: expect.stringContaining('Biometric CSV line 2'),
+    });
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: own.employee.id },
+      }),
+    ).toBe(count);
+    expect(
+      await prisma.auditLog.count({
+        where: { organizationId: own.org.id, entityType: 'BiometricsCsv' },
+      }),
+    ).toBe(audits);
+  });
+
+  it('does not replace approved DTRs and rolls back earlier rows of a conflicting batch', async () => {
+    const before = await current();
+    await expect(
+      caller(own.user).timekeeping.importBiometricsCsv({
+        csvContent: `${own.employee.employeeNumber},2026-09-09 09:00,CHECK_IN\n${own.employee.employeeNumber},2026-09-09 18:00,CHECK_OUT\n${own.employee.employeeNumber},${date} 09:00,CHECK_IN\n${own.employee.employeeNumber},${date} 18:00,CHECK_OUT`,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await current()).toEqual(before);
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: own.employee.id, date: new Date('2026-09-09') },
+      }),
+    ).toBe(0);
+  });
+
+  it('rolls back imported DTRs when the import audit fails after insertion', async () => {
+    const before = await prisma.auditLog.count({
+      where: { organizationId: own.org.id, entityType: 'BiometricsCsv' },
+    });
+    const original = audit.record.bind(audit);
+    jest
+      .spyOn(audit, 'record')
+      .mockImplementationOnce(async (entry, transaction) => {
+        await original(entry, transaction);
+        throw new Error('Synthetic import audit failure');
+      });
+    await expect(
+      caller(own.user).timekeeping.importBiometricsCsv({
+        csvContent: `${own.employee.employeeNumber},2026-09-25 09:00,CHECK_IN\n${own.employee.employeeNumber},2026-09-25 18:00,CHECK_OUT`,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: own.employee.id, date: new Date('2026-09-25') },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.auditLog.count({
+        where: { organizationId: own.org.id, entityType: 'BiometricsCsv' },
+      }),
+    ).toBe(before);
+  });
+
   it('freezes regular processed cutoffs for corrections and legacy writers, but permits a cancelled cutoff', async () => {
     const run = await prisma.payrollRun.create({
       data: {

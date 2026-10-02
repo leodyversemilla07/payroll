@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { type PayrollRun, Prisma, prisma } from '@workspace/db';
 import type {
-  AllowanceInput,
   LoanDeductionInput,
   PayrollCalculationInput,
 } from '@workspace/payroll-engine';
@@ -19,12 +18,16 @@ import {
   calculateMonthsWorkedInYear,
   calculatePhilippinePayroll,
   calculateWithholdingTax,
-  DeMinimisCategory,
   InsufficientPayError,
   PayBasis,
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
 import { TimekeepingService } from '../timekeeping/timekeeping.service';
+import {
+  isStandardRegularCutoff,
+  resolveCutoffAllowances,
+  selectCutoffLoans,
+} from './payroll.inputs';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
 
@@ -548,22 +551,13 @@ export class PayrollService {
       }
     }
 
-    const payrollRun = await transaction.payrollRun.create({
-      data: {
-        organizationId: params.organizationId,
-        processedById: params.processedById,
-        cutoffSequence: params.cutoffSequence,
-        cutoffStartDate: params.cutoffStartDate,
-        cutoffEndDate: params.cutoffEndDate,
-        paymentDate: params.paymentDate,
-        status: 'PROCESSING',
-      },
-    });
-
     const employees = await transaction.employee.findMany({
       where: {
         organizationId: params.organizationId,
         employmentStatus: 'ACTIVE',
+        // hireDate is currently a DateTime, while cutoffs are civil dates.
+        // Include the whole last date, then normalize the eligible window.
+        hireDate: { lt: new Date(params.cutoffEndDate.getTime() + 86_400_000) },
       },
       include: {
         compensation: true,
@@ -578,7 +572,7 @@ export class PayrollService {
 
     if (employees.length === 0) {
       throw new UnprocessableEntityException(
-        'Payroll cannot proceed without active employees',
+        'Payroll cannot proceed without active employees hired on or before the cutoff end date',
       );
     }
 
@@ -590,6 +584,37 @@ export class PayrollService {
         `Payroll cannot proceed: ${missingCompensation.length} active employee(s) have no compensation profile`,
       );
     }
+
+    for (const employee of employees) {
+      const hireDate = normalizeDate(employee.hireDate);
+      if (employee.payBasis === 'MONTHLY') {
+        // The engine currently pays a fixed half-month salary. An approved
+        // proration policy is not encoded; do not turn a shorter period or a
+        // mid-cutoff hire into a full half-month payment.
+        if (!isStandardRegularCutoff(params)) {
+          throw new UnprocessableEntityException(
+            `Employee ${employee.employeeNumber}: monthly pay requires a full standard cutoff (1–15 or 16–month end); custom periods require an approved proration policy`,
+          );
+        }
+        if (hireDate > params.cutoffStartDate) {
+          throw new UnprocessableEntityException(
+            `Employee ${employee.employeeNumber} was hired on ${hireDate.toISOString().slice(0, 10)} during this cutoff; monthly new-hire pay requires an approved proration policy`,
+          );
+        }
+      }
+    }
+
+    const payrollRun = await transaction.payrollRun.create({
+      data: {
+        organizationId: params.organizationId,
+        processedById: params.processedById,
+        cutoffSequence: params.cutoffSequence,
+        cutoffStartDate: params.cutoffStartDate,
+        cutoffEndDate: params.cutoffEndDate,
+        paymentDate: params.paymentDate,
+        status: 'PROCESSING',
+      },
+    });
 
     let runTotalGross = 0n;
     let runTotalDeductions = 0n;
@@ -611,29 +636,46 @@ export class PayrollService {
         hourlyRate: compensation.basicRateHourlyCents,
       });
 
-      const attendanceSummary =
-        await this.timekeepingService.getCutoffAttendanceSummary(
-          employee.id,
-          params.organizationId,
-          params.cutoffStartDate,
-          params.cutoffEndDate,
-          transaction,
-        );
+      const hireDate = normalizeDate(employee.hireDate);
+      const attendanceStart =
+        hireDate > params.cutoffStartDate ? hireDate : params.cutoffStartDate;
+      let attendanceSummary: Awaited<
+        ReturnType<TimekeepingService['getCutoffAttendanceSummary']>
+      >;
+      try {
+        attendanceSummary =
+          await this.timekeepingService.getCutoffAttendanceSummary(
+            employee.id,
+            params.organizationId,
+            attendanceStart,
+            params.cutoffEndDate,
+            transaction,
+          );
+      } catch (error) {
+        if (error instanceof UnprocessableEntityException) {
+          throw new UnprocessableEntityException(
+            `Employee ${employee.employeeNumber}: ${error.message}`,
+          );
+        }
+        throw error;
+      }
 
-      const allowances: AllowanceInput[] = employee.allowances.map(
-        (allowance) => ({
-          name: allowance.name,
-          amountCents: allowance.amountCents,
-          isTaxable: allowance.type === 'TAXABLE',
-          deMinimisCategory: allowance.deMinimisCategory
-            ? DeMinimisCategory[allowance.deMinimisCategory]
-            : undefined,
-        }),
+      const allowances = resolveCutoffAllowances(
+        employee.allowances,
+        employee.employeeNumber,
+        employee.hireDate,
+        params,
+      );
+
+      const eligibleLoans = selectCutoffLoans(
+        employee.loans,
+        employee.employeeNumber,
+        params.cutoffEndDate,
       );
 
       // Stable order ensures partial payments always prioritize the same
       // loans, independent of the database's unspecified row order.
-      const loans: LoanDeductionInput[] = [...employee.loans]
+      const loans: LoanDeductionInput[] = [...eligibleLoans]
         .sort((a, b) => a.id.localeCompare(b.id))
         .map((loan) => ({
           loanId: loan.id,
@@ -753,7 +795,7 @@ export class PayrollService {
         },
       });
 
-      for (const loan of employee.loans) {
+      for (const loan of eligibleLoans) {
         const deduction = result.appliedLoanDeductions.find(
           (item) => item.loanId === loan.id,
         );

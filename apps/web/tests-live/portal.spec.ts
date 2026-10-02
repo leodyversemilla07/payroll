@@ -135,21 +135,9 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     await attendance.getByRole("button", { name: "Load DTR" }).click();
     await expect(attendance).toContainText("No DTR records");
     // Explicit, synthetic standard weekdays; this is not a validated shift calendar.
-    const dates = [
-      "01",
-      "02",
-      "03",
-      "04",
-      "07",
-      "08",
-      "09",
-      "10",
-      "11",
-      "14",
-      "15",
-    ];
-    for (const day of dates) {
-      const date = `2026-09-${day}`;
+    const dates = ["01", "02", "03", "04", "07", "08", "09", "10", "11", "14"];
+    async function addApprovedDtr(date: string) {
+      const halfDay = date === "2026-09-10";
       await attendance
         .getByRole("button", { name: "Add attendance record", exact: true })
         .click();
@@ -160,10 +148,13 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       await editor.getByLabel("Attendance date").fill(date);
       await editor.getByLabel("Day type").selectOption("REGULAR_WORKDAY");
       await editor.getByLabel("Time in (Asia/Manila)").fill(`${date}T09:00`);
-      await editor.getByLabel("Time out (Asia/Manila)").fill(`${date}T18:00`);
+      await editor
+        .getByLabel("Time out (Asia/Manila)")
+        .fill(`${date}T${halfDay ? "13:00" : "18:00"}`);
       await editor
         .getByLabel("Total worked minutes (including overtime)")
-        .fill("480");
+        .fill(halfDay ? "240" : "480");
+      await editor.getByLabel("Undertime minutes").fill(halfDay ? "240" : "0");
       await editor
         .getByLabel("Correction reason")
         .fill(
@@ -182,12 +173,19 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
           .filter({ hasText: `Attendance for ${date} saved` }),
       ).toBeVisible();
     }
+    // Deliberately omit the final weekday until payroll rejects the sparse cutoff.
+    for (const day of dates) await addApprovedDtr(`2026-09-${day}`);
     const records = await prisma.dailyTimeRecord.findMany({
       where: { employeeId: employee.id },
     });
-    expect(records).toHaveLength(11);
+    expect(records).toHaveLength(10);
     expect(
-      records.every((row) => row.isApproved && row.actualWorkedMinutes === 480),
+      records.every(
+        (row) =>
+          row.isApproved &&
+          row.actualWorkedMinutes ===
+            (row.date.toISOString().startsWith("2026-09-10") ? 240 : 480),
+      ),
     ).toBe(true);
     expect(
       records
@@ -239,8 +237,12 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     await request
       .getByLabel("Leave type", { exact: true })
       .selectOption("VACATION");
-    await request.getByLabel("Leave start date").fill("2026-09-16");
-    await request.getByLabel("Leave end date").fill("2026-09-16");
+    await request.getByLabel("Leave start date").fill("2026-09-10");
+    await request.getByLabel("Leave end date").fill("2026-09-10");
+    await request
+      .getByRole("checkbox", { name: "One half-day within this request" })
+      .check();
+    await request.getByLabel("Half-day date").fill("2026-09-10");
     await request
       .getByLabel("Leave reason", { exact: true })
       .fill("Synthetic browser test leave request");
@@ -261,8 +263,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     const balance = await prisma.leaveBalance.findFirstOrThrow({
       where: { employeeId: employee.id, year: 2026, leaveType: "VACATION" },
     });
-    expect(balance.usedCredits.toString()).toBe("1");
-    expect(balance.balance.toString()).toBe("4");
+    expect(balance.usedCredits.toString()).toBe("0.5");
+    expect(balance.balance.toString()).toBe("4.5");
     await logout();
 
     await login(makerEmail);
@@ -271,6 +273,48 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "Process payroll run",
       exact: true,
     });
+    await process
+      .getByLabel("Cutoff", { exact: true })
+      .selectOption("FIRST_CUTOFF");
+    await process.getByLabel("Regular run cutoff start").fill("2026-09-01");
+    await process.getByLabel("Regular run cutoff end").fill("2026-09-15");
+    await process.getByLabel("Regular run payment date").fill("2026-09-16");
+    await process
+      .getByRole("button", { name: "Process regular run", exact: true })
+      .click();
+    await expect(process.getByRole("alert")).toContainText(
+      "1 missing date(s) (2026-09-15)",
+    );
+    expect(
+      await prisma.payrollRun.count({
+        where: { organizationId: organization.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.payslip.count({ where: { employeeId: employee.id } }),
+    ).toBe(0);
+    expect(
+      await prisma.auditLog.count({
+        where: { organizationId: organization.id, entityType: "PayrollRun" },
+      }),
+    ).toBe(0);
+
+    await logout();
+    await login(adminEmail);
+    await navigate(page, "Attendance & DTR");
+    await attendance.getByLabel("DTR employee").selectOption(employee.id);
+    await attendance.getByLabel("DTR start date").fill("2026-09-01");
+    await attendance.getByLabel("DTR end date").fill("2026-09-15");
+    await attendance.getByRole("button", { name: "Load DTR" }).click();
+    await addApprovedDtr("2026-09-15");
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: employee.id },
+      }),
+    ).toBe(11);
+    await logout();
+    await login(makerEmail);
+    await navigate(page, "Process payroll");
     await process
       .getByLabel("Cutoff", { exact: true })
       .selectOption("FIRST_CUTOFF");
@@ -289,6 +333,19 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     expect(run.processedById).toBe(maker.id);
     expect(run.payslips).toHaveLength(1);
     expect(run.payslips[0]?.basicPayCents).toBe(1500000n);
+    expect(run.payslips[0]?.undertimeDeductionCents).toBe(0n);
+    expect(
+      (
+        await prisma.dailyTimeRecord.findUniqueOrThrow({
+          where: {
+            employeeId_date: {
+              employeeId: employee.id,
+              date: new Date("2026-09-10"),
+            },
+          },
+        })
+      ).undertimeMinutes,
+    ).toBe(240);
     expect(run.totalGrossCents - run.totalDeductionsCents).toBe(
       run.totalNetCents,
     );

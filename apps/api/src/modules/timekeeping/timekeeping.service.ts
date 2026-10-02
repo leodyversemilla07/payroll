@@ -5,7 +5,10 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { type DailyTimeRecord, Prisma, prisma } from '@workspace/db';
-import type { AttendanceSummary } from '@workspace/payroll-engine';
+import type {
+  AttendanceSummary,
+  ProcessedDtrDay,
+} from '@workspace/payroll-engine';
 
 @Injectable()
 export class TimekeepingService {
@@ -178,7 +181,7 @@ export class TimekeepingService {
     }
     for (const day of halfLeaveDates) {
       const record = recordsByDate.get(day);
-      if (!record || record.isAbsent) {
+      if (!record || record.isAbsent || record.actualWorkedMinutes <= 0) {
         throw new UnprocessableEntityException(
           'Half-day leave requires a worked attendance record for the partial date; reconcile attendance before payroll',
         );
@@ -200,7 +203,13 @@ export class TimekeepingService {
     }
 
     const effectiveRecords = [
-      ...records.filter((record) => !paidLeaveDates.has(record.date.getTime())),
+      ...records
+        .filter((record) => !paidLeaveDates.has(record.date.getTime()))
+        .map((record) =>
+          halfLeaveDates.has(record.date.getTime())
+            ? reconcileHalfDayDeductions(record)
+            : record,
+        ),
       ...[...paidLeaveDates].map(() => ({
         dayType: 'REGULAR_WORKDAY' as const,
         actualWorkedMinutes: 0,
@@ -213,6 +222,7 @@ export class TimekeepingService {
       })),
     ];
     const summary = summarizeAttendanceRecords(effectiveRecords);
+    assertCompleteWeekdayCoverage(records, paidLeaveDates, startDate, endDate);
     const paidLeaveDays = paidLeaveDates.size + halfLeaveDates.size * 0.5;
     return paidLeaveDays > 0 ? { ...summary, paidLeaveDays } : summary;
   }
@@ -436,12 +446,42 @@ export class TimekeepingService {
     });
   }
 
-  async importBiometricsCsv(csvContent: string, organizationId: string) {
+  async importBiometricsCsv(
+    csvContent: string,
+    organizationId: string,
+    database?: Prisma.TransactionClient,
+  ): Promise<{
+    totalPunchesParsed: number;
+    daysImported: number;
+    anomaliesDetected: number;
+    details: ProcessedDtrDay[];
+  }> {
+    if (!database)
+      return prisma.$transaction(
+        (transaction) =>
+          this.importBiometricsCsv(csvContent, organizationId, transaction),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 60_000,
+        },
+      );
     const { parseBiometricCsv, processBiometricLogs } = await import(
       '@workspace/payroll-engine'
     );
-    const rawLogs = parseBiometricCsv(csvContent);
-    const processedDays = processBiometricLogs(rawLogs);
+    let rawLogs: ReturnType<typeof parseBiometricCsv>;
+    let processedDays: ReturnType<typeof processBiometricLogs>;
+    try {
+      rawLogs = parseBiometricCsv(csvContent);
+      processedDays = processBiometricLogs(rawLogs);
+    } catch (error) {
+      if (error instanceof RangeError)
+        throw new UnprocessableEntityException(error.message);
+      throw error;
+    }
+    if (!rawLogs.length)
+      throw new UnprocessableEntityException(
+        'Biometric CSV contains no punch records',
+      );
 
     let importedDaysCount = 0;
     let anomalyCount = 0;
@@ -451,7 +491,7 @@ export class TimekeepingService {
         anomalyCount += 1;
       }
 
-      const emp = await prisma.employee.findFirst({
+      const emp = await database.employee.findFirst({
         where: {
           employeeNumber: day.employeeNumber,
           organizationId,
@@ -460,21 +500,29 @@ export class TimekeepingService {
 
       if (!emp) continue;
 
-      await this.adjustAttendanceRecord({
-        employeeId: emp.id,
-        organizationId,
-        date: new Date(day.dateStr),
-        dayType: 'REGULAR_WORKDAY',
-        timeIn: day.timeIn,
-        timeOut: day.timeOut,
-        actualWorkedMinutes: day.actualWorkedMinutes,
-        tardinessMinutes: day.tardinessMinutes,
-        undertimeMinutes: day.undertimeMinutes,
-        overtimeMinutes: day.overtimeMinutes,
-        nightDiffMinutes: day.nightDiffMinutes,
-        isAbsent: false,
-        isApproved: !day.hasMissingPunch,
-      });
+      // CSV imports cannot silently replace an already-recorded/approved DTR.
+      // Corrections need the loaded revision and a reason through the HR API.
+      await this.correctAttendanceRecord(
+        {
+          employeeId: emp.id,
+          organizationId,
+          expectedUpdatedAt: null,
+          date: new Date(day.dateStr),
+          dayType: 'REGULAR_WORKDAY',
+          timeIn: day.timeIn ?? null,
+          timeOut: day.timeOut ?? null,
+          actualWorkedMinutes: day.actualWorkedMinutes,
+          tardinessMinutes: day.tardinessMinutes,
+          undertimeMinutes: day.undertimeMinutes,
+          overtimeMinutes: day.overtimeMinutes,
+          nightDiffMinutes: day.nightDiffMinutes,
+          isAbsent: false,
+          // Import is not attendance approval: HR must confirm the shift, break,
+          // holiday classification and punch anomalies through controlled review.
+          isApproved: false,
+        },
+        database,
+      );
 
       importedDaysCount += 1;
     }
@@ -518,6 +566,91 @@ export interface AttendanceCorrectionInput {
   nightDiffMinutes: number;
   isAbsent: boolean;
   isApproved: boolean;
+}
+
+/**
+ * The supported eight-hour weekday model credits four hours of paid leave.
+ * Accept either full-shift deductions or explicitly leave-adjusted deductions.
+ * Never subtract the credit twice or erase a real shortfall. Without an AM/PM
+ * shift calendar, split/contradictory shortfalls require manual reconciliation.
+ * This overlay does not modify the source DTR.
+ */
+function reconcileHalfDayDeductions(record: DailyTimeRecord): DailyTimeRecord {
+  const paidHalfMinutes = 240;
+  const remainingShortfall = paidHalfMinutes - record.actualWorkedMinutes;
+  const { tardinessMinutes, undertimeMinutes } = record;
+  const recordedShortfall = tardinessMinutes + undertimeMinutes;
+  if (tardinessMinutes < 0 || undertimeMinutes < 0 || remainingShortfall < 0) {
+    throw new UnprocessableEntityException(
+      'Half-day attendance has invalid deduction minutes; reconcile manually',
+    );
+  }
+  if (recordedShortfall === remainingShortfall) return record;
+  if (recordedShortfall === remainingShortfall + paidHalfMinutes) {
+    if (undertimeMinutes >= paidHalfMinutes)
+      return {
+        ...record,
+        undertimeMinutes: undertimeMinutes - paidHalfMinutes,
+      };
+    if (tardinessMinutes >= paidHalfMinutes)
+      return {
+        ...record,
+        tardinessMinutes: tardinessMinutes - paidHalfMinutes,
+      };
+  }
+  throw new UnprocessableEntityException(
+    'Half-day attendance deductions do not reconcile with worked minutes and the paid four-hour credit; reconcile the remaining half shift manually',
+  );
+}
+
+/**
+ * Regular payroll currently supports the same Mon–Fri schedule as its 261-day
+ * rate divisor and leave overlay. Every weekday needs an explicit approved DTR
+ * (including recorded holidays/rest exceptions/absences) or approved full-day
+ * paid leave. Missing dates are never invented as attendance or absence.
+ */
+function assertCompleteWeekdayCoverage(
+  records: Pick<
+    DailyTimeRecord,
+    'date' | 'dayType' | 'actualWorkedMinutes' | 'isAbsent' | 'isApproved'
+  >[],
+  paidLeaveDates: ReadonlySet<number>,
+  startDate: Date,
+  endDate: Date,
+) {
+  const recordsByDate = new Map(
+    records.map((record) => [record.date.getTime(), record]),
+  );
+  const missing: string[] = [];
+  const unresolved: string[] = [];
+  for (
+    let day = startDate.getTime();
+    day <= endDate.getTime();
+    day += 86_400_000
+  ) {
+    if ([0, 6].includes(new Date(day).getUTCDay()) || paidLeaveDates.has(day))
+      continue;
+    const record = recordsByDate.get(day);
+    const date = new Date(day).toISOString().slice(0, 10);
+    if (!record?.isApproved) missing.push(date);
+    else if (
+      (record.dayType === 'REGULAR_WORKDAY' ||
+        record.dayType === 'SPECIAL_WORKING_HOLIDAY') &&
+      !record.isAbsent &&
+      record.actualWorkedMinutes === 0
+    )
+      unresolved.push(date);
+  }
+  if (missing.length) {
+    throw new UnprocessableEntityException(
+      `Payroll requires complete approved weekday attendance or approved full-day paid leave: ${missing.length} missing date(s) (${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}). Record and approve the missing DTRs; do not assume attendance or absence.`,
+    );
+  }
+  if (unresolved.length) {
+    throw new UnprocessableEntityException(
+      `Payroll cannot resolve ${unresolved.length} zero-work weekday DTR(s) (${unresolved.slice(0, 5).join(', ')}). Record an explicit absence, reconcile worked time, or approve supported paid leave.`,
+    );
+  }
 }
 
 export function summarizeAttendanceRecords(

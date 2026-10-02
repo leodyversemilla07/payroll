@@ -157,23 +157,37 @@ export function createTimekeepingRouter(ctx: RouterContext) {
 
     importBiometricsCsv: timekeepingWriteProcedure
       .input(z.object({ csvContent: z.string().min(1).max(10_000_000) }))
-      .mutation(async ({ input, ctx }) => {
-        const result = await timekeepingService.importBiometricsCsv(
-          input.csvContent,
-          ctx.user.organizationId,
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'IMPORT',
-          entityType: 'BiometricsCsv',
-          entityId: ctx.user.organizationId,
-          newValue: {
-            daysImported: result.daysImported,
-            anomaliesDetected: result.anomaliesDetected,
-          },
-        });
-        return result;
-      }),
+      .mutation(({ input, ctx }) =>
+        withTimekeepingErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const result = await timekeepingService.importBiometricsCsv(
+                input.csvContent,
+                ctx.user.organizationId,
+                transaction,
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'IMPORT',
+                  entityType: 'BiometricsCsv',
+                  entityId: ctx.user.organizationId,
+                  newValue: {
+                    daysImported: result.daysImported,
+                    anomaliesDetected: result.anomaliesDetected,
+                  },
+                },
+                transaction,
+              );
+              return result;
+            },
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              timeout: 60_000,
+            },
+          ),
+        ),
+      ),
   });
 }

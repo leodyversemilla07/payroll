@@ -138,6 +138,98 @@ width to honor the sidebar's `18rem` token, capped on very narrow screens.
 Browser regressions check light/dark surface alignment, collapsed icon geometry,
 account visibility, and drawer width at 320px, 390px and 700px viewports.
 
+## Regular payroll eligibility and attendance safeguards
+
+- Only active employees hired on or before the cutoff end date are eligible.
+  For daily/hourly employees hired during a cutoff, only the hire date through
+  cutoff end is read for attendance and paid-leave credits; pre-hire DTRs cannot
+  create pay.
+- Monthly salary currently supports full **1–15** and **16–month-end** cutoffs.
+  Mid-cutoff monthly hires and custom monthly periods are blocked until an
+  approved proration policy is implemented; the system does not invent a formula
+  or award a full half-month salary for a partial employment period.
+- Under the current **Monday–Friday** model, every eligible weekday needs an
+  explicit approved DTR (worked time, absence, holiday or rest-day exception) or
+  approved full-day paid leave. Missing dates are not treated as worked time or
+  automatically converted into absences. An approved zero-work workday without
+  an explicit absence is also blocked. Half-day leave needs approved worked
+  attendance; it cannot cover a missing or zero-work DTR.
+- Payroll errors identify the employee and missing dates. Correct and approve
+  attendance through **Attendance & DTR**, then retry. A failed run rolls back
+  payslips, loan collections and payroll audit records together.
+
+This is not a configurable shift/holiday calendar or validated new-hire/statutory
+proration policy. Weekend/rotating schedules and the remaining calculation and
+compliance release gates still need dedicated validation.
+
+## Allowance frequency and loan repayment windows
+
+Regular payroll resolves configured allowances before applying tax/de minimis
+classification:
+
+- `PER_CUTOFF` grants the full configured amount each cutoff.
+- `MONTHLY` grants half on the first cutoff and the remaining half on the second;
+  an odd centavo belongs to the second cutoff. The two shares exactly conserve
+  the configured monthly amount. A missing first-cutoff grant is not automatically
+  carried into a later run.
+- Unsupported frequencies, negative allowance amounts, and missing/inconsistent
+  de minimis category/type configuration block payroll. Monthly allowances for mid-cutoff hires or
+  custom periods also block until an approved allowance-proration policy exists.
+
+Active, positive-balance loans are deducted only when the **cutoff end civil date**
+falls inside their inclusive `startDate`/`endDate` repayment window. A null end
+date is open-ended. Starting during the cutoff makes one full configured
+per-cutoff amortization eligible, subject to available net pay and the remaining
+balance; it is not daily-prorated. A later payment date does not make a
+future-effective loan eligible. Expired balances remain outstanding for review;
+the system neither collects past the configured end date nor marks them settled.
+Invalid active repayment dates/amounts block payroll. The loan-creation API also
+rejects an end date before its start date.
+
+Replays preserve posted payslips and do not grant/collect again. Cancellation
+refunds only actual installment ledger entries, even if loan dates have since
+changed; recalculation uses the current configuration. Monthly allowance splitting
+and cutoff-end loan eligibility are development scheduling conventions, not
+independent approval of employee contracts, company policy, or statutory treatment.
+Versioned allowance changes, missing-cutoff true-ups and partial-period policy
+remain separate validation requirements.
+
+## Manila biometrics and half-day leave reconciliation
+
+Biometric CSV timestamps without an offset are interpreted as **Asia/Manila
+wall time (UTC+08:00)**. Explicit ISO `Z`/offset timestamps are instants. DTR
+grouping, shift comparisons and night-window overlap use Manila civil dates,
+independent of the server timezone. Supported simple CSV formats are:
+
+```csv
+Employee_ID,Timestamp,Punch_Type
+EMP001,2026-09-21 09:00:00,CHECK_IN
+EMP001,2026-09-21T10:00:00Z,CHECK_OUT
+```
+
+Separate `ID,Date,Time,Type` columns are also supported. Types are `CHECK_IN`,
+`CHECK_OUT`, `AUTO`, `1` (in), or `2` (out); omitted types mean `AUTO`. Invalid
+dates/formats are rejected rather than silently skipped. Multiple, duplicate,
+inverted or unmatched punches are flagged for reconciliation, not invented
+worked time. Overnight shift pairing is not implemented.
+
+Imports create **unapproved** DTRs only for the caller's tenant. HR must review
+the shift, break and holiday treatment through Attendance & DTR before approving.
+CSV imports cannot overwrite an existing DTR: use a versioned correction with a
+reason. The API's complete import and import audit share one serializable
+transaction; malformed/conflicting batches and audit failures leave no partial
+imports. Re-uploading already-recorded dates returns a conflict, not an upsert.
+
+Under the supported eight-hour weekday model, approved half-day paid leave
+credits 240 minutes without converting it into worked time. Payroll accepts
+consistent full-shift deduction minutes or already leave-adjusted minutes,
+removes the paid half day only once, and preserves actual remaining tardiness or
+undertime. The source DTR is unchanged. Ambiguous split shortfalls, missing
+deductions and incompatible clock/break totals block payroll for manual review.
+There is still no approved AM/PM leave-slot, rotating/overnight shift or break
+calendar; biometric estimates and these reconciliation rules are not statutory
+or company-policy certification.
+
 ## Large synthetic sandbox dataset
 
 The former in-memory demonstration page has been removed. Sample data now lives

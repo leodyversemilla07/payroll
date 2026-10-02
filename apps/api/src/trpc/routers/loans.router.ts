@@ -28,23 +28,31 @@ export function createLoansRouter(ctx: RouterContext) {
 
     create: payrollProcedure
       .input(
-        z.object({
-          employeeId: z.string().uuid(),
-          loanType: z.enum([
-            'SSS_SALARY_LOAN',
-            'SSS_CALAMITY_LOAN',
-            'PAGIBIG_MULTI_PURPOSE',
-            'PAGIBIG_HOUSING',
-            'COMPANY_CASH_ADVANCE',
-            'COMPANY_EMERGENCY_LOAN',
-          ]),
-          referenceNumber: z.string().max(100).optional(),
-          principalPesos: z.number().positive().finite(),
-          totalAmountPesos: z.number().positive().finite(),
-          amortizationPesos: z.number().positive().finite(),
-          startDate: z.string().date(),
-          endDate: z.string().date().optional(),
-        }),
+        z
+          .object({
+            employeeId: z.string().uuid(),
+            loanType: z.enum([
+              'SSS_SALARY_LOAN',
+              'SSS_CALAMITY_LOAN',
+              'PAGIBIG_MULTI_PURPOSE',
+              'PAGIBIG_HOUSING',
+              'COMPANY_CASH_ADVANCE',
+              'COMPANY_EMERGENCY_LOAN',
+            ]),
+            referenceNumber: z.string().max(100).optional(),
+            principalPesos: z.number().positive().finite(),
+            totalAmountPesos: z.number().positive().finite(),
+            amortizationPesos: z.number().positive().finite(),
+            startDate: z.string().date(),
+            endDate: z.string().date().optional(),
+          })
+          .refine(
+            (input) => !input.endDate || input.endDate >= input.startDate,
+            {
+              message: 'Repayment end date must not be before the start date',
+              path: ['endDate'],
+            },
+          ),
       )
       .mutation(async ({ input, ctx }) => {
         const loan = await loansService.createLoan({

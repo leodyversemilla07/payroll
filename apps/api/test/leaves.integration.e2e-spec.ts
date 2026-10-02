@@ -12,6 +12,7 @@ import { PayrollService } from '../src/modules/payroll/payroll.service';
 import { TimekeepingService } from '../src/modules/timekeeping/timekeeping.service';
 import { createApiRouter } from '../src/trpc/routers/app.router';
 import { type Context, TrpcService } from '../src/trpc/trpc.service';
+import { approvedWeekdayDtrs } from './fixtures/attendance';
 
 const tag = randomUUID();
 const orgIds: string[] = [];
@@ -1053,12 +1054,15 @@ describe('PostgreSQL-backed leave management and decisions', () => {
       data: { payBasis: 'DAILY' },
     });
     await prisma.dailyTimeRecord.createMany({
-      data: ['2029-05-07', '2029-05-08'].map((day) => ({
-        employeeId: own.employee.id,
-        date: new Date(day),
-        actualWorkedMinutes: 480,
-        isApproved: true,
-      })),
+      data: approvedWeekdayDtrs(
+        own.employee.id,
+        '2029-05-01',
+        '2029-05-15',
+      ).map((row) =>
+        (row.date as Date).toISOString().slice(0, 10) === '2029-05-10'
+          ? { ...row, actualWorkedMinutes: 0, isAbsent: true }
+          : row,
+      ),
     });
     const request = await cancelFile('2029-05-10');
     await caller(own.user).leaves.approve({ requestId: request.id });
