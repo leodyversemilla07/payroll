@@ -367,10 +367,18 @@ model LeaveRequest {
   partialDate       DateTime?    @db.Date
   isPaid            Boolean      @default(true)
   reason            String
-  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
   approvedById      String?
   rejectedById      String?
   rejectionReason   String?
+  // Nullable for legacy approvals: never infer a refundable debit from totals alone.
+  debitedBalanceId  String?
+  debitedDays       Decimal?     @db.Decimal(5, 2)
+  cancelledById     String?
+  cancellationReason String?
+  cancelledFromStatus String?
+  cancelledAt       DateTime?
+  refundedDays      Decimal?     @db.Decimal(5, 2)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 

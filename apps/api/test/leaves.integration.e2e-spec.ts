@@ -693,4 +693,400 @@ describe('PostgreSQL-backed leave management and decisions', () => {
     expect(recorded.balance.equals(recorded.totalCredits.minus(1))).toBe(true);
     expect(recorded.revision).toBe(adjustment.status === 'fulfilled' ? 3 : 2);
   });
+
+  const cancelBalance = () =>
+    prisma.leaveBalance.findUniqueOrThrow({
+      where: {
+        employeeId_leaveType_year: {
+          employeeId: own.employee.id,
+          leaveType: 'SAFE_CANCEL',
+          year: 2029,
+        },
+      },
+    });
+  function cancelFile(day: string, half = false, paid = true) {
+    return caller(own.user).leaves.request({
+      employeeId: own.employee.id,
+      leaveType: 'SAFE_CANCEL',
+      startDate: day,
+      endDate: day,
+      daysCount: half ? 0.5 : 1,
+      partialDate: half ? day : undefined,
+      isPaid: paid,
+      reason: 'Verified cancellation schedule for integration testing',
+    });
+  }
+  const cancelApproved = (requestId: string) =>
+    caller(own.user).leaves.cancelApproved({
+      requestId,
+      reason: 'Leave schedule changed before payroll processing',
+    });
+
+  it('withdraws only linked-self or staff pending leave without any debit or refund', async () => {
+    await caller(own.user).leaves.setCredits({
+      ...creditInput('SAFE_CANCEL', 5),
+      year: 2029,
+    });
+    const request = await cancelFile('2029-01-08', true);
+    const self = caller({
+      ...own.user,
+      role: Role.EMPLOYEE,
+      employeeId: own.employee.id,
+    });
+    await expect(
+      caller({
+        ...own.user,
+        role: Role.EMPLOYEE,
+        employeeId: foreign.employee.id,
+      }).leaves.withdraw({
+        requestId: request.id,
+        reason: 'Cannot withdraw another employee record',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      caller(foreign.user).leaves.withdraw({
+        requestId: request.id,
+        reason: 'Foreign tenant must not cancel this record',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const first = await self.leaves.withdraw({
+      requestId: request.id,
+      reason: 'Employee no longer needs the requested date',
+    });
+    const replay = await caller(own.user).leaves.withdraw({
+      requestId: request.id,
+      reason: 'Changed replay reason must not replace history',
+    });
+    expect(replay).toMatchObject({
+      status: 'CANCELLED',
+      cancelledFromStatus: 'PENDING',
+      cancellationReason: first.cancellationReason,
+      refundedDays: null,
+    });
+    expect((await cancelBalance()).balance.toString()).toBe('5');
+    expect((await cancelBalance()).revision).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: request.id, action: 'UPDATE' },
+      }),
+    ).toBe(1);
+  });
+  it('records a half-day debit and restores it only once during concurrent approved cancellations', async () => {
+    const request = await cancelFile('2029-01-09', true);
+    const before = await cancelBalance();
+    const approved = await caller(own.user).leaves.approve({
+      requestId: request.id,
+    });
+    expect(approved).toMatchObject({
+      debitedDays: '0.5',
+      debitedBalanceId: before.id,
+    });
+    for (const role of [
+      Role.EMPLOYEE,
+      Role.PAYROLL_SPECIALIST,
+      Role.DEPARTMENT_MANAGER,
+    ])
+      await expect(
+        caller({
+          ...own.user,
+          role,
+          employeeId: own.employee.id,
+        }).leaves.cancelApproved({
+          requestId: request.id,
+          reason: 'Unauthorized approved reversal must be denied',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      caller({
+        ...own.user,
+        employeeId: own.employee.id,
+      }).leaves.cancelApproved({
+        requestId: request.id,
+        reason: 'Linked administrator must not self-refund',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      caller(foreign.user).leaves.cancelApproved({
+        requestId: request.id,
+        reason: 'Foreign tenant must not restore credits',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const results = await Promise.all([
+      cancelApproved(request.id),
+      cancelApproved(request.id),
+    ]);
+    expect(results[0]).toMatchObject({
+      status: 'CANCELLED',
+      cancelledFromStatus: 'APPROVED',
+      approvedById: own.user.id,
+      refundedDays: '0.5',
+    });
+    const after = await cancelBalance();
+    expect(after.balance.toString()).toBe('5');
+    expect(after.usedCredits.toString()).toBe('0');
+    expect(after.revision).toBe(before.revision + 2);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: request.id, action: 'UPDATE' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: before.id, action: 'UPDATE' },
+      }),
+    ).toBe(1);
+    await expect(
+      timekeeping.getCutoffAttendanceSummary(
+        own.employee.id,
+        own.org.id,
+        new Date('2029-01-09'),
+        new Date('2029-01-09'),
+      ),
+    ).rejects.toThrow('without attendance records');
+    expect(
+      await prisma.dailyTimeRecord.count({
+        where: { employeeId: own.employee.id },
+      }),
+    ).toBe(0);
+    expect(
+      await caller(own.user).leaves.listCreditChanges({
+        employeeId: own.employee.id,
+        year: 2029,
+      }),
+    ).toHaveLength(1);
+    await cancelFile('2029-01-09', true);
+  });
+  it('never escalates a pending withdrawal to a refund when it races approval', async () => {
+    const request = await cancelFile('2029-01-10');
+    const before = await cancelBalance();
+    const outcomes = await Promise.allSettled([
+      caller({
+        ...own.user,
+        role: Role.EMPLOYEE,
+        employeeId: own.employee.id,
+      }).leaves.withdraw({
+        requestId: request.id,
+        reason: 'Employee is withdrawing the pending schedule',
+      }),
+      caller(own.user).leaves.approve({ requestId: request.id }),
+    ]);
+    expect(
+      outcomes.filter((outcome) => outcome.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const recorded = await prisma.leaveRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    expect((await cancelBalance()).usedCredits.toString()).toBe(
+      recorded.status === 'APPROVED' ? '1' : '0',
+    );
+    if (recorded.status === 'APPROVED') {
+      await expect(
+        caller(own.user).leaves.withdraw({
+          requestId: request.id,
+          reason: 'Stale pending withdrawal may not refund an approval',
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await cancelApproved(request.id);
+    }
+    expect((await cancelBalance()).balance.equals(before.balance)).toBe(true);
+  });
+  it('rolls back request, refund and first audit when the balance audit fails', async () => {
+    const request = await cancelFile('2029-01-11');
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    const before = await cancelBalance();
+    const originalRecord = audit.record.bind(audit);
+    const spy = jest
+      .spyOn(audit, 'record')
+      .mockImplementationOnce(originalRecord)
+      .mockRejectedValueOnce(new Error('Balance audit unavailable'));
+    await expect(cancelApproved(request.id)).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+    });
+    expect(
+      (
+        await prisma.leaveRequest.findUniqueOrThrow({
+          where: { id: request.id },
+        })
+      ).status,
+    ).toBe('APPROVED');
+    expect((await cancelBalance()).revision).toBe(before.revision);
+    expect((await cancelBalance()).balance.equals(before.balance)).toBe(true);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: request.id, action: 'UPDATE' },
+      }),
+    ).toBe(0);
+    spy.mockRestore();
+    await cancelApproved(request.id);
+  });
+  it('blocks processed cutoffs, permits a cancelled cutoff and never rewrites disbursed payroll', async () => {
+    const request = await cancelFile('2029-02-01');
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    const run = await prisma.payrollRun.create({
+      data: {
+        organizationId: own.org.id,
+        cutoffSequence: 'FIRST_CUTOFF',
+        cutoffStartDate: new Date('2029-02-01'),
+        cutoffEndDate: new Date('2029-02-15'),
+        paymentDate: new Date('2029-02-16'),
+        status: 'DRAFT',
+      },
+    });
+    for (const status of [
+      'DRAFT',
+      'PROCESSING',
+      'AUDITED',
+      'APPROVED',
+    ] as const) {
+      await prisma.payrollRun.update({
+        where: { id: run.id },
+        data: { status },
+      });
+      await expect(cancelApproved(request.id)).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+    }
+    // Fixture represents a legitimately cancelled, never-disbursed regular run.
+    await prisma.payrollRun.update({
+      where: { id: run.id },
+      data: { status: 'CANCELLED' },
+    });
+    await cancelApproved(request.id);
+    const disbursedRequest = await cancelFile('2029-02-20');
+    await caller(own.user).leaves.approve({ requestId: disbursedRequest.id });
+    const paidRun = await prisma.payrollRun.create({
+      data: {
+        organizationId: own.org.id,
+        cutoffSequence: 'SECOND_CUTOFF',
+        cutoffStartDate: new Date('2029-02-16'),
+        cutoffEndDate: new Date('2029-02-28'),
+        paymentDate: new Date('2029-03-01'),
+        status: 'DISBURSED',
+      },
+    });
+    const before = await cancelBalance();
+    await expect(cancelApproved(disbursedRequest.id)).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    expect((await cancelBalance()).revision).toBe(before.revision);
+    expect(
+      (await prisma.payrollRun.findUniqueOrThrow({ where: { id: paidRun.id } }))
+        .status,
+    ).toBe('DISBURSED');
+  });
+  it('fails closed for legacy paid approval even if aggregate used credits seem sufficient; unpaid cancellation never refunds', async () => {
+    const before = await cancelBalance();
+    const legacy = await prisma.leaveRequest.create({
+      data: {
+        employeeId: own.employee.id,
+        leaveType: 'SAFE_CANCEL',
+        startDate: new Date('2029-03-05'),
+        endDate: new Date('2029-03-05'),
+        daysCount: new Prisma.Decimal(1),
+        isPaid: true,
+        status: 'APPROVED',
+        approvedById: own.user.id,
+        reason: 'Legacy paid approval without debit trace',
+      },
+    });
+    await expect(cancelApproved(legacy.id)).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+    });
+    const unpaid = await cancelFile('2029-03-07', false, false);
+    await caller(own.user).leaves.approve({ requestId: unpaid.id });
+    expect((await cancelApproved(unpaid.id)).refundedDays).toBeNull();
+    expect((await cancelBalance()).revision).toBe(before.revision);
+  });
+  it('invalidates stale credit edits after a refund and lists cancellation provenance as plain strings', async () => {
+    const request = await cancelFile('2029-03-06');
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    const version = (await cancelBalance()).revision;
+    await cancelApproved(request.id);
+    await expect(
+      caller(own.user).leaves.setCredits({
+        ...creditInput('SAFE_CANCEL', 7, version),
+        year: 2029,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const rows = await caller(own.user).leaves.listRequests({
+      employeeId: own.employee.id,
+      year: 2029,
+      status: 'CANCELLED',
+    });
+    expect(
+      rows.some(
+        (row) =>
+          row.id === request.id &&
+          row.refundedDays === '1' &&
+          row.debitedDays === '1',
+      ),
+    ).toBe(true);
+    expect(() => superjson.stringify(rows)).not.toThrow();
+  });
+  it('preserves used credits when an explicit total adjustment races a cancellation refund', async () => {
+    const request = await cancelFile('2029-03-08');
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    const before = await cancelBalance();
+    const [adjustment, reversal] = await Promise.allSettled([
+      caller(own.user).leaves.setCredits({
+        ...creditInput('SAFE_CANCEL', 6, before.revision),
+        year: 2029,
+      }),
+      cancelApproved(request.id),
+    ]);
+    expect(reversal.status).toBe('fulfilled');
+    const after = await cancelBalance();
+    expect(after.usedCredits.equals(before.usedCredits.minus(1))).toBe(true);
+    expect(
+      after.balance.equals(after.totalCredits.minus(after.usedCredits)),
+    ).toBe(true);
+    expect(after.totalCredits.toString()).toBe(
+      adjustment.status === 'fulfilled' ? '6' : '5',
+    );
+    expect(after.revision).toBe(
+      before.revision + (adjustment.status === 'fulfilled' ? 2 : 1),
+    );
+  });
+  it('keeps a payroll snapshot consistent when execution races an approved leave reversal', async () => {
+    await prisma.employee.update({
+      where: { id: own.employee.id },
+      data: { payBasis: 'DAILY' },
+    });
+    await prisma.dailyTimeRecord.createMany({
+      data: ['2029-05-07', '2029-05-08'].map((day) => ({
+        employeeId: own.employee.id,
+        date: new Date(day),
+        actualWorkedMinutes: 480,
+        isApproved: true,
+      })),
+    });
+    const request = await cancelFile('2029-05-10');
+    await caller(own.user).leaves.approve({ requestId: request.id });
+    const before = await cancelBalance();
+    const [reversal, execution] = await Promise.allSettled([
+      cancelApproved(request.id),
+      caller({ ...own.user, role: Role.SUPER_ADMIN }).payroll.triggerRun({
+        cutoffSequence: 'FIRST_CUTOFF',
+        cutoffStartDate: '2029-05-01',
+        cutoffEndDate: '2029-05-15',
+        paymentDate: '2029-05-16',
+      }),
+    ]);
+    expect(execution.status).toBe('fulfilled');
+    if (execution.status !== 'fulfilled') return;
+    const recorded = await prisma.leaveRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    const slip = await prisma.payslip.findFirstOrThrow({
+      where: { payrollRunId: execution.value.id, employeeId: own.employee.id },
+    });
+    expect(slip.paidLeavePayCents > 0n).toBe(recorded.status === 'APPROVED');
+    expect(
+      (await cancelBalance()).balance.equals(
+        reversal.status === 'fulfilled'
+          ? before.balance.plus(1)
+          : before.balance,
+      ),
+    ).toBe(true);
+  });
 });

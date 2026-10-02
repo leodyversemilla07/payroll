@@ -5,7 +5,12 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { type LeaveRequest, Prisma, prisma } from '@workspace/db';
+import {
+  type LeaveBalance,
+  type LeaveRequest,
+  Prisma,
+  prisma,
+} from '@workspace/db';
 import { calculateSilCashConversion } from '@workspace/payroll-engine';
 import {
   type CreditAudit,
@@ -25,6 +30,23 @@ export interface LeaveRequestInput {
   isPaid: boolean;
   reason: string;
 }
+export type CancellationAudit = (data: {
+  previous: LeaveRequest;
+  request: LeaveRequest;
+  previousBalance: LeaveBalance | null;
+  balance: LeaveBalance | null;
+  transaction: Prisma.TransactionClient;
+}) => Promise<void>;
+export interface LeaveCancellationInput {
+  requestId: string;
+  organizationId: string;
+  actorId: string;
+  actorEmployeeId?: string;
+  expectedStatus: 'PENDING' | 'APPROVED';
+  canWithdrawAny: boolean;
+  reason: string;
+}
+
 type DecisionAudit = (data: {
   previous: LeaveRequest;
   request: LeaveRequest;
@@ -62,7 +84,7 @@ export class LeavesService {
     employeeId: string,
     organizationId: string,
     year: number,
-    status?: 'PENDING' | 'APPROVED' | 'REJECTED',
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED',
     limit = 100,
   ) {
     await this.assertEmployeeInOrganization(employeeId, organizationId);
@@ -174,14 +196,7 @@ export class LeavesService {
         throw new ConflictException(
           'Another approved leave request overlaps these dates; reconcile the requests before approval',
         );
-      const updated = await transaction.leaveRequest.updateMany({
-        where: { id: requestId, status: 'PENDING' },
-        data: { status: 'APPROVED', approvedById },
-      });
-      if (updated.count !== 1)
-        throw new ConflictException(
-          'Leave request was changed while being approved',
-        );
+      let debitedBalanceId: string | null = null;
       if (request.isPaid) {
         const deducted = await transaction.leaveBalance.updateMany({
           where: {
@@ -201,7 +216,34 @@ export class LeavesService {
           throw new ConflictException(
             'Paid leave requires an existing balance with enough available days',
           );
+        const debited = await transaction.leaveBalance.findFirst({
+          where: {
+            employeeId: request.employeeId,
+            employee: { organizationId },
+            leaveType: request.leaveType,
+            year: schedule.startDate.getUTCFullYear(),
+          },
+          select: { id: true },
+        });
+        if (!debited)
+          throw new ConflictException(
+            'Debited leave balance could not be recorded',
+          );
+        debitedBalanceId = debited.id;
       }
+      const updated = await transaction.leaveRequest.updateMany({
+        where: { id: requestId, status: 'PENDING' },
+        data: {
+          status: 'APPROVED',
+          approvedById,
+          debitedBalanceId,
+          debitedDays: request.isPaid ? request.daysCount : null,
+        },
+      });
+      if (updated.count !== 1)
+        throw new ConflictException(
+          'Leave request was changed while being approved',
+        );
       const approved = await transaction.leaveRequest.findUniqueOrThrow({
         where: { id: requestId },
       });
@@ -241,6 +283,140 @@ export class LeavesService {
       });
       await audit?.({ previous, request, transaction });
       return { request, newlyRejected: true };
+    });
+  }
+
+  async cancelLeaveRequest(
+    input: LeaveCancellationInput,
+    audit: CancellationAudit,
+  ) {
+    if (input.reason.trim().length < 10 || input.reason.length > 500)
+      throw new UnprocessableEntityException(
+        'A 10–500-character cancellation reason is required',
+      );
+    return this.runDecision(async (transaction) => {
+      const previous = await transaction.leaveRequest.findFirst({
+        where: {
+          id: input.requestId,
+          employee: { organizationId: input.organizationId },
+        },
+      });
+      if (!previous) throw new NotFoundException('Leave request not found');
+      if (input.expectedStatus === 'PENDING') {
+        if (
+          !input.canWithdrawAny &&
+          input.actorEmployeeId !== previous.employeeId
+        )
+          throw new ForbiddenException(
+            'You can withdraw only your own pending employee leave',
+          );
+      } else if (input.actorEmployeeId === previous.employeeId)
+        throw new ForbiddenException(
+          'Another administrator must reverse your approved employee leave',
+        );
+      if (
+        previous.status === 'CANCELLED' &&
+        previous.cancelledFromStatus === input.expectedStatus
+      )
+        return { request: previous, newlyCancelled: false };
+      if (previous.status !== input.expectedStatus)
+        throw new ConflictException(
+          'Leave status changed. Reload requests before cancelling; pending withdrawal cannot reverse an approval.',
+        );
+      let previousBalance: LeaveBalance | null = null;
+      let balance: LeaveBalance | null = null;
+      let refundedDays: Prisma.Decimal | null = null;
+      if (input.expectedStatus === 'APPROVED') {
+        const schedule = validateLeaveSchedule({
+          ...previous,
+          daysCount: Number(previous.daysCount),
+          partialDate: previous.partialDate ?? undefined,
+        });
+        const processed = await transaction.payrollRun.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            cutoffSequence: { in: ['FIRST_CUTOFF', 'SECOND_CUTOFF'] },
+            status: { not: 'CANCELLED' },
+            cutoffStartDate: { lte: schedule.endDate },
+            cutoffEndDate: { gte: schedule.startDate },
+          },
+          select: { id: true },
+        });
+        if (processed)
+          throw new ConflictException(
+            'These leave dates overlap a non-cancelled regular payroll run. Resolve payroll first; cancellation never rewrites payslips and disbursed payroll cannot be cancelled.',
+          );
+        if (previous.isPaid) {
+          if (
+            !previous.debitedBalanceId ||
+            !previous.debitedDays?.equals(previous.daysCount)
+          )
+            throw new UnprocessableEntityException(
+              'This approval has no matching recorded debit provenance. Reconcile legacy usage manually; cancellation cannot guess a credit refund.',
+            );
+          previousBalance = await transaction.leaveBalance.findFirst({
+            where: {
+              id: previous.debitedBalanceId,
+              employeeId: previous.employeeId,
+              employee: { organizationId: input.organizationId },
+              leaveType: previous.leaveType,
+              year: schedule.startDate.getUTCFullYear(),
+            },
+          });
+          if (
+            !previousBalance ||
+            previousBalance.usedCredits.lessThan(previous.debitedDays) ||
+            previousBalance.balance.isNegative() ||
+            !previousBalance.totalCredits.equals(
+              previousBalance.usedCredits.plus(previousBalance.balance),
+            )
+          )
+            throw new UnprocessableEntityException(
+              'The recorded debit balance is missing or inconsistent. Reconcile usage manually before cancellation.',
+            );
+          const restored = await transaction.leaveBalance.updateMany({
+            where: {
+              id: previousBalance.id,
+              employee: { organizationId: input.organizationId },
+              revision: previousBalance.revision,
+              usedCredits: { gte: previous.debitedDays },
+            },
+            data: {
+              usedCredits: { decrement: previous.debitedDays },
+              balance: { increment: previous.debitedDays },
+              revision: { increment: 1 },
+            },
+          });
+          if (restored.count !== 1)
+            throw new ConflictException(
+              'Leave balance changed while being restored. Reload requests and balances.',
+            );
+          balance = await transaction.leaveBalance.findUniqueOrThrow({
+            where: { id: previousBalance.id },
+          });
+          refundedDays = previous.debitedDays;
+        }
+      }
+      const changed = await transaction.leaveRequest.updateMany({
+        where: { id: previous.id, status: input.expectedStatus },
+        data: {
+          status: 'CANCELLED',
+          cancelledFromStatus: input.expectedStatus,
+          cancelledById: input.actorId,
+          cancellationReason: input.reason,
+          cancelledAt: new Date(),
+          refundedDays,
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException(
+          'Leave request changed while being cancelled',
+        );
+      const request = await transaction.leaveRequest.findUniqueOrThrow({
+        where: { id: previous.id },
+      });
+      await audit({ previous, request, previousBalance, balance, transaction });
+      return { request, newlyCancelled: true };
     });
   }
 

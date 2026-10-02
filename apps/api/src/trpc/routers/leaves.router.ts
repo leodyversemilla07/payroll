@@ -40,7 +40,12 @@ function serializeCreditChange<T extends LeaveCreditChange>(change: T) {
   };
 }
 function serializeRequest(request: LeaveRequest) {
-  return { ...request, daysCount: request.daysCount.toString() };
+  return {
+    ...request,
+    daysCount: request.daysCount.toString(),
+    debitedDays: request.debitedDays?.toString() ?? null,
+    refundedDays: request.refundedDays?.toString() ?? null,
+  };
 }
 async function withLeaveErrors<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -89,6 +94,69 @@ async function withLeaveErrors<T>(operation: () => Promise<T>): Promise<T> {
 
 export function createLeavesRouter(ctx: RouterContext) {
   const { trpc, protectedProcedure, leavesService, auditService } = ctx;
+  const cancellationInput = z.object({
+    requestId: z.string().uuid(),
+    reason: z.string().trim().min(10).max(500),
+  });
+  const cancel = async (
+    input: z.infer<typeof cancellationInput>,
+    user: Parameters<typeof assertEmployeeAccess>[0],
+    req: Parameters<typeof auditService.record>[0]['request'],
+    expectedStatus: 'PENDING' | 'APPROVED',
+  ) =>
+    withLeaveErrors(async () => {
+      const { request } = await leavesService.cancelLeaveRequest(
+        {
+          ...input,
+          expectedStatus,
+          organizationId: user.organizationId,
+          actorId: user.id,
+          actorEmployeeId: user.employeeId,
+          canWithdrawAny: TIMEKEEPING_READ_ROLES.some(
+            (role) => role === user.role,
+          ),
+        },
+        async ({
+          previous,
+          request,
+          previousBalance,
+          balance,
+          transaction,
+        }) => {
+          await auditService.record(
+            {
+              user,
+              request: req,
+              action: 'UPDATE',
+              entityType: 'LeaveRequest',
+              entityId: request.id,
+              previousValue: { request: previous, balance: previousBalance },
+              newValue: { request, balance },
+            },
+            transaction,
+          );
+          if (balance)
+            await auditService.record(
+              {
+                user,
+                request: req,
+                action: 'UPDATE',
+                entityType: 'LeaveBalance',
+                entityId: balance.id,
+                previousValue: previousBalance,
+                newValue: {
+                  balance,
+                  leaveRequestId: request.id,
+                  refundedDays: request.refundedDays,
+                  reason: request.cancellationReason,
+                },
+              },
+              transaction,
+            );
+        },
+      );
+      return serializeRequest(request);
+    });
   return trpc.router({
     getBalances: protectedProcedure
       .input(z.object({ employeeId: z.string().uuid(), year: year.optional() }))
@@ -182,7 +250,9 @@ export function createLeavesRouter(ctx: RouterContext) {
         z.object({
           employeeId: z.string().uuid(),
           year,
-          status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+          status: z
+            .enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'])
+            .optional(),
           limit: z.number().int().min(1).max(200).default(100),
         }),
       )
@@ -316,6 +386,18 @@ export function createLeavesRouter(ctx: RouterContext) {
           );
           return serializeRequest(request);
         }),
+      ),
+
+    withdraw: protectedProcedure
+      .input(cancellationInput)
+      .mutation(({ input, ctx }) =>
+        cancel(input, ctx.user, ctx.req, 'PENDING'),
+      ),
+
+    cancelApproved: ctx.hrProcedure
+      .input(cancellationInput)
+      .mutation(({ input, ctx }) =>
+        cancel(input, ctx.user, ctx.req, 'APPROVED'),
       ),
 
     monetizeSil: protectedProcedure

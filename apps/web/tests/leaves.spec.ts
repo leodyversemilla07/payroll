@@ -23,6 +23,13 @@ const original = {
   approvedById: null as string | null,
   rejectedById: null as string | null,
   rejectionReason: null as string | null,
+  debitedBalanceId: null as string | null,
+  debitedDays: null as string | null,
+  refundedDays: null as string | null,
+  cancelledById: null as string | null,
+  cancellationReason: null as string | null,
+  cancelledFromStatus: null as string | null,
+  cancelledAt: null as string | null,
   createdAt: "2026-09-01T08:00:00.000Z",
   updatedAt: "2026-09-01T08:00:00.000Z",
 };
@@ -48,12 +55,31 @@ async function mockLeaves(
     creditConflict?: boolean;
     commitThenError?: boolean;
     historyFailures?: number;
+    approved?: boolean;
+    legacyDebit?: boolean;
+    cancellationConflict?: boolean;
+    cancellationCommitThenError?: boolean;
+    blockCancellation?: Promise<void>;
   } = {},
 ) {
   let signedIn = false;
-  let rows = options.empty ? [] : [{ ...original }];
+  let rows = options.empty
+    ? []
+    : [
+        {
+          ...original,
+          status: options.approved ? "APPROVED" : "PENDING",
+          approvedById: options.approved ? "original-approver" : null,
+          debitedDays: options.approved && !options.legacyDebit ? "0.5" : null,
+          debitedBalanceId:
+            options.approved && !options.legacyDebit ? "balance-1" : null,
+        },
+      ];
+  let cancellationConflict = options.cancellationConflict ?? false;
+  let cancellationCommitThenError =
+    options.cancellationCommitThenError ?? false;
   let totalValue = "5";
-  let usedValue = String(options.initialUsed ?? 0);
+  let usedValue = String(options.initialUsed ?? (options.approved ? 0.5 : 0));
   let balanceValue = String(Number(totalValue) - Number(usedValue));
   let revision = 0;
   let hasBalance = !options.empty;
@@ -93,6 +119,13 @@ async function mockLeaves(
       await options.blockDecision;
     if (paths.includes("leaves.setCredits") && options.blockCredits)
       await options.blockCredits;
+    if (
+      paths.some((path) =>
+        ["leaves.withdraw", "leaves.cancelApproved"].includes(path),
+      ) &&
+      options.blockCancellation
+    )
+      await options.blockCancellation;
     function creditBalance() {
       return {
         id: "balance-1",
@@ -151,6 +184,72 @@ async function mockLeaves(
             },
           },
         };
+      }
+      if (["leaves.withdraw", "leaves.cancelApproved"].includes(path)) {
+        const payload = request.postDataJSON()[String(index)].json;
+        saves.push({ path, payload });
+        const old =
+          rows.find((row) => row.id === payload.requestId) ?? original;
+        if (old.status === "CANCELLED")
+          return { result: { data: { json: old } } };
+        if (cancellationConflict) {
+          cancellationConflict = false;
+          usedValue = "0.5";
+          balanceValue = String(Number(totalValue) - 0.5);
+          revision++;
+          rows = rows.map((row) =>
+            row.id === old.id
+              ? {
+                  ...row,
+                  status: "APPROVED",
+                  approvedById: "other-approver",
+                  debitedDays: "0.5",
+                  debitedBalanceId: "balance-1",
+                }
+              : row,
+          );
+          return apiError(
+            "CONFLICT",
+            "Leave status changed. Reload requests before cancelling; pending withdrawal cannot reverse an approval.",
+          );
+        }
+        if (path === "leaves.withdraw" && old.status !== "PENDING")
+          return apiError(
+            "CONFLICT",
+            "Pending withdrawal cannot reverse an approval",
+          );
+        if (path === "leaves.cancelApproved" && old.isPaid && !old.debitedDays)
+          return apiError(
+            "UNPROCESSABLE_CONTENT",
+            "This approval has no matching recorded debit provenance. Reconcile legacy usage manually; cancellation cannot guess a credit refund.",
+          );
+        const refundedDays =
+          path === "leaves.cancelApproved" && old.isPaid
+            ? old.debitedDays
+            : null;
+        if (refundedDays) {
+          usedValue = String(Number(usedValue) - Number(refundedDays));
+          balanceValue = String(Number(balanceValue) + Number(refundedDays));
+          revision++;
+        }
+        const saved = {
+          ...old,
+          status: "CANCELLED",
+          cancelledFromStatus: old.status,
+          cancelledById: user.id,
+          cancellationReason: String(payload.reason),
+          cancelledAt: "2026-09-10T08:00:00.000Z",
+          refundedDays,
+        };
+        rows = rows.map((row) => (row.id === old.id ? saved : row));
+        if (cancellationCommitThenError) {
+          cancellationCommitThenError = false;
+          return apiError(
+            "INTERNAL_SERVER_ERROR",
+            "Successful cancellation response was lost",
+          );
+        }
+        return { result: { data: { json: saved } } };
       }
       if (path === "leaves.setCredits") {
         const payload = request.postDataJSON()[String(index)].json;
@@ -247,7 +346,13 @@ async function mockLeaves(
           rows.find((row) => row.id === payload.requestId) ?? original;
         const saved =
           path === "leaves.approve"
-            ? { ...old, status: "APPROVED", approvedById: user.id }
+            ? {
+                ...old,
+                status: "APPROVED",
+                approvedById: user.id,
+                debitedDays: old.daysCount,
+                debitedBalanceId: "balance-1",
+              }
             : {
                 ...old,
                 status: "REJECTED",
@@ -934,6 +1039,269 @@ test("mobile credit history has retry and fits without horizontal overflow", asy
     .click();
   await expect(
     section.getByText("No credit changes are recorded in this history."),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+async function cancellationForm(page: Page, approved = false) {
+  const section = page.getByRole("region", {
+    name: "Leave management",
+    exact: true,
+  });
+  await section
+    .getByRole("button", {
+      name: approved ? "Reverse approved leave" : "Withdraw request",
+      exact: true,
+    })
+    .click();
+  const form = page.getByRole("region", {
+    name: "Leave cancellation",
+    exact: true,
+  });
+  await form
+    .getByLabel("Cancellation reason", { exact: true })
+    .fill("Private leave cancellation draft");
+  return form;
+}
+test("payroll specialist withdraws pending leave without changing credits", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, { role: "PAYROLL_SPECIALIST" });
+  const section = await load(page);
+  const form = await cancellationForm(page);
+  await form
+    .getByRole("button", { name: "Confirm withdrawal", exact: true })
+    .click();
+  await expect(
+    section.getByText(/Leave request recorded as CANCELLED/),
+  ).toBeVisible();
+  await expect(
+    section.getByText("5 available · 0 used · 5 credited day(s)"),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Cancellation reason: Private leave cancellation draft"),
+  ).toBeVisible();
+  expect(saves).toEqual([
+    {
+      path: "leaves.withdraw",
+      payload: {
+        requestId: original.id,
+        reason: "Private leave cancellation draft",
+      },
+    },
+  ]);
+  await expect(section.getByText(/Recorded credit restoration:/)).toHaveCount(
+    0,
+  );
+});
+test("HR reverses approved half-day leave with recorded restoration and retained approval", async ({
+  page,
+}) => {
+  const { saves, reads } = await mockLeaves(page, { approved: true });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await expect(form.getByText(/original recorded debit, once/)).toBeVisible();
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(
+    section.getByText(/Leave request recorded as CANCELLED/),
+  ).toBeVisible();
+  await expect(
+    section.getByText("5 available · 0 used · 5 credited day(s)"),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Recorded credit restoration: 0.5 day(s)"),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Approved by user: original-approver"),
+  ).toBeVisible();
+  expect(saves[0]?.path).toBe("leaves.cancelApproved");
+  await section.getByLabel("Request status").selectOption("CANCELLED");
+  await expect(
+    section.getByRole("heading", { name: "SIL · CANCELLED", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() => reads.some((read) => read.status === "CANCELLED"))
+    .toBeTruthy();
+});
+test("approved reversal is hidden for specialists and linked-self administrators", async ({
+  page,
+}) => {
+  await mockLeaves(page, { approved: true, role: "PAYROLL_SPECIALIST" });
+  let section = await load(page);
+  await expect(
+    section.getByRole("heading", { name: "SIL · APPROVED", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("button", {
+      name: "Reverse approved leave",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.unroute("**/trpc/**");
+  await mockLeaves(page, { approved: true, self: true });
+  section = await load(page);
+  await expect(
+    section.getByRole("heading", { name: "SIL · APPROVED", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("button", {
+      name: "Reverse approved leave",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
+test("legacy paid approvals fail closed without discarding the cancellation reason", async ({
+  page,
+}) => {
+  await mockLeaves(page, { approved: true, legacyDebit: true });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(
+    form.getByText(/approval has no matching recorded debit provenance/),
+  ).toBeVisible();
+  await expect(
+    form.getByLabel("Cancellation reason", { exact: true }),
+  ).toHaveValue("Private leave cancellation draft");
+  await expect(
+    section.getByText("4.5 available · 0.5 used · 5 credited day(s)"),
+  ).toBeVisible();
+});
+test("stale specialist withdrawal cannot escalate to reversing a new approval", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, {
+    role: "PAYROLL_SPECIALIST",
+    cancellationConflict: true,
+  });
+  const section = await load(page);
+  const form = await cancellationForm(page);
+  await form
+    .getByRole("button", { name: "Confirm withdrawal", exact: true })
+    .click();
+  await expect(
+    form.getByText(/pending withdrawal cannot reverse an approval/),
+  ).toBeVisible();
+  await expect(
+    form.getByLabel("Cancellation reason", { exact: true }),
+  ).toHaveValue("Private leave cancellation draft");
+  await form
+    .getByRole("button", { name: "Close and reload requests", exact: true })
+    .click();
+  await expect(
+    section.getByRole("heading", { name: "SIL · APPROVED", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("button", {
+      name: "Reverse approved leave",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  expect(saves.every((save) => save.path === "leaves.withdraw")).toBeTruthy();
+});
+test("lost cancellation responses retry without restoring credits a second time", async ({
+  page,
+}) => {
+  const { saves } = await mockLeaves(page, {
+    approved: true,
+    cancellationCommitThenError: true,
+  });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(form.getByText(/outcome is uncertain/)).toBeVisible();
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(
+    section.getByText(/Leave request recorded as CANCELLED/),
+  ).toBeVisible();
+  await expect(
+    section.getByText("5 available · 0 used · 5 credited day(s)"),
+  ).toBeVisible();
+  expect(saves).toHaveLength(2);
+});
+test("background request failures keep the cancellation draft and do not persist it", async ({
+  page,
+}) => {
+  await mockLeaves(page, { approved: true, refreshFailure: true });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(section.getByText(/Request refresh failed/)).toBeVisible();
+  await expect(
+    form.getByLabel("Cancellation reason", { exact: true }),
+  ).toHaveValue("Private leave cancellation draft");
+  expect(
+    await page.evaluate(() =>
+      JSON.stringify({
+        local: { ...localStorage },
+        session: { ...sessionStorage },
+      }),
+    ),
+  ).not.toContain("Private leave cancellation draft");
+});
+test("cancellation in flight blocks closing, credit edits and changing filters", async ({
+  page,
+}) => {
+  let release: () => void = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await mockLeaves(page, { approved: true, blockCancellation: blocked });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await expect(
+    section.getByLabel("Leave employee", { exact: true }),
+  ).toBeDisabled();
+  await expect(section.getByLabel("Leave year")).toBeDisabled();
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(
+    form.getByRole("button", { name: "Close cancellation", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    section.getByLabel("Leave employee", { exact: true }),
+  ).toBeDisabled();
+  await expect(
+    section.getByRole("button", {
+      name: "Allocate leave credits",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  release();
+  await expect(
+    section.getByText(/Leave request recorded as CANCELLED/),
+  ).toBeVisible();
+});
+test("mobile cancellation and long stored reasons fit without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockLeaves(page, { approved: true });
+  const section = await load(page);
+  const form = await cancellationForm(page, true);
+  await form
+    .getByLabel("Cancellation reason", { exact: true })
+    .fill("x".repeat(400));
+  await form
+    .getByRole("button", { name: "Confirm approved reversal", exact: true })
+    .click();
+  await expect(
+    section.getByRole("heading", { name: "SIL · CANCELLED", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(

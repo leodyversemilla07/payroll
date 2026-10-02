@@ -50,6 +50,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
   const rejectLeaveRequest = jest.fn();
   const setEmployeeLeaveCredits = jest.fn();
   const listEmployeeCreditChanges = jest.fn();
+  const cancelLeaveRequest = jest.fn();
   const record = jest.fn();
   const database = {} as Prisma.TransactionClient;
   const router = createLeavesRouter(
@@ -62,6 +63,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         rejectLeaveRequest,
         setEmployeeLeaveCredits,
         listEmployeeCreditChanges,
+        cancelLeaveRequest,
       },
       auditService: { record },
     } as unknown as RouterServices),
@@ -135,6 +137,39 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           change: creditChange,
           replayed: false,
         };
+      },
+    );
+    cancelLeaveRequest.mockImplementation(
+      async (
+        input: Parameters<LeavesService['cancelLeaveRequest']>[0],
+        audit: Parameters<LeavesService['cancelLeaveRequest']>[1],
+      ) => {
+        const previous = { ...saved, status: input.expectedStatus };
+        const request = {
+          ...previous,
+          status: 'CANCELLED',
+          cancelledFromStatus: input.expectedStatus,
+          cancelledById: input.actorId,
+          cancellationReason: input.reason,
+          refundedDays:
+            input.expectedStatus === 'APPROVED'
+              ? new Prisma.Decimal(0.5)
+              : null,
+        };
+        await audit({
+          previous: previous as never,
+          request: request as never,
+          previousBalance:
+            input.expectedStatus === 'APPROVED'
+              ? (creditBalance as never)
+              : null,
+          balance:
+            input.expectedStatus === 'APPROVED'
+              ? (creditBalance as never)
+              : null,
+          transaction: database,
+        });
+        return { request, newlyCancelled: true };
       },
     );
     getEmployeeLeaveBalances.mockResolvedValue([]);
@@ -386,6 +421,96 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         year: 2026,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it.each([
+    null,
+    Role.EMPLOYEE,
+    Role.PAYROLL_SPECIALIST,
+    Role.DEPARTMENT_MANAGER,
+  ])('denies approved reversal to %s', async (role) => {
+    await expect(
+      router.createCaller(context(role, employeeId)).cancelApproved({
+        requestId,
+        reason: 'Schedule changed before payroll',
+      }),
+    ).rejects.toMatchObject({ code: role ? 'FORBIDDEN' : 'UNAUTHORIZED' });
+    expect(cancelLeaveRequest).not.toHaveBeenCalled();
+  });
+  it.each([Role.HR_ADMIN, Role.SUPER_ADMIN])(
+    'audits %s approved reversal and balance restoration in the same transaction',
+    async (role) => {
+      const result = await router.createCaller(context(role)).cancelApproved({
+        requestId,
+        reason: 'Schedule changed before payroll',
+      });
+      expect(result).toMatchObject({
+        status: 'CANCELLED',
+        refundedDays: '0.5',
+        cancelledFromStatus: 'APPROVED',
+      });
+      expect(cancelLeaveRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expectedStatus: 'APPROVED',
+          organizationId: 'org-1',
+          actorId: 'user-1',
+        }),
+        expect.any(Function),
+      );
+      expect(record).toHaveBeenCalledTimes(2);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'LeaveBalance',
+          action: 'UPDATE',
+          newValue: expect.objectContaining({
+            leaveRequestId: requestId,
+            refundedDays: new Prisma.Decimal(0.5),
+          }),
+        }),
+        database,
+      );
+    },
+  );
+  it('binds withdrawal to pending state and authenticated self/staff access despite forged fields', async () => {
+    const forged = {
+      requestId,
+      reason: 'Employee no longer needs these dates',
+      expectedStatus: 'APPROVED',
+      canWithdrawAny: true,
+      actorId: 'foreign-user',
+    };
+    await router
+      .createCaller(context(Role.EMPLOYEE, employeeId))
+      .withdraw(forged);
+    expect(cancelLeaveRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedStatus: 'PENDING',
+        canWithdrawAny: false,
+        actorId: 'user-1',
+        actorEmployeeId: employeeId,
+      }),
+      expect.any(Function),
+    );
+    expect(record).toHaveBeenCalledTimes(1);
+    await router.createCaller(context(Role.PAYROLL_SPECIALIST)).withdraw({
+      requestId,
+      reason: 'Staff withdrawing erroneous pending dates',
+    });
+    expect(cancelLeaveRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedStatus: 'PENDING',
+        canWithdrawAny: true,
+      }),
+      expect.any(Function),
+    );
+  });
+  it('requires an explicit cancellation reason before calling the service', async () => {
+    await expect(
+      router
+        .createCaller(context(Role.HR_ADMIN))
+        .cancelApproved({ requestId, reason: '  short ' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(cancelLeaveRequest).not.toHaveBeenCalled();
   });
 
   it('maps missing employees and audit failures to safe errors', async () => {

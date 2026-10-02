@@ -375,8 +375,9 @@ function CreditHistory({
         </CardTitle>
         <CardDescription>
           Up to 100 latest allocation/adjustment attestations. Approval debits
-          are audited separately. Legacy balances may predate this history;
-          references and recorded amounts are not independent verification.
+          and cancellation refunds are audited separately. Legacy balances may
+          predate this history; references and recorded amounts are not
+          independent verification.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

@@ -89,7 +89,7 @@ policy and employee eligibility. `leaves.setCredits` requires an exact leave
 code, a whole/half-day total (0–999.5), a source reference, a 10–500-character
 reason, a loaded revision (null for a new balance), and an operation UUID. New
 codes are uppercase; existing codes cannot be renamed or duplicated by casing.
-The amount is a **new total**, not an increment. Usage is never reset/refunded;
+The amount is a **new total**, not an increment. This form never resets/refunds usage;
 availability is total less used credits. New allocations open with zero recorded
 usage; approved paid requests without a balance block allocation rather than
 inventing zero usage. Importing prior/external usage is not supported by this
@@ -109,11 +109,11 @@ refresh failures and blocks employee/year switching until save or explicit cance
 
 `leaves.listCreditChanges` exposes up to 100 most recent allocation/adjustment
 attestations per employee/year, with actor, source, reason and numeric snapshots.
-Approval debits remain in audit records separately. Existing balances are not
+Approval debits and cancellation refunds remain in audit records separately. Existing balances are not
 backfilled as verified ledger entries. Unchanged totals may be explicitly recorded
 with a fresh source/reason, but neither that history nor a reference string proves
 statutory eligibility or source authenticity. Automatic accrual, carryover, leave
-usage corrections and durable source-document storage are not implemented.
+general/external usage corrections and durable source-document storage are not implemented.
 
 Staff can file requests with explicit paid/unpaid treatment, a reason, and
 Monday–Friday calendar dates (1900–2100). Whole days or one named half weekday
@@ -129,6 +129,22 @@ approved overlaps, and any non-cancelled regular payroll cutoff covering the
 dates blocks approval. Decisions do not rewrite payslips. Rejection requires a
 10–500-character reason and cannot reverse approved leave or refund credits.
 
+Staff with timekeeping access can withdraw pending requests; the API also permits
+linked employees to withdraw their own pending requests. Approved reversal is a
+separate HR/super-admin operation, never a linked-self refund. Both require a
+10–500-character reason and preserve original approval/cancellation provenance.
+A stale withdrawal cannot reverse an intervening approval. Every non-cancelled
+regular cutoff, including drafts and disbursed runs, blocks approved reversal.
+Paid approval now records its exact debit balance and days; reversal restores
+that recorded amount once, with a balance revision and transactional request and
+balance audits. Replays preserve the first cancellation actor/reason, and refunds
+invalidate stale credit edits. Legacy paid approvals without debit provenance,
+missing balances or inconsistent usage require manual reconciliation: aggregate
+usage is not proof of a refundable debit. Unpaid reversals and pending withdrawals
+never change credits. Cancellation does not alter DTRs or payroll snapshots;
+explicitly reconcile attendance before any future payroll, without assuming
+worked time or absence. Cancelled dates may be refiled subject to normal checks.
+
 Filing and its audit commit together. Approval, any paid-credit debit, and the
 before/after audit also commit together, as do rejection, actor/reason and its
 audit. Concurrent decisions cannot overdraw or replace each other; replays retain
@@ -137,10 +153,10 @@ write absence DTRs; reconcile attendance explicitly. Drafts are not stored in th
 browser and survive background refresh failures. Browser tests mock tRPC;
 PostgreSQL tests cover persistence, tenant isolation, audit rollback and races.
 
-Deploy migrations `20261002000000_leave_rejection` and
-`20261002010000_leave_credit_changes` with `pnpm db:migrate:deploy` before using
-the updated API. They add rejection provenance, a balance revision and the credit
-change table; existing credit amounts/usage remain unchanged, and no entitlement
+Deploy migrations `20261002000000_leave_rejection`,
+`20261002010000_leave_credit_changes` and `20261003000000_leave_cancellation`
+with `pnpm db:migrate:deploy` before using the updated API. They add rejection and
+cancellation/debit provenance, a balance revision and the credit change table; existing credit amounts/usage remain unchanged, and no entitlement
 or verified history is fabricated. Do not run seeding against populated databases.
 
 ## Attendance and DTR

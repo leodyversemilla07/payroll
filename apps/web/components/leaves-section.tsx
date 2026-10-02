@@ -29,6 +29,7 @@ import { type FormEvent, useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { leaveSchedule } from "@/lib/leave-schedule";
 import { trpc } from "@/lib/trpc";
+import { LeaveCancellationForm } from "./leave-cancellation";
 import { LeaveCreditTools } from "./leave-credits";
 
 type Outputs = inferRouterOutputs<AppRouter>["leaves"];
@@ -74,7 +75,7 @@ export function LeavesSection({
     year: number;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [creditEditing, setCreditEditing] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const year = Number(yearText);
@@ -106,7 +107,7 @@ export function LeavesSection({
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={load}>
-          <FieldSet disabled={busy || creditEditing}>
+          <FieldSet disabled={busy || editorOpen}>
             <FieldLegend>Load employee leave records</FieldLegend>
             <Field>
               <FieldLabel htmlFor="leave-employee">Leave employee</FieldLabel>
@@ -149,7 +150,7 @@ export function LeavesSection({
             {validationError && <FieldError>{validationError}</FieldError>}
             <Button
               type="submit"
-              disabled={busy || creditEditing || employeeListFailed}
+              disabled={busy || editorOpen || employeeListFailed}
             >
               Load leave records
             </Button>
@@ -168,7 +169,7 @@ export function LeavesSection({
             canDecide={canDecide}
             canApproveOwn={loaded.employeeId !== actorEmployeeId}
             onBusy={setBusy}
-            onCreditEditing={setCreditEditing}
+            onEditing={setEditorOpen}
           />
         ) : (
           <p>Select an employee and load their leave year.</p>
@@ -185,7 +186,7 @@ function EmployeeLeaves({
   canDecide,
   canApproveOwn,
   onBusy,
-  onCreditEditing,
+  onEditing,
 }: {
   employeeId: string;
   year: number;
@@ -193,13 +194,14 @@ function EmployeeLeaves({
   canDecide: boolean;
   canApproveOwn: boolean;
   onBusy: (busy: boolean) => void;
-  onCreditEditing: (editing: boolean) => void;
+  onEditing: (editing: boolean) => void;
 }) {
   const [status, setStatus] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
   const [creditEditing, setCreditEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [cancellation, setCancellation] = useState<Leave | null>(null);
   const [decision, setDecision] = useState<{
     request: Leave;
     kind: "approve" | "reject";
@@ -215,7 +217,7 @@ function EmployeeLeaves({
       status:
         status === "ALL"
           ? undefined
-          : (status as "PENDING" | "APPROVED" | "REJECTED"),
+          : (status as "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"),
       limit: 100,
     },
     { retry: false },
@@ -304,11 +306,11 @@ function EmployeeLeaves({
         balances={balances.data}
         readFailed={balances.isError}
         canManage={canDecide && canApproveOwn}
-        disabled={busy || !!decision || showForm}
+        disabled={busy || !!decision || !!cancellation || showForm}
         onBusy={setPending}
         onEditing={(editing) => {
           setCreditEditing(editing);
-          onCreditEditing(editing);
+          onEditing(editing);
         }}
         onRecorded={(replayed) =>
           setNotice(
@@ -321,7 +323,7 @@ function EmployeeLeaves({
       <Button
         type="button"
         variant="outline"
-        disabled={busy || !!decision || creditEditing}
+        disabled={busy || !!decision || !!cancellation || creditEditing}
         aria-expanded={showForm}
         aria-controls="leave-request-form"
         onClick={() => {
@@ -362,12 +364,12 @@ function EmployeeLeaves({
             <NativeSelect
               id="leave-status"
               value={status}
-              disabled={busy || !!decision}
+              disabled={busy || !!decision || !!cancellation}
               onChange={(event) => setStatus(event.currentTarget.value)}
               className="w-full"
             >
               <NativeSelectOption value="ALL">All statuses</NativeSelectOption>
-              {["PENDING", "APPROVED", "REJECTED"].map((entry) => (
+              {["PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((entry) => (
                 <NativeSelectOption key={entry} value={entry}>
                   {entry}
                 </NativeSelectOption>
@@ -446,6 +448,54 @@ function EmployeeLeaves({
                               Rejected by user: {request.rejectedById}
                             </p>
                           )}
+                          {request.cancellationReason && (
+                            <p className="break-words">
+                              Cancellation reason: {request.cancellationReason}
+                            </p>
+                          )}
+                          {request.cancelledById && (
+                            <p className="break-all text-sm text-muted-foreground">
+                              Cancelled by user: {request.cancelledById} · from{" "}
+                              {request.cancelledFromStatus}
+                            </p>
+                          )}
+                          {request.cancelledAt && (
+                            <p className="break-words text-sm text-muted-foreground">
+                              Recorded cancellation time (UTC):{" "}
+                              {new Date(request.cancelledAt).toISOString()}
+                            </p>
+                          )}
+                          {request.refundedDays && (
+                            <p>
+                              Recorded credit restoration:{" "}
+                              {request.refundedDays} day(s)
+                            </p>
+                          )}
+                          {(request.status === "PENDING" ||
+                            (request.status === "APPROVED" &&
+                              canDecide &&
+                              canApproveOwn)) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={
+                                busy ||
+                                !!decision ||
+                                !!cancellation ||
+                                showForm ||
+                                creditEditing
+                              }
+                              onClick={() => {
+                                setCancellation(request);
+                                onEditing(true);
+                                setNotice(null);
+                              }}
+                            >
+                              {request.status === "PENDING"
+                                ? "Withdraw request"
+                                : "Reverse approved leave"}
+                            </Button>
+                          )}
                           {request.status === "PENDING" && canDecide && (
                             <div className="flex flex-wrap gap-3">
                               {canApproveOwn ? (
@@ -455,6 +505,7 @@ function EmployeeLeaves({
                                   disabled={
                                     busy ||
                                     !!decision ||
+                                    !!cancellation ||
                                     showForm ||
                                     creditEditing
                                   }
@@ -477,6 +528,7 @@ function EmployeeLeaves({
                                 disabled={
                                   busy ||
                                   !!decision ||
+                                  !!cancellation ||
                                   showForm ||
                                   creditEditing
                                 }
@@ -505,6 +557,27 @@ function EmployeeLeaves({
           )}
         </CardContent>
       </Card>
+      {cancellation && (
+        <LeaveCancellationForm
+          key={cancellation.id}
+          request={cancellation}
+          onBusy={setPending}
+          onClose={() => {
+            setCancellation(null);
+            onEditing(false);
+            void utils.leaves.listRequests.invalidate();
+            void utils.leaves.getBalances.invalidate();
+          }}
+          onDone={() => {
+            setCancellation(null);
+            onEditing(false);
+            setNotice(
+              "Leave request recorded as CANCELLED. Review attendance before future payroll.",
+            );
+            invalidate();
+          }}
+        />
+      )}
       {decision && (
         <LeaveDecision
           key={`${decision.request.id}:${decision.kind}`}

@@ -77,6 +77,7 @@ function mockApproval(
       findUniqueOrThrow: jest.fn(async () => request()),
     },
     leaveBalance: {
+      findFirst: jest.fn(async () => ({ id: 'balance-1' })),
       updateMany: jest.fn(
         async (args: {
           where: { balance: { gte: number } };
@@ -160,12 +161,13 @@ describe('LeavesService approval', () => {
     expect(transaction.leaveBalance.updateMany).not.toHaveBeenCalled();
   });
 
-  it('rejects a lost approval race without touching the balance', async () => {
-    const { transaction } = mockApproval({ lostRace: true });
+  it('rolls back the debit after a lost approval race', async () => {
+    const { getBalance, getStatus } = mockApproval({ lostRace: true });
     await expect(
       new LeavesService().approveLeaveRequest('request-1', 'org-1', 'admin-1'),
     ).rejects.toThrow(ConflictException);
-    expect(transaction.leaveBalance.updateMany).not.toHaveBeenCalled();
+    expect(getBalance()).toBe(5);
+    expect(getStatus()).toBe('PENDING');
   });
 
   it('retries a serialization conflict before deducting leave', async () => {
