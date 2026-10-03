@@ -149,6 +149,8 @@ export function YearEndTaxSection({
                   <strong className="max-w-full break-words">{row.name}</strong>
                   <span className="max-w-full break-words text-sm text-muted-foreground">
                     {row.employeeNumber} · {statusLabel(row.status)}
+                    {row.issuanceFreshness &&
+                      ` · certificate ${row.issuanceFreshness.toLowerCase()}`}
                     {row.unsettledDifferenceCents != null &&
                     big(row.unsettledDifferenceCents) !== 0n
                       ? ` · ${fmt(row.unsettledDifferenceCents)}`
@@ -187,8 +189,178 @@ export function YearEndTaxSection({
             taxYear={taxYear}
           />
         )}
+        {taxYearValid && <TaxCorrectionQueue taxYear={taxYear} />}
       </CardContent>
     </Card>
+  );
+}
+
+function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
+  const pending = trpc.compliance.listTaxCorrections.useQuery(
+    { taxYear },
+    { retry: false },
+  );
+  const me = trpc.auth.me.useQuery(undefined, { retry: false });
+  const invalidate = useInvalidateEvidence();
+  const [notice, setNotice] = useState("");
+  const review = trpc.compliance.reviewTaxCorrection.useMutation({
+    onSuccess: (record) => {
+      setNotice(
+        record.status === "APPROVED"
+          ? "Correction approved and new evidence version published."
+          : "Correction rejected; effective evidence is unchanged.",
+      );
+      invalidate();
+    },
+  });
+  const canReview =
+    me.data?.role === "SUPER_ADMIN" || me.data?.role === "HR_ADMIN";
+  return (
+    <section
+      aria-label="Tax correction review"
+      className="space-y-3 rounded-xl border border-border p-4"
+    >
+      <h3 className="font-semibold">Pending tax corrections</h3>
+      <p className="text-sm text-muted-foreground">
+        Only a different signed-in HR/admin can approve or reject. Pending
+        proposals do not affect payroll or tax evidence. Showing up to 100
+        oldest requests.
+      </p>
+      {notice && <p role="status">{notice}</p>}
+      <MutationError error={review.error} />
+      {pending.isPending ? (
+        <p role="status">Loading corrections…</p>
+      ) : pending.isError ? (
+        <p role="alert">
+          Could not load corrections.{" "}
+          <Button variant="outline" onClick={() => void pending.refetch()}>
+            Retry
+          </Button>
+        </p>
+      ) : !pending.data?.length ? (
+        <p className="text-sm">No pending corrections.</p>
+      ) : (
+        pending.data.map((request) => (
+          <TaxCorrectionReview
+            key={request.id}
+            request={request}
+            own={request.requestedById === me.data?.id}
+            canReview={canReview}
+            busy={review.isPending}
+            submit={(decision, reviewReason) =>
+              review.mutate({ id: request.id, decision, reviewReason })
+            }
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
+function TaxCorrectionReview({
+  request,
+  own,
+  canReview,
+  busy,
+  submit,
+}: {
+  request: {
+    id: string;
+    kind: string;
+    requestedById: string;
+    payload: unknown;
+    originalEvidence: unknown;
+    settlementPreview?: unknown;
+  };
+  own: boolean;
+  canReview: boolean;
+  busy: boolean;
+  submit: (decision: "APPROVE" | "REJECT", reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  return (
+    <section
+      aria-label={`Correction ${request.id}`}
+      className="space-y-3 rounded-xl border border-border p-3 text-sm"
+    >
+      <h4 className="font-semibold">
+        {request.kind.replaceAll("_", " ")} · requested by{" "}
+        {request.requestedById}
+      </h4>
+      <details>
+        <summary className="cursor-pointer">
+          Compare recorded evidence and proposed values
+        </summary>
+        <p className="mt-2 font-medium">Recorded evidence</p>
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+          {JSON.stringify(request.originalEvidence, null, 2)}
+        </pre>
+        <p className="mt-2 font-medium">
+          Proposed values (amounts are decimal centavo strings)
+        </p>
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+          {JSON.stringify(request.payload, null, 2)}
+        </pre>
+        {!!request.settlementPreview && (
+          <>
+            <p className="mt-2 font-medium">
+              Live settlement difference (centavos; approval rejects changed
+              sources)
+            </p>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+              {JSON.stringify(request.settlementPreview, null, 2)}
+            </pre>
+          </>
+        )}
+      </details>
+      {own ? (
+        <p>
+          You requested this correction. A different HR/admin must review it.
+        </p>
+      ) : !canReview ? (
+        <p>HR/admin review is required.</p>
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit("APPROVE", reason);
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor={`review-${request.id}`}>
+                Review reason (10–500 characters)
+              </FieldLabel>
+              <Input
+                id={`review-${request.id}`}
+                required
+                minLength={10}
+                maxLength={500}
+                value={reason}
+                onChange={(event) => setReason(event.currentTarget.value)}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={busy}>
+                Approve correction
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  busy ||
+                  reason.trim().length < 10 ||
+                  reason.trim().length > 500
+                }
+                onClick={() => submit("REJECT", reason)}
+              >
+                Reject correction
+              </Button>
+            </div>
+          </FieldGroup>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -329,6 +501,8 @@ function useInvalidateEvidence() {
   const utils = trpc.useUtils();
   return () => {
     void utils.compliance.listYearEndReconciliations.invalidate();
+    void utils.compliance.listTaxCorrections.invalidate();
+    void utils.compliance.getBir2316Issuance.invalidate();
     void utils.compliance.getTaxEvidence.invalidate();
   };
 }
@@ -357,7 +531,6 @@ function DeclarationForms({
   const [correctHasPrior, setCorrectHasPrior] = useState(false);
   const [correctReference, setCorrectReference] = useState("");
   const [reason, setReason] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
   const [correctDone, setCorrectDone] = useState(false);
   const correct = trpc.compliance.correctPriorEmployerDeclaration.useMutation({
     onSuccess: () => {
@@ -381,7 +554,6 @@ function DeclarationForms({
       hasPriorEmployer: correctHasPrior,
       sourceReference: correctReference,
       correctionReason: reason,
-      reviewerId,
     });
   }
 
@@ -472,14 +644,17 @@ function DeclarationForms({
                     idPrefix="declaration-correct"
                     reason={reason}
                     setReason={setReason}
-                    reviewerId={reviewerId}
-                    setReviewerId={setReviewerId}
                   />
                   <MutationError error={correct.error} />
-                  {correctDone && <p role="status">Correction recorded.</p>}
+                  {correctDone && (
+                    <p role="status">
+                      Correction requested; awaiting a different signed-in
+                      HR/admin.
+                    </p>
+                  )}
                   <Field>
                     <Button type="submit" disabled={correct.isPending}>
-                      {correct.isPending ? "Recording…" : "Record correction"}
+                      {correct.isPending ? "Submitting…" : "Request correction"}
                     </Button>
                   </Field>
                 </FieldGroup>
@@ -496,14 +671,10 @@ function CorrectionFields({
   idPrefix,
   reason,
   setReason,
-  reviewerId,
-  setReviewerId,
 }: {
   idPrefix: string;
   reason: string;
   setReason: (value: string) => void;
-  reviewerId: string;
-  setReviewerId: (value: string) => void;
 }) {
   return (
     <>
@@ -520,21 +691,10 @@ function CorrectionFields({
           required
         />
       </Field>
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-reviewer`}>
-          Reviewer user ID (must differ from you)
-        </FieldLabel>
-        <Input
-          id={`${idPrefix}-reviewer`}
-          value={reviewerId}
-          onChange={(event) => setReviewerId(event.currentTarget.value)}
-          required
-        />
-        <FieldDescription>
-          A second active staff user in your organization reviews the
-          correction.
-        </FieldDescription>
-      </Field>
+      <p className="text-xs text-muted-foreground">
+        This proposal does not change effective evidence. A different signed-in
+        HR/admin must review it before a new version is published.
+      </p>
     </>
   );
 }
@@ -572,7 +732,6 @@ function PreviousIncomeForms({
   const [correctWithheld, setCorrectWithheld] = useState("");
   const [correctReference, setCorrectReference] = useState("");
   const [reason, setReason] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
   const [correctDone, setCorrectDone] = useState(false);
   const correct = trpc.compliance.correctPreviousEmployerIncome.useMutation({
     onSuccess: () => {
@@ -639,7 +798,6 @@ function PreviousIncomeForms({
       taxWithheldCents: withheldCents,
       documentReference: correctReference,
       correctionReason: reason,
-      reviewerId,
     });
   }
 
@@ -852,14 +1010,17 @@ function PreviousIncomeForms({
                     idPrefix={`prior-correct-${target.id}`}
                     reason={reason}
                     setReason={setReason}
-                    reviewerId={reviewerId}
-                    setReviewerId={setReviewerId}
                   />
                   <MutationError error={correct.error} />
-                  {correctDone && <p role="status">Correction recorded.</p>}
+                  {correctDone && (
+                    <p role="status">
+                      Correction requested; awaiting a different signed-in
+                      HR/admin.
+                    </p>
+                  )}
                   <Field>
                     <Button type="submit" disabled={correct.isPending}>
-                      {correct.isPending ? "Recording…" : "Record correction"}
+                      {correct.isPending ? "Submitting…" : "Request correction"}
                     </Button>
                   </Field>
                 </FieldGroup>
@@ -895,7 +1056,6 @@ function RemittanceForms({
   const [correctRemitted, setCorrectRemitted] = useState("");
   const [correctReference, setCorrectReference] = useState("");
   const [reason, setReason] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
   const [correctDone, setCorrectDone] = useState(false);
   const correct = trpc.compliance.correctMonthlyTaxRemittance.useMutation({
     onSuccess: () => {
@@ -938,7 +1098,6 @@ function RemittanceForms({
       remittedCents,
       documentReference: correctReference,
       correctionReason: reason,
-      reviewerId,
     });
   }
 
@@ -1063,14 +1222,17 @@ function RemittanceForms({
                     idPrefix={`remittance-correct-${target.month}`}
                     reason={reason}
                     setReason={setReason}
-                    reviewerId={reviewerId}
-                    setReviewerId={setReviewerId}
                   />
                   <MutationError error={correct.error} />
-                  {correctDone && <p role="status">Correction recorded.</p>}
+                  {correctDone && (
+                    <p role="status">
+                      Correction requested; awaiting a different signed-in
+                      HR/admin.
+                    </p>
+                  )}
                   <Field>
                     <Button type="submit" disabled={correct.isPending}>
-                      {correct.isPending ? "Recording…" : "Record correction"}
+                      {correct.isPending ? "Submitting…" : "Request correction"}
                     </Button>
                   </Field>
                 </FieldGroup>
@@ -1191,8 +1353,30 @@ function PreviewCard({
           {voided && <p role="status">Certificate voided.</p>}
           {issuanceQuery.isPending ? (
             <p role="status">Loading issuance…</p>
+          ) : issuanceQuery.isError ? (
+            <p role="alert">
+              Could not verify certificate issuance.{" "}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void issuanceQuery.refetch()}
+              >
+                Retry
+              </Button>
+            </p>
           ) : issuance && issuance.status === "ISSUED" ? (
             <>
+              {issuance.freshness !== "CURRENT" && (
+                <p role="alert" className="text-destructive">
+                  Certificate{" "}
+                  {issuance.freshness === "STALE"
+                    ? "is stale"
+                    : "cannot be verified"}
+                  .{" "}
+                  {issuance.freshnessReason ??
+                    "Review, void and re-issue after checking the source evidence."}
+                </p>
+              )}
               <p>
                 Issued {issuance.issuedAt ? fmtDate(issuance.issuedAt) : "—"} ·
                 version {String(issuance.version ?? "?")} · statutory deadline{" "}
@@ -1281,7 +1465,6 @@ function SettlementForms({
   const [correctDate, setCorrectDate] = useState(`${taxYear}-12-20`);
   const [correctReference, setCorrectReference] = useState("");
   const [reason, setReason] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
   const [correctDone, setCorrectDone] = useState(false);
   const correct = trpc.compliance.correctYearEndSettlement.useMutation({
     onSuccess: () => {
@@ -1310,7 +1493,6 @@ function SettlementForms({
       settlementDate: correctDate,
       documentReference: correctReference,
       correctionReason: reason,
-      reviewerId,
     });
   }
 
@@ -1414,14 +1596,19 @@ function SettlementForms({
                       idPrefix="settlement-correct"
                       reason={reason}
                       setReason={setReason}
-                      reviewerId={reviewerId}
-                      setReviewerId={setReviewerId}
                     />
                     <MutationError error={correct.error} />
-                    {correctDone && <p role="status">Correction recorded.</p>}
+                    {correctDone && (
+                      <p role="status">
+                        Correction requested; awaiting a different signed-in
+                        HR/admin.
+                      </p>
+                    )}
                     <Field>
                       <Button type="submit" disabled={correct.isPending}>
-                        {correct.isPending ? "Recording…" : "Record correction"}
+                        {correct.isPending
+                          ? "Submitting…"
+                          : "Request correction"}
                       </Button>
                     </Field>
                   </FieldGroup>

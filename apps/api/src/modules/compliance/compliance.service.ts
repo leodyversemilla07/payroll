@@ -4,11 +4,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { prisma } from '@workspace/db';
+import { type Prisma, prisma } from '@workspace/db';
 import type {
   ThirteenthMonthBatchResult,
   ThirteenthMonthEmployeeResult,
 } from '@workspace/payroll-engine';
+import { resolvePriorEmployerTotals } from './prior-employment.inputs';
+import { sourceFingerprint, TAX_SOURCE_FORMAT } from './tax-source-fingerprint';
 
 export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
 
@@ -52,6 +54,14 @@ export interface Bir1601CSummary {
 
 @Injectable()
 export class ComplianceService {
+  private database: Prisma.TransactionClient = prisma;
+
+  /** A fresh transaction-scoped instance; never mutate the singleton service. */
+  withDatabase(database: Prisma.TransactionClient): ComplianceService {
+    const service = new ComplianceService();
+    service.database = database;
+    return service;
+  }
   /**
    * Generates a structured bank transmittal CSV string for the specified payroll run and bank.
    */
@@ -60,7 +70,7 @@ export class ComplianceService {
     bankFormat: BankFormat,
     organizationId: string,
   ): Promise<string> {
-    const run = await prisma.payrollRun.findFirst({
+    const run = await this.database.payrollRun.findFirst({
       where: { id: payrollRunId, organizationId },
       select: { status: true },
     });
@@ -71,7 +81,7 @@ export class ComplianceService {
       );
     }
 
-    const payslips = await prisma.payslip.findMany({
+    const payslips = await this.database.payslip.findMany({
       where: {
         payrollRunId,
         payrollRun: {
@@ -177,7 +187,7 @@ export class ComplianceService {
     year: number,
     organizationId: string,
   ): Promise<Bir1601CSummary> {
-    const payslips = await prisma.payslip.findMany({
+    const payslips = await this.database.payslip.findMany({
       where: {
         payrollRun: {
           organizationId,
@@ -254,7 +264,7 @@ export class ComplianceService {
     employeeId: string,
     organizationId: string,
   ) {
-    const employee = await prisma.employee.findFirst({
+    const employee = await this.database.employee.findFirst({
       where: { id: employeeId, organizationId },
       select: { id: true },
     });
@@ -299,17 +309,18 @@ export class ComplianceService {
         'Correction reviewer must differ from the recorder (four-eyes)',
       );
     }
-    const reviewer = await prisma.user.findFirst({
+    const reviewer = await this.database.user.findFirst({
       where: {
         id: input.reviewerId,
         organizationId: input.organizationId,
         isActive: true,
+        role: { in: ['SUPER_ADMIN', 'HR_ADMIN'] },
       },
       select: { id: true },
     });
     if (!reviewer) {
       throw new UnprocessableEntityException(
-        'Correction reviewer must be an active user in this organization',
+        'Correction reviewer must be an active HR/admin in this organization',
       );
     }
   }
@@ -324,7 +335,7 @@ export class ComplianceService {
   }) {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const existing = await prisma.priorEmployerDeclaration.findFirst({
+    const existing = await this.database.priorEmployerDeclaration.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -338,7 +349,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.priorEmployerDeclaration.create({
+      this.database.priorEmployerDeclaration.create({
         data: input,
         select: {
           id: true,
@@ -377,7 +388,7 @@ export class ComplianceService {
       recorderId: input.recordedById,
       reviewerId: input.reviewerId,
     });
-    const current = await prisma.priorEmployerDeclaration.findFirst({
+    const current = await this.database.priorEmployerDeclaration.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -391,7 +402,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.priorEmployerDeclaration.create({
+      this.database.priorEmployerDeclaration.create({
         data: {
           employeeId: input.employeeId,
           organizationId: input.organizationId,
@@ -437,7 +448,7 @@ export class ComplianceService {
   }) {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const declaration = await prisma.priorEmployerDeclaration.findFirst({
+    const declaration = await this.database.priorEmployerDeclaration.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -463,24 +474,25 @@ export class ComplianceService {
         'Invalid previous-employer period or compensation totals',
       );
     }
-    const existingDocument = await prisma.previousEmployerIncome.findFirst({
-      where: {
-        employeeId: input.employeeId,
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-        employerTin: input.employerTin,
-        periodStart: input.periodStart,
-        periodEnd: input.periodEnd,
-      },
-      select: { id: true },
-    });
+    const existingDocument =
+      await this.database.previousEmployerIncome.findFirst({
+        where: {
+          employeeId: input.employeeId,
+          organizationId: input.organizationId,
+          taxYear: input.taxYear,
+          employerTin: input.employerTin,
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+        },
+        select: { id: true },
+      });
     if (existingDocument) {
       throw new ConflictException(
         'This previous-employer document already exists; use the correction procedure with a reviewer to supersede it',
       );
     }
     return this.createEvidence(() =>
-      prisma.previousEmployerIncome.create({
+      this.database.previousEmployerIncome.create({
         data: input,
         select: {
           id: true,
@@ -542,7 +554,7 @@ export class ComplianceService {
         'Invalid previous-employer compensation totals',
       );
     }
-    const current = await prisma.previousEmployerIncome.findFirst({
+    const current = await this.database.previousEmployerIncome.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -559,7 +571,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.previousEmployerIncome.create({
+      this.database.previousEmployerIncome.create({
         data: {
           employeeId: input.employeeId,
           organizationId: input.organizationId,
@@ -621,7 +633,7 @@ export class ComplianceService {
       );
     }
     const existingRemittance =
-      await prisma.monthlyTaxRemittanceEvidence.findFirst({
+      await this.database.monthlyTaxRemittanceEvidence.findFirst({
         where: {
           organizationId: input.organizationId,
           taxYear: input.taxYear,
@@ -635,7 +647,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.monthlyTaxRemittanceEvidence.create({
+      this.database.monthlyTaxRemittanceEvidence.create({
         data: input,
         select: {
           id: true,
@@ -683,7 +695,7 @@ export class ComplianceService {
       recorderId: input.recordedById,
       reviewerId: input.reviewerId,
     });
-    const current = await prisma.monthlyTaxRemittanceEvidence.findFirst({
+    const current = await this.database.monthlyTaxRemittanceEvidence.findFirst({
       where: {
         organizationId: input.organizationId,
         taxYear: input.taxYear,
@@ -697,7 +709,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.monthlyTaxRemittanceEvidence.create({
+      this.database.monthlyTaxRemittanceEvidence.create({
         data: {
           organizationId: input.organizationId,
           taxYear: input.taxYear,
@@ -740,19 +752,19 @@ export class ComplianceService {
       remittanceVersions,
       settlementVersions,
     ] = await Promise.all([
-      prisma.priorEmployerDeclaration.findMany({
+      this.database.priorEmployerDeclaration.findMany({
         where: { employeeId, organizationId, taxYear },
         orderBy: { version: 'desc' },
       }),
-      prisma.previousEmployerIncome.findMany({
+      this.database.previousEmployerIncome.findMany({
         where: { employeeId, organizationId, taxYear },
         orderBy: [{ version: 'desc' }, { periodStart: 'asc' }],
       }),
-      prisma.monthlyTaxRemittanceEvidence.findMany({
+      this.database.monthlyTaxRemittanceEvidence.findMany({
         where: { organizationId, taxYear },
         orderBy: [{ month: 'asc' }, { version: 'desc' }],
       }),
-      prisma.yearEndTaxSettlement.findMany({
+      this.database.yearEndTaxSettlement.findMany({
         where: { employeeId, organizationId, taxYear },
         orderBy: { version: 'desc' },
       }),
@@ -817,7 +829,7 @@ export class ComplianceService {
   ) {
     this.assertSupportedTaxYear(taxYear);
     await this.assertEmployeeInTenant(employeeId, organizationId);
-    return prisma.yearEndTaxSettlement.findFirst({
+    return this.database.yearEndTaxSettlement.findFirst({
       where: { employeeId, organizationId, taxYear },
       orderBy: { version: 'desc' },
     });
@@ -830,12 +842,131 @@ export class ComplianceService {
   ) {
     this.assertSupportedTaxYear(taxYear);
     await this.assertEmployeeInTenant(employeeId, organizationId);
-    const issuance = await prisma.bir2316Issuance.findFirst({
+    const issuance = await this.database.bir2316Issuance.findFirst({
       where: { employeeId, organizationId, taxYear },
       orderBy: { version: 'desc' },
     });
     if (!issuance) return null;
-    return { ...issuance, ...issuanceTiming(issuance.taxYear) };
+    return {
+      ...issuance,
+      ...issuanceTiming(issuance.taxYear),
+      ...(await this.issuanceFreshness(
+        issuance,
+        employeeId,
+        organizationId,
+        taxYear,
+      )),
+    };
+  }
+
+  /** Conservative source identity, not a claim of regulatory validity. */
+  async getTaxSourceFingerprint(
+    employeeId: string,
+    organizationId: string,
+    taxYear: number,
+  ): Promise<string> {
+    const employee = await this.database.employee.findFirst({
+      where: { id: employeeId, organizationId },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            tin: true,
+            rdoCode: true,
+            registeredAddress: true,
+          },
+        },
+        compensation: true,
+        payslips: {
+          where: {
+            payrollRun: {
+              organizationId,
+              status: 'DISBURSED',
+              paymentDate: {
+                gte: new Date(Date.UTC(taxYear, 0, 1)),
+                lt: new Date(Date.UTC(taxYear + 1, 0, 1)),
+              },
+            },
+          },
+          include: { payrollRun: true },
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+    const [declarations, incomes, remittances, settlements] = await Promise.all(
+      [
+        this.database.priorEmployerDeclaration.findMany({
+          where: { employeeId, organizationId, taxYear },
+          orderBy: { id: 'asc' },
+        }),
+        this.database.previousEmployerIncome.findMany({
+          where: { employeeId, organizationId, taxYear },
+          orderBy: { id: 'asc' },
+        }),
+        this.database.monthlyTaxRemittanceEvidence.findMany({
+          where: { organizationId, taxYear },
+          orderBy: { id: 'asc' },
+        }),
+        this.database.yearEndTaxSettlement.findMany({
+          where: { employeeId, organizationId, taxYear },
+          orderBy: { id: 'asc' },
+        }),
+      ],
+    );
+    return sourceFingerprint({
+      format: TAX_SOURCE_FORMAT,
+      employee,
+      declarations,
+      incomes,
+      remittances,
+      settlements,
+    });
+  }
+
+  private async issuanceFreshness(
+    issuance: { status: string; snapshot: Prisma.JsonValue },
+    employeeId: string,
+    organizationId: string,
+    taxYear: number,
+  ) {
+    if (issuance.status !== 'ISSUED')
+      return {
+        freshness: 'VOIDED' as const,
+        freshnessReason: 'Certificate was voided',
+      };
+    const snapshot = issuance.snapshot;
+    const stored =
+      snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+        ? snapshot.sourceFingerprint
+        : null;
+    const format =
+      snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+        ? snapshot.sourceFormat
+        : null;
+    if (
+      typeof stored !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(stored) ||
+      format !== TAX_SOURCE_FORMAT
+    )
+      return {
+        freshness: 'UNVERIFIABLE' as const,
+        freshnessReason:
+          'Issuance has no supported source fingerprint; void and re-issue after review',
+      };
+    const current = await this.getTaxSourceFingerprint(
+      employeeId,
+      organizationId,
+      taxYear,
+    );
+    return current === stored
+      ? { freshness: 'CURRENT' as const, freshnessReason: null }
+      : {
+          freshness: 'STALE' as const,
+          freshnessReason:
+            'Source data changed after issuance; review, void and re-issue. The frozen certificate has not been updated.',
+        };
   }
 
   /**
@@ -854,7 +985,7 @@ export class ComplianceService {
   }) {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const current = await prisma.bir2316Issuance.findFirst({
+    const current = await this.database.bir2316Issuance.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -889,7 +1020,7 @@ export class ComplianceService {
         'Year-end evidence is incomplete for this employee; resolve the review queue before issuing a certificate',
       );
     }
-    const declaration = await prisma.priorEmployerDeclaration.findFirst({
+    const declaration = await this.database.priorEmployerDeclaration.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -898,15 +1029,22 @@ export class ComplianceService {
       orderBy: { version: 'desc' },
     });
     const { partIVA } = preview.certificate;
+    const fingerprint = await this.getTaxSourceFingerprint(
+      input.employeeId,
+      input.organizationId,
+      input.taxYear,
+    );
     const cents = (value: bigint) => value.toString();
     return this.createEvidence(() =>
-      prisma.bir2316Issuance.create({
+      this.database.bir2316Issuance.create({
         data: {
           employeeId: input.employeeId,
           organizationId: input.organizationId,
           taxYear: input.taxYear,
           status: 'ISSUED',
           snapshot: {
+            sourceFingerprint: fingerprint,
+            sourceFormat: TAX_SOURCE_FORMAT,
             grossCents: cents(partIVA.grossCompensationIncomeCents),
             taxableCents: cents(partIVA.totalTaxableCompensationCents),
             taxDueCents: cents(partIVA.taxDueAnnualCents),
@@ -962,7 +1100,7 @@ export class ComplianceService {
     this.assertSupportedTaxYear(input.taxYear);
     await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
     const voidReason = this.assertCorrectionReason(input.voidReason);
-    const current = await prisma.bir2316Issuance.findFirst({
+    const current = await this.database.bir2316Issuance.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -975,7 +1113,7 @@ export class ComplianceService {
         'No issued certificate exists to void for this employee-year',
       );
     }
-    return prisma.bir2316Issuance.update({
+    return this.database.bir2316Issuance.update({
       where: { id: current.id },
       data: {
         status: 'VOIDED',
@@ -1006,7 +1144,7 @@ export class ComplianceService {
     documentReference: string;
     recordedById: string;
   }) {
-    const existing = await prisma.yearEndTaxSettlement.findFirst({
+    const existing = await this.database.yearEndTaxSettlement.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -1021,7 +1159,7 @@ export class ComplianceService {
     }
     const posting = await this.prepareSettlementPosting(input);
     return this.createEvidence(() =>
-      prisma.yearEndTaxSettlement.create({
+      this.database.yearEndTaxSettlement.create({
         data: {
           employeeId: input.employeeId,
           organizationId: input.organizationId,
@@ -1073,7 +1211,7 @@ export class ComplianceService {
       recorderId: input.recordedById,
       reviewerId: input.reviewerId,
     });
-    const current = await prisma.yearEndTaxSettlement.findFirst({
+    const current = await this.database.yearEndTaxSettlement.findFirst({
       where: {
         employeeId: input.employeeId,
         organizationId: input.organizationId,
@@ -1098,7 +1236,7 @@ export class ComplianceService {
       );
     }
     return this.createEvidence(() =>
-      prisma.yearEndTaxSettlement.create({
+      this.database.yearEndTaxSettlement.create({
         data: {
           employeeId: input.employeeId,
           organizationId: input.organizationId,
@@ -1169,7 +1307,7 @@ export class ComplianceService {
         'Settlement date must fall within the tax year being settled',
       );
     }
-    const employee = await prisma.employee.findFirst({
+    const employee = await this.database.employee.findFirst({
       where: { id: input.employeeId, organizationId: input.organizationId },
       select: { id: true, employmentStatus: true },
     });
@@ -1206,7 +1344,7 @@ export class ComplianceService {
         1,
       ),
     );
-    const monthPayslips = await prisma.payslip.findMany({
+    const monthPayslips = await this.database.payslip.findMany({
       where: {
         employeeId: input.employeeId,
         payrollRun: {
@@ -1264,7 +1402,7 @@ export class ComplianceService {
       gte: new Date(Date.UTC(taxYear, 0, 1)),
       lt: new Date(Date.UTC(taxYear + 1, 0, 1)),
     };
-    const employees = await prisma.employee.findMany({
+    const employees = await this.database.employee.findMany({
       where: {
         organizationId,
         payslips: {
@@ -1282,7 +1420,7 @@ export class ComplianceService {
       orderBy: { employeeNumber: 'asc' },
     });
 
-    const declarations = await prisma.priorEmployerDeclaration.findMany({
+    const declarations = await this.database.priorEmployerDeclaration.findMany({
       where: {
         organizationId,
         taxYear,
@@ -1300,20 +1438,22 @@ export class ComplianceService {
         declarationByEmployee.set(entry.employeeId, entry);
       }
     }
-    const previousRecords = await prisma.previousEmployerIncome.findMany({
-      where: {
-        organizationId,
-        taxYear,
-        employeeId: { in: employees.map((employee) => employee.id) },
+    const previousRecords = await this.database.previousEmployerIncome.findMany(
+      {
+        where: {
+          organizationId,
+          taxYear,
+          employeeId: { in: employees.map((employee) => employee.id) },
+        },
+        select: {
+          employeeId: true,
+          employerTin: true,
+          periodStart: true,
+          periodEnd: true,
+          version: true,
+        },
       },
-      select: {
-        employeeId: true,
-        employerTin: true,
-        periodStart: true,
-        periodEnd: true,
-        version: true,
-      },
-    });
+    );
     const currentPreviousByKey = new Map<
       string,
       (typeof previousRecords)[number]
@@ -1328,7 +1468,7 @@ export class ComplianceService {
     const previousEmployeeIds = new Set(
       [...currentPreviousByKey.values()].map((entry) => entry.employeeId),
     );
-    const issuances = await prisma.bir2316Issuance.findMany({
+    const issuances = await this.database.bir2316Issuance.findMany({
       where: {
         organizationId,
         taxYear,
@@ -1339,11 +1479,17 @@ export class ComplianceService {
         status: true,
         issuedAt: true,
         version: true,
+        snapshot: true,
       },
     });
     const issuanceByEmployee = new Map<
       string,
-      { status: string; issuedAt: Date; version: number }
+      {
+        status: string;
+        issuedAt: Date;
+        version: number;
+        snapshot: Prisma.JsonValue;
+      }
     >();
     for (const entry of issuances) {
       const current = issuanceByEmployee.get(entry.employeeId);
@@ -1351,7 +1497,7 @@ export class ComplianceService {
         issuanceByEmployee.set(entry.employeeId, entry);
       }
     }
-    const payslips = await prisma.payslip.findMany({
+    const payslips = await this.database.payslip.findMany({
       where: {
         payrollRun: { organizationId, status: 'DISBURSED', paymentDate },
       },
@@ -1368,10 +1514,11 @@ export class ComplianceService {
         (monthlyWithheld.get(month) ?? 0n) + payslip.withholdingTaxCents,
       );
     }
-    const remittances = await prisma.monthlyTaxRemittanceEvidence.findMany({
-      where: { organizationId, taxYear },
-      select: { month: true, remittedCents: true, version: true },
-    });
+    const remittances =
+      await this.database.monthlyTaxRemittanceEvidence.findMany({
+        where: { organizationId, taxYear },
+        select: { month: true, remittedCents: true, version: true },
+      });
     const latestRemittanceByMonth = new Map<
       number,
       { remittedCents: bigint; version: number }
@@ -1425,15 +1572,26 @@ export class ComplianceService {
       settlementType: string | null;
       settledCents: bigint | null;
       issuanceStatus: string | null;
+      issuanceFreshness: 'CURRENT' | 'STALE' | 'UNVERIFIABLE' | 'VOIDED' | null;
       issuedAt: Date | null;
       reason?: string;
     };
     const rows: ReconciliationRow[] = [];
     for (const employee of employees) {
+      const currentIssuance = issuanceByEmployee.get(employee.id);
+      const freshness = currentIssuance
+        ? await this.issuanceFreshness(
+            currentIssuance,
+            employee.id,
+            organizationId,
+            taxYear,
+          )
+        : null;
       const identity = {
         employeeId: employee.id,
         employeeNumber: employee.employeeNumber,
         name: `${employee.firstName} ${employee.lastName}`,
+        issuanceFreshness: freshness?.freshness ?? null,
       };
       try {
         const declaration = declarationByEmployee.get(employee.id);
@@ -1529,6 +1687,11 @@ export class ComplianceService {
         .length,
       settledCount: rows.filter((row) => row.status === 'SETTLED').length,
       issuedCount: rows.filter((row) => row.issuanceStatus === 'ISSUED').length,
+      staleIssuanceCount: rows.filter(
+        (row) =>
+          row.issuanceFreshness === 'STALE' ||
+          row.issuanceFreshness === 'UNVERIFIABLE',
+      ).length,
       missingRemittanceMonths,
       mismatchedRemittanceMonths,
       remittanceEvidenceIsUnverified: true as const,
@@ -1560,9 +1723,10 @@ export class ComplianceService {
       generateBir2316Certificate,
       formatBir2316TextDocument,
       annualizeTax,
+      reconcileTaxAdjustment,
     } = await import('@workspace/payroll-engine');
 
-    const employee = await prisma.employee.findFirst({
+    const employee = await this.database.employee.findFirst({
       where: { id: employeeId, organizationId },
       include: {
         organization: true,
@@ -1698,52 +1862,31 @@ export class ComplianceService {
     // taxable is taken as stated on the transcribed 2316 — the previous
     // employer applied its own ₱90,000 cap — and is never re-bucketed here.
     const [priorDeclaration, priorRecordVersions] = await Promise.all([
-      prisma.priorEmployerDeclaration.findFirst({
+      this.database.priorEmployerDeclaration.findFirst({
         where: { employeeId, organizationId, taxYear },
         orderBy: { version: 'desc' },
         select: { hasPriorEmployer: true },
       }),
-      prisma.previousEmployerIncome.findMany({
+      this.database.previousEmployerIncome.findMany({
         where: { employeeId, organizationId, taxYear },
       }),
     ]);
-    // Only the highest version of each transcribed document annualizes.
-    const currentPriorByKey = new Map<
-      string,
-      (typeof priorRecordVersions)[number]
-    >();
-    for (const record of priorRecordVersions) {
-      const key = `${record.employerTin}|${record.periodStart.toISOString()}|${record.periodEnd.toISOString()}`;
-      const current = currentPriorByKey.get(key);
-      if (!current || record.version > current.version) {
-        currentPriorByKey.set(key, record);
-      }
-    }
-    const priorRecords = [...currentPriorByKey.values()];
-    let priorEmployerTotals: {
-      employerCount: number;
-      grossCents: bigint;
-      taxableCents: bigint;
-      withheldCents: bigint;
-    } | null = null;
-    if (priorRecords.length > 0) {
-      if (!priorDeclaration?.hasPriorEmployer) {
-        throw new UnprocessableEntityException(
-          'Declare prior employment before including its tax documents in annual tax computation',
-        );
-      }
-      const priorGrossCents = priorRecords.reduce(
-        (sum, record) => sum + record.grossCompensationCents,
-        0n,
-      );
-      const priorTaxableCents = priorRecords.reduce(
-        (sum, record) => sum + record.taxableCompensationCents,
-        0n,
-      );
-      const priorWithheldCents = priorRecords.reduce(
-        (sum, record) => sum + record.taxWithheldCents,
-        0n,
-      );
+    const presentEmployerTotals = {
+      grossCents: certData.partIVA.grossCompensationIncomeCents,
+      taxableCents: certData.partIVA.totalTaxableCompensationCents,
+      withheldCents: certData.partIVA.totalTaxWithheldCents,
+    };
+    const priorEmployerTotals = resolvePriorEmployerTotals(
+      priorDeclaration,
+      priorRecordVersions,
+      { taxYear },
+    );
+    if (priorEmployerTotals) {
+      const {
+        grossCents: priorGrossCents,
+        taxableCents: priorTaxableCents,
+        withheldCents: priorWithheldCents,
+      } = priorEmployerTotals;
       // A minimum-wage earner whose prior pay was itself taxable needs
       // period-by-period wage analysis, not automatic annualization.
       if (
@@ -1773,12 +1916,6 @@ export class ComplianceService {
         combinedAdjustment < 0n ? -combinedAdjustment : 0n;
       certData.partIVA.taxPayableByEmployeeCents =
         combinedAdjustment > 0n ? combinedAdjustment : 0n;
-      priorEmployerTotals = {
-        employerCount: priorRecords.length,
-        grossCents: priorGrossCents,
-        taxableCents: priorTaxableCents,
-        withheldCents: priorWithheldCents,
-      };
     }
 
     // The payslip ledger is not a year-end tax adjustment ledger: a difference
@@ -1787,7 +1924,7 @@ export class ComplianceService {
     // disbursed payslips change the recomputed adjustment, so the remaining
     // balance is derived live instead of trusting the snapshot.
     const taxAdjustmentCents = certData.partIVA.taxAdjustmentCents;
-    const settlement = await prisma.yearEndTaxSettlement.findFirst({
+    const settlement = await this.database.yearEndTaxSettlement.findFirst({
       where: { employeeId, organizationId, taxYear },
       orderBy: { version: 'desc' },
     });
@@ -1796,19 +1933,12 @@ export class ComplianceService {
         ? settlement.settledCents
         : -settlement.settledCents
       : 0n;
-    const remainingDifferenceCents = taxAdjustmentCents - settledDelta;
-    const isSettled = settlement !== null && remainingDifferenceCents === 0n;
-    const reconciliationStatus:
-      | 'BALANCED'
-      | 'DEFICIENCY_REVIEW'
-      | 'REFUND_REVIEW'
-      | 'SETTLED' = isSettled
-      ? 'SETTLED'
-      : taxAdjustmentCents === 0n
-        ? 'BALANCED'
-        : taxAdjustmentCents > 0n
-          ? 'DEFICIENCY_REVIEW'
-          : 'REFUND_REVIEW';
+    const { remainingDifferenceCents, isSettled, reconciliationStatus } =
+      reconcileTaxAdjustment(
+        taxAdjustmentCents,
+        settledDelta,
+        settlement !== null,
+      );
     const formattedDocument = formatBir2316TextDocument(certData);
     const documentWithPrior = priorEmployerTotals
       ? [
@@ -1816,22 +1946,30 @@ export class ComplianceService {
           '------------------------------------------------------------------------------------------',
           'PRIOR EMPLOYER INCOME (TRANSCRIBED 2316 FIGURES, SELF-REPORTED — NOT VERIFIED)',
           `  Previous employers recorded ............................. ${priorEmployerTotals.employerCount}`,
+          `  Effective documents recorded ............................ ${priorEmployerTotals.documentCount}`,
           `  Prior gross compensation ................................ PHP ${(Number(priorEmployerTotals.grossCents) / 100).toFixed(2)}`,
           `  Prior taxable compensation .............................. PHP ${(Number(priorEmployerTotals.taxableCents) / 100).toFixed(2)}`,
           `  Prior tax withheld ...................................... PHP ${(Number(priorEmployerTotals.withheldCents) / 100).toFixed(2)}`,
           '  Combined totals above annualize these transcribed prior-employer',
           '  figures with present-employer payroll per RR 11-2018 §2.79.',
+          '  Wage/benefit detail sections remain PRESENT-EMPLOYER ONLY.',
         ].join('\r\n')
       : formattedDocument;
 
     return {
       certificate: certData,
       reconciliationStatus,
-      formattedDocument: documentWithPrior,
+      formattedDocument: [
+        documentWithPrior,
+        `RECORDED SETTLEMENT DELTA (CENTAVOS): ${settledDelta}`,
+        `REMAINING DIFFERENCE TO REVIEW (CENTAVOS): ${remainingDifferenceCents}`,
+      ].join('\r\n'),
       settlement,
       remainingDifferenceCents,
       isSettled,
       priorEmployerTotals,
+      presentEmployerTotals,
+      employerBreakdownScope: 'PRESENT_EMPLOYER_ONLY' as const,
     };
   }
 
@@ -1858,7 +1996,7 @@ export class ComplianceService {
 
     // PD 851 covers rank-and-file employees only; Labor Code managerial
     // employees are counted separately for report transparency.
-    const employees = await prisma.employee.findMany({
+    const employees = await this.database.employee.findMany({
       where: {
         organizationId,
         isManagerial: false,
@@ -1880,7 +2018,7 @@ export class ComplianceService {
         },
       },
     });
-    const excludedManagerialCount = await prisma.employee.count({
+    const excludedManagerialCount = await this.database.employee.count({
       where: {
         organizationId,
         hireDate: { lt: yearEnd },
@@ -1888,7 +2026,7 @@ export class ComplianceService {
       },
     });
 
-    const organization = await prisma.organization.findUnique({
+    const organization = await this.database.organization.findUnique({
       where: { id: organizationId },
     });
     if (!organization) throw new NotFoundException('Organization not found');

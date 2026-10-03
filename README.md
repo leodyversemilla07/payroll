@@ -411,6 +411,52 @@ an employee. Browser tests mock tRPC; dedicated PostgreSQL integration tests
 also verify persistence, tenant isolation, concurrent registration, and rollback
 when audit persistence fails.
 
+## Final-pay previews (not settlements)
+
+`employees.calculateFinalPay` is an HR/super-admin **read-only development preview**.
+It does not post payroll, debit leave, collect a loan, issue a tax certificate or
+pay a refund. There is no final-pay portal editor or posting workflow yet.
+
+The API requires an explicit exit date, unpaid final-period days (0–31), unused
+SIL days (0–366), and `authorizedLoanDeductionsCents` as a bounded nonnegative
+centavo string. Days use whole/half-day steps. Entering zero is an explicit
+scenario statement, not independent verification. Positive monetization also
+requires `priorMonetizedLeaveDaysInYear`, including explicitly verified zero,
+and sufficient consistent recorded SIL availability; missing credits never
+become an assumed five-day grant. Positive proposed debt deductions require a
+`loanAuthorizationReference` and cannot exceed recorded debt. Outstanding debt
+is shown separately and is not automatically deducted. References are
+attestations, not proof of lawful authorization or inspected documents.
+
+Retirement scenarios require explicit `retirementBenefitTaxTreatment`
+(`EXEMPT`/`TAXABLE`), `isRepeatRetirementClaim`, and
+`retirementTaxSourceReference`. The limited statutory preview cannot infer an
+exemption from age, round a shorter tenure into five-year eligibility, or model
+private-plan/early-retirement coverage. Anniversary-derived service years and
+age use UTC civil dates, not a 365.25-day approximation. Company-covered service
+and any overrides still require independent review.
+
+The service reads employee, disbursed ledger, effective prior-employer evidence
+and latest tax settlement in one repeatable-read snapshot. A prior-employer
+declaration is required; transcribed prior taxable income/withholding are added
+without re-bucketing them as present-employer benefits. Recorded refunds and
+deficiency collections reduce the remaining tax difference instead of being
+proposed again. Pending employee/remittance corrections and employee payroll
+reservations in DRAFT/PROCESSING/AUDITED/APPROVED block the preview. Unclassified
+MWE income, inconsistent sources and unsupported retirement policies fail
+closed for manual reconciliation.
+
+The result retains `signedNetFinalPayCents` and `unfundedDeductionsCents` when
+proposed deductions exceed available final pay; the payable display is zero,
+not proof of collection. This is an exit-year projection using currently
+recorded compensation, not a historical rate snapshot or a complete settlement
+of prior-year arrears, external leave usage or debt. Rules, entitlements,
+authorizations, exemptions and actual payments remain release gates.
+
+Periodic and annual withholding arithmetic use BigInt centavos and half-up
+rounding of the final fractional tax centavo. These arithmetic tests do not
+establish approval of the configured tables, classifications or effective dates.
+
 ## Compliance previews (not filing documents)
 
 `compliance.listYearEndReconciliations` provides a tenant-scoped, read-only
@@ -418,10 +464,20 @@ review queue; `compliance.previewBir2316Reconciliation` produces an internal,
 read-only worksheet, **not** an official BIR Form 2316. HR staff can record
 write-once, self-reported prior-employer declarations/income and monthly
 remittance references; `compliance.getTaxEvidence` reads the references with
-full supersession history. Rows are never mutated: the `compliance.correct*`
-procedures append a higher-version row (with reason and a different reviewer,
-four-eyes) that replaces the current one, and every reader annualizes,
-remits, and settles from the latest version per key. The
+full supersession history. Effective evidence rows are never edited: the
+`compliance.correct*` procedures now create **pending proposals**, not immediate
+replacement evidence. `compliance.listTaxCorrections` exposes the oldest 100
+pending requests for a tenant/year, including recorded/proposed values.
+`compliance.reviewTaxCorrection` publishes a higher version only when a different
+**signed-in, active HR/admin** approves with a written review reason. Reviewer
+identity comes from the session; caller-supplied reviewer/provenance fields are
+rejected. Payroll specialists may propose settlement corrections but cannot
+review them. Rejection retains the proposal and leaves effective evidence
+unchanged. Duplicate pending targets, self-review, inactive/demoted/foreign
+reviewers and concurrent duplicate decisions are blocked. Changed target
+evidence (or changed payroll/evidence sources for settlement proposals) requires
+rejection and a fresh request. Every reader annualizes, remits and settles from
+the latest **approved** version per key. The
 queue blocks missing or conflicting evidence. Transcribed previous-employer
 2316 figures are annualized with present-employer payroll in one graduated-
 table computation per RR 11-2018 §2.79 (prior taxable taken as stated, never
@@ -441,7 +497,27 @@ fully-settled reconciliation — never a computed-but-unpaid difference — and
 freezes the reconciled figures into a `Bir2316Issuance` snapshot for audit.
 This is not a validated official BIR form. Issuance records carry their
 January-31 statutory deadline as information and are
-voided, never deleted; a re-issue appends a new version. No filing-eligibility
+voided, never deleted; a re-issue appends a new version. Pending corrections for
+the employee or organization remittances block issuance. Evidence recording,
+proposal/review, settlement recording and issuance/void APIs commit with their
+audits in serializable transactions; audit failures leave no partial versions.
+
+Issuances freeze a lossless, versioned source fingerprint covering employee and
+employer identity, compensation, disbursed payroll paid in the tax year, and tax
+evidence/settlement versions. Reads and review-queue rows report **CURRENT**,
+**STALE**, **UNVERIFIABLE** (legacy snapshot without a fingerprint), or **VOIDED**.
+`CURRENT` means only that captured sources match; it is not tax/form approval.
+The check is conservative: even a reference-only or employee metadata change
+may require review. Pending proposals alone do not change effective sources.
+Stale snapshots stay frozen; HR must review, void and re-issue, never silently
+refresh them. Fingerprint format changes must accompany source/calculation-policy
+changes. This is not a digital signature or proof of source-document authenticity.
+
+Apply migration `20261003010000_tax_correction_review` and regenerate the Prisma
+client before running the updated API. Old correction clients supplying a
+reviewer UUID must switch to the pending-request/review workflow.
+
+No filing-eligibility
 verdict (e.g. substituted filing) is made by the API. Previous-employer
 income, remittances, and the current official form layout still require
 review. See [the release-gate checklist](docs/validation-gates.md) before any

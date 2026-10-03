@@ -166,10 +166,11 @@ describe("Statutory boundary conditions", () => {
       expect(result.taxAdjustmentCents).toBe(15n);
     });
 
-    it("exempts minimum wage earners regardless of amounts", () => {
-      const result = annualizeTax(999999999n, 12345n, true);
-      expect(result.totalAnnualTaxDueCents).toBe(0n);
-      expect(result.taxAdjustmentCents).toBe(-12345n);
+    it("blocks unclassified MWE taxable income instead of applying a blanket exemption", () => {
+      expect(() => annualizeTax(999999999n, 12345n, true)).toThrow(
+        "manual tax review",
+      );
+      expect(annualizeTax(0n, 12345n, true).taxAdjustmentCents).toBe(-12345n);
     });
   });
 
@@ -256,8 +257,7 @@ describe("Statutory boundary conditions", () => {
       expect(separation.isTaxExempt).toBe(false);
     });
 
-    it("rounds a 6-month fraction up into the 5-year minimum", () => {
-      // 4.5 years = 4 years and 6 months -> 5 years -> 5 x 22.5 days.
+    it("does not round a 6-month fraction into the five-year eligibility minimum", () => {
       const separation = calculateStatutorySeparationPay(
         SeparationType.RETIREMENT,
         5000000n,
@@ -265,9 +265,8 @@ describe("Statutory boundary conditions", () => {
         4.5,
         60,
       );
-      // 22.5 days x 2,000 = PHP 45,000.00 per year x 5 years.
-      expect(separation.separationPayCents).toBe(22500000n);
-      expect(separation.isTaxExempt).toBe(true);
+      expect(separation.separationPayCents).toBe(0n);
+      expect(separation.isTaxExempt).toBe(false);
     });
 
     it("taxes the benefit when claimed a second time", () => {
@@ -283,16 +282,16 @@ describe("Statutory boundary conditions", () => {
       expect(separation.isTaxExempt).toBe(false);
     });
 
-    it("taxes the benefit below age 60", () => {
-      const separation = calculateStatutorySeparationPay(
-        SeparationType.RETIREMENT,
-        5000000n,
-        dailyRateCents,
-        10.0,
-        55,
-      );
-      expect(separation.separationPayCents).toBe(45000000n);
-      expect(separation.isTaxExempt).toBe(false);
+    it("blocks early retirement rather than guessing private-plan coverage or tax treatment", () => {
+      expect(() =>
+        calculateStatutorySeparationPay(
+          SeparationType.RETIREMENT,
+          5000000n,
+          dailyRateCents,
+          10,
+          55,
+        ),
+      ).toThrow("manual review");
     });
 
     it("explains ineligibility in the final-pay remarks", () => {

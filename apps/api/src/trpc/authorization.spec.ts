@@ -1,4 +1,4 @@
-import { Role } from '@workspace/db';
+import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import type { AuditService } from '../audit/audit.service';
 import type { AuthService } from '../auth/auth.service';
@@ -10,6 +10,11 @@ import type { PayrollService } from '../modules/payroll/payroll.service';
 import type { TimekeepingService } from '../modules/timekeeping/timekeeping.service';
 import { createApiRouter } from './routers/app.router';
 import { type Context, TrpcService } from './trpc.service';
+
+jest.mock('@workspace/db', () => ({
+  ...jest.requireActual('@workspace/db'),
+  prisma: { $transaction: jest.fn() },
+}));
 
 function createContext(
   role: Role | null,
@@ -53,6 +58,7 @@ describe('tRPC authorization', () => {
   const recordPriorEmployerDeclaration = jest.fn();
   const recordMonthlyTaxRemittance = jest.fn();
   const complianceService = {
+    withDatabase: () => complianceService,
     recordPriorEmployerDeclaration,
     recordMonthlyTaxRemittance,
   } as unknown as ComplianceService;
@@ -74,6 +80,9 @@ describe('tRPC authorization', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      (operation: (database: object) => Promise<unknown>) => operation({}),
+    );
   });
 
   it('rejects anonymous access to protected tenant data', async () => {
@@ -151,6 +160,7 @@ describe('tRPC authorization', () => {
         entityType: 'PriorEmployerDeclaration',
         entityId: 'record-1',
       }),
+      expect.any(Object),
     );
     recordMonthlyTaxRemittance.mockResolvedValue({ id: 'record-2' });
     await caller.compliance.recordMonthlyTaxRemittance({

@@ -62,6 +62,7 @@ model Organization {
   previousEmployerIncomes PreviousEmployerIncome[]
   yearEndTaxSettlements YearEndTaxSettlement[]
   bir2316Issuances Bir2316Issuance[]
+  taxEvidenceCorrections TaxEvidenceCorrection[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -578,10 +579,34 @@ model BankTransmittalBatch {
   @@index([payrollRunId])
 }
 
+// Proposals do not change effective evidence until an authenticated second
+// HR/admin accepts them. Payloads contain decimal strings, never JSON numbers
+// for centavos. A partial SQL index permits only one pending proposal per target.
+model TaxEvidenceCorrection {
+  id                 String @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId         String?
+  taxYear            Int
+  kind               String
+  targetId           String
+  payload            Json
+  originalEvidence   Json
+  sourceFingerprint  String
+  requestedById      String
+  status             String @default("PENDING")
+  reviewedById       String?
+  reviewReason       String?
+  publishedRecordId  String?
+  createdAt          DateTime @default(now())
+  reviewedAt         DateTime?
+
+  @@index([organizationId, taxYear, status])
+}
+
 // Write-once, employee-year declaration. A "no prior employer" answer is a
 // recorded assertion, not independent verification of employment history.
-// Corrections never mutate a row: a superseding version points at the row it
-// replaces, and readers use the highest version per key.
+// Approved corrections append a version; readers use the highest version.
 model PriorEmployerDeclaration {
   id                String   @id @default(uuid())
   organizationId    String

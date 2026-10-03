@@ -59,6 +59,16 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
         role: "PAYROLL_SPECIALIST",
       },
     });
+    const reviewerEmail = `reviewer-${tag}@test.invalid`;
+    const reviewer = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        email: reviewerEmail,
+        name: "Second test HR reviewer",
+        passwordHash,
+        role: "HR_ADMIN",
+      },
+    });
     async function login(email: string) {
       await page.goto("/");
       await page.getByLabel("Email", { exact: true }).fill(email);
@@ -395,6 +405,103 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       "APPROVE",
       "UPDATE",
     ]);
+    await navigate(page, "Year-end tax");
+    const yearEnd = page.getByRole("region", {
+      name: "Year-end tax",
+      exact: true,
+    });
+    await yearEnd
+      .getByLabel("Employee", { exact: true })
+      .selectOption(employee.id);
+    await yearEnd
+      .getByLabel("Source reference", { exact: true })
+      .fill("Synthetic signed declaration v1");
+    await yearEnd
+      .getByRole("button", { name: "Record declaration", exact: true })
+      .click();
+    await expect(yearEnd.getByText("Declaration recorded.")).toBeVisible();
+    await yearEnd
+      .getByRole("button", { name: "Correct declaration", exact: true })
+      .click();
+    await yearEnd
+      .getByLabel("Source reference", { exact: true })
+      .nth(1)
+      .fill("Synthetic reviewed declaration v2");
+    await yearEnd
+      .getByLabel(/Correction reason/)
+      .fill(
+        "Synthetic browser test correction with independently signed-in review",
+      );
+    await expect(yearEnd.getByLabel(/Reviewer user ID/)).toHaveCount(0);
+    await yearEnd
+      .getByRole("button", { name: "Request correction", exact: true })
+      .click();
+    await expect(
+      yearEnd.getByText(
+        "Correction requested; awaiting a different signed-in HR/admin.",
+      ),
+    ).toBeVisible();
+    const pending = await prisma.taxEvidenceCorrection.findFirstOrThrow({
+      where: { organizationId: organization.id, status: "PENDING" },
+    });
+    expect(
+      await prisma.priorEmployerDeclaration.count({
+        where: { employeeId: employee.id },
+      }),
+    ).toBe(1);
+    const reviewQueue = page.getByRole("region", {
+      name: "Tax correction review",
+      exact: true,
+    });
+    await expect(
+      reviewQueue.getByText(
+        "You requested this correction. A different HR/admin must review it.",
+      ),
+    ).toBeVisible();
+    await expect(
+      reviewQueue.getByRole("button", { name: "Approve correction" }),
+    ).toHaveCount(0);
+    await logout();
+    await login(reviewerEmail);
+    await navigate(page, "Year-end tax");
+    await reviewQueue
+      .getByText("Compare recorded evidence and proposed values")
+      .click();
+    await expect(
+      reviewQueue.getByText("Synthetic reviewed declaration v2", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await reviewQueue
+      .getByLabel(/Review reason/)
+      .fill("Synthetic second HR checked the corrected declaration source");
+    await reviewQueue
+      .getByRole("button", { name: "Approve correction", exact: true })
+      .click();
+    await expect(
+      reviewQueue.getByText(
+        "Correction approved and new evidence version published.",
+      ),
+    ).toBeVisible();
+    expect(
+      await prisma.taxEvidenceCorrection.findUnique({
+        where: { id: pending.id },
+      }),
+    ).toMatchObject({
+      status: "APPROVED",
+      requestedById: admin.id,
+      reviewedById: reviewer.id,
+    });
+    expect(
+      await prisma.priorEmployerDeclaration.findFirst({
+        where: { employeeId: employee.id },
+        orderBy: { version: "desc" },
+      }),
+    ).toMatchObject({
+      version: 2,
+      recordedById: admin.id,
+      reviewedById: reviewer.id,
+    });
     await logout();
     expect(failures).toEqual([]);
   } finally {
@@ -405,6 +512,14 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     await prisma.payrollRun.deleteMany({
       where: { organizationId: organization.id },
     });
+    const declarations = await prisma.priorEmployerDeclaration.findMany({
+      where: { organizationId: organization.id },
+      orderBy: { version: "desc" },
+    });
+    for (const declaration of declarations)
+      await prisma.priorEmployerDeclaration.delete({
+        where: { id: declaration.id },
+      });
     await prisma.employee.deleteMany({
       where: { organizationId: organization.id },
     });

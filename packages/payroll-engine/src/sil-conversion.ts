@@ -31,6 +31,19 @@ export const BIR_MAX_TAX_EXEMPT_LEAVE_DAYS = 12;
 export function calculateSilCashConversion(
   input: SilConversionInput,
 ): SilConversionResult {
+  if (
+    input.dailyRateCents < 0n ||
+    [input.unusedLeaveDays, input.priorMonetizedDaysInYear ?? 0].some(
+      (days) =>
+        !Number.isFinite(days) ||
+        days < 0 ||
+        days > 366 ||
+        !/^\d+(\.\d{1,2})?$/.test(String(days)),
+    )
+  )
+    throw new RangeError(
+      "Leave monetization requires valid non-negative rates and day counts with at most two decimals",
+    );
   if (input.unusedLeaveDays <= 0 || input.dailyRateCents <= 0n) {
     return {
       dailyRateCents: input.dailyRateCents,
@@ -56,11 +69,12 @@ export function calculateSilCashConversion(
   const taxableDays = Math.max(0, input.unusedLeaveDays - exemptDays);
 
   const exemptDaysScaled = BigInt(Math.round(exemptDays * 100));
-  const taxableDaysScaled = BigInt(Math.round(taxableDays * 100));
 
   const taxExemptDeMinimisCents =
     (input.dailyRateCents * exemptDaysScaled) / 100n;
-  const taxablePortionCents = (input.dailyRateCents * taxableDaysScaled) / 100n;
+  // Rounding a fractional split independently can lose a centavo. Conserve
+  // the total cash amount; the remaining centavo belongs to taxable excess.
+  const taxablePortionCents = totalMonetizedCashCents - taxExemptDeMinimisCents;
 
   let remarks = `Monetized ${input.unusedLeaveDays} day(s) at daily rate.`;
   if (taxableDays > 0) {

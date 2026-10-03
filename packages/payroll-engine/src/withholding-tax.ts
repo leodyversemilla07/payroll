@@ -5,43 +5,28 @@ import type { Centavos } from "./types";
  */
 
 interface TaxBracket {
-  minPesos: number;
-  maxPesos: number;
-  baseTaxPesos: number;
-  excessRate: number;
+  ceiling: bigint | null;
+  floor: bigint;
+  fixed: bigint;
+  percent: bigint;
 }
 
 const SEMI_MONTHLY_BRACKETS: TaxBracket[] = [
-  { minPesos: 0, maxPesos: 10417, baseTaxPesos: 0, excessRate: 0 },
-  { minPesos: 10417, maxPesos: 16667, baseTaxPesos: 0, excessRate: 0.15 },
-  { minPesos: 16667, maxPesos: 33333, baseTaxPesos: 937.5, excessRate: 0.2 },
-  { minPesos: 33333, maxPesos: 83333, baseTaxPesos: 4270.7, excessRate: 0.25 },
-  { minPesos: 83333, maxPesos: 333333, baseTaxPesos: 16770.7, excessRate: 0.3 },
-  {
-    minPesos: 333333,
-    maxPesos: Number.POSITIVE_INFINITY,
-    baseTaxPesos: 91770.7,
-    excessRate: 0.35,
-  },
+  { ceiling: 1041700n, floor: 0n, fixed: 0n, percent: 0n },
+  { ceiling: 1666700n, floor: 1041700n, fixed: 0n, percent: 15n },
+  { ceiling: 3333300n, floor: 1666700n, fixed: 93750n, percent: 20n },
+  { ceiling: 8333300n, floor: 3333300n, fixed: 427070n, percent: 25n },
+  { ceiling: 33333300n, floor: 8333300n, fixed: 1677070n, percent: 30n },
+  { ceiling: null, floor: 33333300n, fixed: 9177070n, percent: 35n },
 ];
 
 const MONTHLY_BRACKETS: TaxBracket[] = [
-  { minPesos: 0, maxPesos: 20833, baseTaxPesos: 0, excessRate: 0 },
-  { minPesos: 20833, maxPesos: 33333, baseTaxPesos: 0, excessRate: 0.15 },
-  { minPesos: 33333, maxPesos: 66667, baseTaxPesos: 1875.0, excessRate: 0.2 },
-  { minPesos: 66667, maxPesos: 166667, baseTaxPesos: 8541.8, excessRate: 0.25 },
-  {
-    minPesos: 166667,
-    maxPesos: 666667,
-    baseTaxPesos: 33541.8,
-    excessRate: 0.3,
-  },
-  {
-    minPesos: 666667,
-    maxPesos: Number.POSITIVE_INFINITY,
-    baseTaxPesos: 183541.8,
-    excessRate: 0.35,
-  },
+  { ceiling: 2083300n, floor: 0n, fixed: 0n, percent: 0n },
+  { ceiling: 3333300n, floor: 2083300n, fixed: 0n, percent: 15n },
+  { ceiling: 6666700n, floor: 3333300n, fixed: 187500n, percent: 20n },
+  { ceiling: 16666700n, floor: 6666700n, fixed: 854180n, percent: 25n },
+  { ceiling: 66666700n, floor: 16666700n, fixed: 3354180n, percent: 30n },
+  { ceiling: null, floor: 66666700n, fixed: 18354180n, percent: 35n },
 ];
 
 /**
@@ -65,24 +50,18 @@ export function calculateWithholdingTax(
     return 0n;
   }
 
-  const taxablePesos = Number(taxableCompensationCents) / 100;
   const brackets = isSemiMonthly ? SEMI_MONTHLY_BRACKETS : MONTHLY_BRACKETS;
-
-  for (const bracket of brackets) {
-    if (taxablePesos >= bracket.minPesos && taxablePesos <= bracket.maxPesos) {
-      const excess = taxablePesos - bracket.minPesos;
-      const taxPesos = bracket.baseTaxPesos + excess * bracket.excessRate;
-      return BigInt(Math.round(taxPesos * 100));
-    }
-  }
-
-  // Both statutory bracket tables are non-empty.
-  const topBracket = brackets.at(-1);
-  if (!topBracket) return 0n;
-
-  const excess = taxablePesos - topBracket.minPesos;
-  const taxPesos = topBracket.baseTaxPesos + excess * topBracket.excessRate;
-  return BigInt(Math.round(taxPesos * 100));
+  const bracket = brackets.find(
+    (entry) =>
+      entry.ceiling === null || taxableCompensationCents <= entry.ceiling,
+  );
+  if (!bracket) throw new RangeError("Withholding table is incomplete");
+  // Centavos stay BigInt throughout. Round fractional tax centavos once,
+  // half up; floating-point pesos can move an exact half-cent below the tie.
+  return (
+    bracket.fixed +
+    ((taxableCompensationCents - bracket.floor) * bracket.percent + 50n) / 100n
+  );
 }
 
 /**
@@ -97,7 +76,17 @@ export function annualizeTax(
   totalAnnualTaxDueCents: Centavos;
   taxAdjustmentCents: Centavos; // Positive = Deficiency (employee owes), Negative = Refund (employee gets back)
 } {
-  if (isMinimumWageEarner || totalAnnualTaxableCents <= 25000000n) {
+  if (totalAnnualTaxableCents < 0n || totalTaxWithheldCents < 0n) {
+    throw new RangeError(
+      "Annual taxable income and withholding cannot be negative",
+    );
+  }
+  if (isMinimumWageEarner && totalAnnualTaxableCents > 0n) {
+    throw new RangeError(
+      "MWE taxable compensation requires manual tax review; classify exempt wages separately",
+    );
+  }
+  if (totalAnnualTaxableCents <= 25000000n) {
     // Under 250,000 PHP annual taxable = 0 tax
     return {
       totalAnnualTaxDueCents: 0n,
@@ -105,28 +94,43 @@ export function annualizeTax(
     };
   }
 
-  const taxablePesos = Number(totalAnnualTaxableCents) / 100;
-  let taxDuePesos = 0;
-
-  if (taxablePesos <= 250000) {
-    taxDuePesos = 0;
-  } else if (taxablePesos <= 400000) {
-    taxDuePesos = (taxablePesos - 250000) * 0.15;
-  } else if (taxablePesos <= 800000) {
-    taxDuePesos = 22500 + (taxablePesos - 400000) * 0.2;
-  } else if (taxablePesos <= 2000000) {
-    taxDuePesos = 102500 + (taxablePesos - 800000) * 0.25;
-  } else if (taxablePesos <= 8000000) {
-    taxDuePesos = 402500 + (taxablePesos - 2000000) * 0.3;
-  } else {
-    taxDuePesos = 2202500 + (taxablePesos - 8000000) * 0.35;
-  }
-
-  const totalAnnualTaxDueCents = BigInt(Math.round(taxDuePesos * 100));
+  // Exact 2023-onwards graduated table; round only the fractional tax centavo
+  // half up. Never convert cumulative centavos to a floating-point peso value.
+  const brackets = [
+    { ceiling: 40000000n, floor: 25000000n, fixed: 0n, percent: 15n },
+    { ceiling: 80000000n, floor: 40000000n, fixed: 2250000n, percent: 20n },
+    { ceiling: 200000000n, floor: 80000000n, fixed: 10250000n, percent: 25n },
+    { ceiling: 800000000n, floor: 200000000n, fixed: 40250000n, percent: 30n },
+  ];
+  const bracket = brackets.find(
+    (entry) => totalAnnualTaxableCents <= entry.ceiling,
+  ) ?? { floor: 800000000n, fixed: 220250000n, percent: 35n };
+  const totalAnnualTaxDueCents =
+    bracket.fixed +
+    ((totalAnnualTaxableCents - bracket.floor) * bracket.percent + 50n) / 100n;
   const taxAdjustmentCents = totalAnnualTaxDueCents - totalTaxWithheldCents;
 
   return {
     totalAnnualTaxDueCents,
     taxAdjustmentCents,
   };
+}
+
+/** A recorded settlement is a signed attestation, not extra payslip withholding. */
+export function reconcileTaxAdjustment(
+  annualAdjustmentCents: bigint,
+  settledAdjustmentCents = 0n,
+  hasRecordedSettlement = false,
+) {
+  const remainingDifferenceCents =
+    annualAdjustmentCents - settledAdjustmentCents;
+  const isSettled = hasRecordedSettlement && remainingDifferenceCents === 0n;
+  const reconciliationStatus = isSettled
+    ? ("SETTLED" as const)
+    : remainingDifferenceCents === 0n
+      ? ("BALANCED" as const)
+      : remainingDifferenceCents > 0n
+        ? ("DEFICIENCY_REVIEW" as const)
+        : ("REFUND_REVIEW" as const);
+  return { remainingDifferenceCents, isSettled, reconciliationStatus };
 }

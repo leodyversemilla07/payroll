@@ -1513,7 +1513,7 @@ describe('ComplianceService evidence supersession', () => {
         reviewerId: 'ghost-1',
         correctionReason: base.correctionReason,
       }),
-    ).rejects.toThrow('active user');
+    ).rejects.toThrow('active HR/admin');
     expect(prisma.priorEmployerDeclaration.create).not.toHaveBeenCalled();
   });
 

@@ -4,7 +4,17 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
+import { Prisma, prisma } from '@workspace/db';
 import { z } from 'zod';
+import { TaxCorrectionService } from '../../modules/compliance/tax-correction.service';
+import {
+  type CorrectionKind,
+  declarationCorrection,
+  incomeCorrection,
+  remittanceCorrection,
+  settlementCorrection,
+} from '../../modules/compliance/tax-correction.validation';
+import type { Context } from '../trpc.service';
 import type { RouterContext } from './router-context';
 
 // Centavos arrive as decimal strings so browsers never round large amounts.
@@ -19,6 +29,15 @@ async function withEvidenceErrors<T>(request: () => Promise<T>): Promise<T> {
   try {
     return await request();
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ['P2002', 'P2034'].includes(error.code)
+    )
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message:
+          'Tax evidence changed concurrently or already has a pending correction. Reload before retrying.',
+      });
     if (error instanceof ConflictException) {
       throw new TRPCError({ code: 'CONFLICT', message: error.message });
     }
@@ -41,6 +60,37 @@ export function createComplianceRouter(ctx: RouterContext) {
     auditService,
   } = ctx;
 
+  const submitCorrection = (
+    userContext: Context & { user: NonNullable<Context['user']> },
+    kind: CorrectionKind,
+    input: unknown,
+  ) =>
+    withEvidenceErrors(() =>
+      prisma.$transaction(
+        async (transaction) => {
+          const record = await new TaxCorrectionService(transaction).submit(
+            userContext.user.organizationId,
+            userContext.user.id,
+            kind,
+            input,
+          );
+          await auditService.record(
+            {
+              user: userContext.user,
+              request: userContext.req,
+              action: 'CREATE',
+              entityType: 'TaxEvidenceCorrection',
+              entityId: record.id,
+              newValue: { kind, targetId: record.targetId, status: 'PENDING' },
+            },
+            transaction,
+          );
+          return record;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+
   return trpc.router({
     recordPriorEmployerDeclaration: hrProcedure
       .input(
@@ -51,28 +101,40 @@ export function createComplianceRouter(ctx: RouterContext) {
           sourceReference: referenceInput,
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.recordPriorEmployerDeclaration({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'CREATE',
-          entityType: 'PriorEmployerDeclaration',
-          entityId: record.id,
-          newValue: {
-            employeeId: input.employeeId,
-            taxYear: input.taxYear,
-            hasPriorEmployer: input.hasPriorEmployer,
-          },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await withEvidenceErrors(() =>
+                complianceService
+                  .withDatabase(transaction)
+                  .recordPriorEmployerDeclaration({
+                    ...input,
+                    organizationId: ctx.user.organizationId,
+                    recordedById: ctx.user.id,
+                  }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'CREATE',
+                  entityType: 'PriorEmployerDeclaration',
+                  entityId: record.id,
+                  newValue: {
+                    employeeId: input.employeeId,
+                    taxYear: input.taxYear,
+                    hasPriorEmployer: input.hasPriorEmployer,
+                  },
+                },
+                transaction,
+              );
+              return record;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        ),
+      ),
 
     recordPreviousEmployerIncome: hrProcedure
       .input(
@@ -92,26 +154,41 @@ export function createComplianceRouter(ctx: RouterContext) {
           documentReference: referenceInput,
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.recordPreviousEmployerIncome({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-            periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
-            periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'CREATE',
-          entityType: 'PreviousEmployerIncome',
-          entityId: record.id,
-          newValue: { employeeId: input.employeeId, taxYear: input.taxYear },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await withEvidenceErrors(() =>
+                complianceService
+                  .withDatabase(transaction)
+                  .recordPreviousEmployerIncome({
+                    ...input,
+                    organizationId: ctx.user.organizationId,
+                    recordedById: ctx.user.id,
+                    periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
+                    periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
+                  }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'CREATE',
+                  entityType: 'PreviousEmployerIncome',
+                  entityId: record.id,
+                  newValue: {
+                    employeeId: input.employeeId,
+                    taxYear: input.taxYear,
+                  },
+                },
+                transaction,
+              );
+              return record;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        ),
+      ),
 
     recordMonthlyTaxRemittance: hrProcedure
       .input(
@@ -122,132 +199,116 @@ export function createComplianceRouter(ctx: RouterContext) {
           documentReference: referenceInput,
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.recordMonthlyTaxRemittance({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'CREATE',
-          entityType: 'MonthlyTaxRemittanceEvidence',
-          entityId: record.id,
-          newValue: { taxYear: input.taxYear, month: input.month },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await withEvidenceErrors(() =>
+                complianceService
+                  .withDatabase(transaction)
+                  .recordMonthlyTaxRemittance({
+                    ...input,
+                    organizationId: ctx.user.organizationId,
+                    recordedById: ctx.user.id,
+                  }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'CREATE',
+                  entityType: 'MonthlyTaxRemittanceEvidence',
+                  entityId: record.id,
+                  newValue: { taxYear: input.taxYear, month: input.month },
+                },
+                transaction,
+              );
+              return record;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        ),
+      ),
 
     correctPriorEmployerDeclaration: hrProcedure
-      .input(
-        z.object({
-          employeeId: z.string().uuid(),
-          taxYear: z.number().int().min(2023).max(2100),
-          hasPriorEmployer: z.boolean(),
-          sourceReference: referenceInput,
-          correctionReason: correctionReasonInput,
-          reviewerId: z.string().uuid(),
-        }),
-      )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.supersedePriorEmployerDeclaration({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'UPDATE',
-          entityType: 'PriorEmployerDeclaration',
-          entityId: record.id,
-          previousValue: { supersedesId: record.supersedesId },
-          newValue: {
-            employeeId: input.employeeId,
-            taxYear: input.taxYear,
-            hasPriorEmployer: input.hasPriorEmployer,
-          },
-        });
-        return record;
-      }),
+      .input(declarationCorrection)
+      .mutation(({ input, ctx }) =>
+        submitCorrection(ctx, 'DECLARATION', input),
+      ),
 
     correctPreviousEmployerIncome: hrProcedure
-      .input(
-        z.object({
-          employeeId: z.string().uuid(),
-          taxYear: z.number().int().min(2023).max(2100),
-          employerName: z.string().trim().min(1).max(200),
-          employerTin: z
-            .string()
-            .trim()
-            .regex(/^[0-9-]{9,20}$/),
-          periodStart: z.string().date(),
-          periodEnd: z.string().date(),
-          grossCompensationCents: centsInput,
-          taxableCompensationCents: centsInput,
-          taxWithheldCents: centsInput,
-          documentReference: referenceInput,
-          correctionReason: correctionReasonInput,
-          reviewerId: z.string().uuid(),
-        }),
-      )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.supersedePreviousEmployerIncome({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-            periodStart: new Date(`${input.periodStart}T00:00:00.000Z`),
-            periodEnd: new Date(`${input.periodEnd}T00:00:00.000Z`),
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'UPDATE',
-          entityType: 'PreviousEmployerIncome',
-          entityId: record.id,
-          previousValue: { supersedesId: record.supersedesId },
-          newValue: { employeeId: input.employeeId, taxYear: input.taxYear },
-        });
-        return record;
-      }),
+      .input(incomeCorrection)
+      .mutation(({ input, ctx }) =>
+        submitCorrection(ctx, 'PREVIOUS_INCOME', input),
+      ),
 
     correctMonthlyTaxRemittance: hrProcedure
+      .input(remittanceCorrection)
+      .mutation(({ input, ctx }) => submitCorrection(ctx, 'REMITTANCE', input)),
+
+    listTaxCorrections: payrollProcedure
+      .input(z.object({ taxYear: z.number().int().min(2023).max(2100) }))
+      .query(({ input, ctx }) =>
+        prisma.$transaction(
+          (transaction) =>
+            new TaxCorrectionService(transaction).list(
+              ctx.user.organizationId,
+              input.taxYear,
+            ),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+            timeout: 60_000,
+          },
+        ),
+      ),
+
+    reviewTaxCorrection: hrProcedure
       .input(
-        z.object({
-          taxYear: z.number().int().min(2023).max(2100),
-          month: z.number().int().min(1).max(12),
-          remittedCents: centsInput,
-          documentReference: referenceInput,
-          correctionReason: correctionReasonInput,
-          reviewerId: z.string().uuid(),
-        }),
+        z
+          .object({
+            id: z.string().uuid(),
+            decision: z.enum(['APPROVE', 'REJECT']),
+            reviewReason: correctionReasonInput,
+          })
+          .strict(),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.supersedeMonthlyTaxRemittance({
-            ...input,
-            organizationId: ctx.user.organizationId,
-            recordedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'UPDATE',
-          entityType: 'MonthlyTaxRemittanceEvidence',
-          entityId: record.id,
-          previousValue: { supersedesId: record.supersedesId },
-          newValue: { taxYear: input.taxYear, month: input.month },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await new TaxCorrectionService(transaction).review(
+                ctx.user.organizationId,
+                ctx.user.id,
+                input.id,
+                input.decision,
+                input.reviewReason,
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'UPDATE',
+                  entityType: 'TaxEvidenceCorrection',
+                  entityId: record.id,
+                  previousValue: { status: 'PENDING' },
+                  newValue: {
+                    status: record.status,
+                    publishedRecordId: record.publishedRecordId,
+                    reviewedById: ctx.user.id,
+                    reviewReason: input.reviewReason,
+                  },
+                },
+                transaction,
+              );
+              return record;
+            },
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              timeout: 60_000,
+            },
+          ),
+        ),
+      ),
 
     exportBankTransmittal: payrollProcedure
       .input(
@@ -318,9 +379,18 @@ export function createComplianceRouter(ctx: RouterContext) {
     listYearEndReconciliations: payrollProcedure
       .input(z.object({ taxYear: z.number().int().min(2023).max(2100) }))
       .query(({ input, ctx }) =>
-        complianceService.listYearEndReconciliations(
-          ctx.user.organizationId,
-          input.taxYear,
+        prisma.$transaction(
+          (transaction) =>
+            complianceService
+              .withDatabase(transaction)
+              .listYearEndReconciliations(
+                ctx.user.organizationId,
+                input.taxYear,
+              ),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+            timeout: 60_000,
+          },
         ),
       ),
 
@@ -357,71 +427,52 @@ export function createComplianceRouter(ctx: RouterContext) {
           documentReference: referenceInput,
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.recordYearEndSettlement({
-            employeeId: input.employeeId,
-            organizationId: ctx.user.organizationId,
-            taxYear: input.taxYear,
-            settlementDate: new Date(`${input.settlementDate}T00:00:00.000Z`),
-            documentReference: input.documentReference,
-            recordedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'CREATE',
-          entityType: 'YearEndTaxSettlement',
-          entityId: record.id,
-          newValue: {
-            employeeId: input.employeeId,
-            taxYear: input.taxYear,
-            settlementType: record.settlementType,
-          },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await withEvidenceErrors(() =>
+                complianceService
+                  .withDatabase(transaction)
+                  .recordYearEndSettlement({
+                    employeeId: input.employeeId,
+                    organizationId: ctx.user.organizationId,
+                    taxYear: input.taxYear,
+                    settlementDate: new Date(
+                      `${input.settlementDate}T00:00:00.000Z`,
+                    ),
+                    documentReference: input.documentReference,
+                    recordedById: ctx.user.id,
+                  }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'CREATE',
+                  entityType: 'YearEndTaxSettlement',
+                  entityId: record.id,
+                  newValue: {
+                    employeeId: input.employeeId,
+                    taxYear: input.taxYear,
+                    settlementType: record.settlementType,
+                  },
+                },
+                transaction,
+              );
+              return record;
+            },
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              timeout: 60_000,
+            },
+          ),
+        ),
+      ),
 
     correctYearEndSettlement: payrollProcedure
-      .input(
-        z.object({
-          employeeId: z.string().uuid(),
-          taxYear: z.number().int().min(2023).max(2100),
-          settlementDate: z.string().date(),
-          documentReference: referenceInput,
-          correctionReason: correctionReasonInput,
-          reviewerId: z.string().uuid(),
-        }),
-      )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.supersedeYearEndSettlement({
-            employeeId: input.employeeId,
-            organizationId: ctx.user.organizationId,
-            taxYear: input.taxYear,
-            settlementDate: new Date(`${input.settlementDate}T00:00:00.000Z`),
-            documentReference: input.documentReference,
-            correctionReason: input.correctionReason,
-            recordedById: ctx.user.id,
-            reviewerId: input.reviewerId,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'UPDATE',
-          entityType: 'YearEndTaxSettlement',
-          entityId: record.id,
-          previousValue: { supersedesId: record.supersedesId },
-          newValue: {
-            employeeId: input.employeeId,
-            taxYear: input.taxYear,
-            settlementType: record.settlementType,
-          },
-        });
-        return record;
-      }),
+      .input(settlementCorrection)
+      .mutation(({ input, ctx }) => submitCorrection(ctx, 'SETTLEMENT', input)),
 
     issueBir2316: hrProcedure
       .input(
@@ -430,28 +481,56 @@ export function createComplianceRouter(ctx: RouterContext) {
           taxYear: z.number().int().min(2023).max(2100),
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.issueBir2316({
-            employeeId: input.employeeId,
-            organizationId: ctx.user.organizationId,
-            taxYear: input.taxYear,
-            issuedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'CREATE',
-          entityType: 'Bir2316Issuance',
-          entityId: record.id,
-          newValue: {
-            employeeId: input.employeeId,
-            taxYear: input.taxYear,
-          },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const pending = await transaction.taxEvidenceCorrection.count({
+                where: {
+                  organizationId: ctx.user.organizationId,
+                  taxYear: input.taxYear,
+                  status: 'PENDING',
+                  OR: [
+                    { employeeId: input.employeeId },
+                    { kind: 'REMITTANCE' },
+                  ],
+                },
+              });
+              if (pending)
+                throw new ConflictException(
+                  'Resolve pending tax evidence corrections before issuing a certificate',
+                );
+              const record = await withEvidenceErrors(() =>
+                complianceService.withDatabase(transaction).issueBir2316({
+                  employeeId: input.employeeId,
+                  organizationId: ctx.user.organizationId,
+                  taxYear: input.taxYear,
+                  issuedById: ctx.user.id,
+                }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'CREATE',
+                  entityType: 'Bir2316Issuance',
+                  entityId: record.id,
+                  newValue: {
+                    employeeId: input.employeeId,
+                    taxYear: input.taxYear,
+                  },
+                },
+                transaction,
+              );
+              return record;
+            },
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              timeout: 60_000,
+            },
+          ),
+        ),
+      ),
 
     voidBir2316Issuance: hrProcedure
       .input(
@@ -461,26 +540,38 @@ export function createComplianceRouter(ctx: RouterContext) {
           voidReason: correctionReasonInput,
         }),
       )
-      .mutation(async ({ input, ctx }) => {
-        const record = await withEvidenceErrors(() =>
-          complianceService.voidBir2316Issuance({
-            employeeId: input.employeeId,
-            organizationId: ctx.user.organizationId,
-            taxYear: input.taxYear,
-            voidReason: input.voidReason,
-            voidedById: ctx.user.id,
-          }),
-        );
-        await auditService.record({
-          user: ctx.user,
-          request: ctx.req,
-          action: 'UPDATE',
-          entityType: 'Bir2316Issuance',
-          entityId: record.id,
-          newValue: { status: record.status },
-        });
-        return record;
-      }),
+      .mutation(({ input, ctx }) =>
+        withEvidenceErrors(() =>
+          prisma.$transaction(
+            async (transaction) => {
+              const record = await withEvidenceErrors(() =>
+                complianceService
+                  .withDatabase(transaction)
+                  .voidBir2316Issuance({
+                    employeeId: input.employeeId,
+                    organizationId: ctx.user.organizationId,
+                    taxYear: input.taxYear,
+                    voidReason: input.voidReason,
+                    voidedById: ctx.user.id,
+                  }),
+              );
+              await auditService.record(
+                {
+                  user: ctx.user,
+                  request: ctx.req,
+                  action: 'UPDATE',
+                  entityType: 'Bir2316Issuance',
+                  entityId: record.id,
+                  newValue: { status: record.status },
+                },
+                transaction,
+              );
+              return record;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        ),
+      ),
 
     getBir2316Issuance: payrollProcedure
       .input(
@@ -491,10 +582,16 @@ export function createComplianceRouter(ctx: RouterContext) {
       )
       .query(({ input, ctx }) =>
         withEvidenceErrors(() =>
-          complianceService.getBir2316Issuance(
-            input.employeeId,
-            ctx.user.organizationId,
-            input.taxYear,
+          prisma.$transaction(
+            (transaction) =>
+              complianceService
+                .withDatabase(transaction)
+                .getBir2316Issuance(
+                  input.employeeId,
+                  ctx.user.organizationId,
+                  input.taxYear,
+                ),
+            { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
           ),
         ),
       ),

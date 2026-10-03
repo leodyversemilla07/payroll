@@ -1,7 +1,12 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
 import { Prisma, prisma } from '@workspace/db';
 import { z } from 'zod';
+import { finalPayPreviewSchema } from '../../modules/employees/final-pay.inputs';
 import type { RouterContext } from './router-context';
 import { assertEmployeeAccess, EMPLOYEE_RECORD_ROLES } from './router-context';
 
@@ -144,29 +149,37 @@ export function createEmployeesRouter(ctx: RouterContext) {
       }),
 
     calculateFinalPay: hrProcedure
-      .input(
-        z.object({
-          employeeId: z.string().uuid(),
-          separationType: z.enum([
-            'RESIGNATION',
-            'REDUNDANCY',
-            'RETRENCHMENT',
-            'CLOSURE_NON_BANKRUPT',
-            'DISEASE',
-            'RETIREMENT',
-          ]),
-          yearsOfService: z.number().nonnegative().optional(),
-          unpaidDaysWorked: z.number().nonnegative().optional(),
-          unusedLeaveDays: z.number().nonnegative().optional(),
-          exitDate: z.string().date().optional(),
-        }),
-      )
-      .query(({ input, ctx }) =>
-        employeesService.calculateFinalPaySettlement({
-          ...input,
-          organizationId: ctx.user.organizationId,
-          exitDate: input.exitDate ? new Date(input.exitDate) : undefined,
-        }),
-      ),
+      .input(finalPayPreviewSchema)
+      .query(async ({ input, ctx }) => {
+        try {
+          return await employeesService.calculateFinalPaySettlement({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            exitDate: new Date(input.exitDate),
+          });
+        } catch (error) {
+          if (
+            error instanceof BadRequestException ||
+            error instanceof NotFoundException ||
+            error instanceof UnprocessableEntityException
+          ) {
+            throw new TRPCError({
+              code:
+                error instanceof NotFoundException
+                  ? 'NOT_FOUND'
+                  : error instanceof BadRequestException
+                    ? 'BAD_REQUEST'
+                    : 'UNPROCESSABLE_CONTENT',
+              message: error.message,
+              cause: error,
+            });
+          }
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Final-pay preview failed. Please retry.',
+            cause: error,
+          });
+        }
+      }),
   });
 }

@@ -17,6 +17,7 @@ describe("DOLE Final Pay & Separation Settlement Engine", () => {
       unpaidDaysWorkedInLastPeriod: 5, // 5 days worked in final cutoff
       totalYtdBasicEarnedCents: 40000000n, // 50,000 * 8 months = PHP 400,000.00
       unusedLeaveDays: 6, // 6 days unused SIL/VL
+      priorMonetizedLeaveDaysInYear: 0, // Explicitly reviewed zero earlier monetization
       ytdTaxableCompensationCents: 38000000n,
       totalYtdTaxWithheldCents: 3000000n,
       outstandingLoanBalanceCents: 500000n, // PHP 5,000.00 company advance

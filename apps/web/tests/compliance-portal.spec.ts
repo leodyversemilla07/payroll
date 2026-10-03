@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 const user = {
   id: "u1",
@@ -229,22 +229,27 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
   await yearEnd
     .getByLabel(/Correction reason/)
     .fill("Employee disclosed earlier employment omitted from the record");
-  await yearEnd
-    .getByLabel(/Reviewer user ID/)
-    .fill("11111111-1111-4111-8111-111111111111");
+  await expect(yearEnd.getByLabel(/Reviewer user ID/)).toHaveCount(0);
   const correctionRequest = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       request.url().includes("compliance.correctPriorEmployerDeclaration"),
   );
-  await yearEnd.getByRole("button", { name: "Record correction" }).click();
-  await expect(yearEnd.getByText("Correction recorded.")).toBeVisible();
+  await yearEnd.getByRole("button", { name: "Request correction" }).click();
+  await expect(
+    yearEnd.getByText(
+      "Correction requested; awaiting a different signed-in HR/admin.",
+    ),
+  ).toBeVisible();
   expect(mutations).toContain("compliance.correctPriorEmployerDeclaration");
   expect((await correctionRequest).postDataJSON()["0"].json).toMatchObject({
     employeeId: employee.id,
     hasPriorEmployer: true,
     sourceReference: "HR-DECL-2026-v2",
   });
+  expect((await correctionRequest).postDataJSON()["0"].json).not.toHaveProperty(
+    "reviewerId",
+  );
 });
 
 // Exercise certificate issuance against mocked tRPC: a settled employee can
@@ -309,6 +314,7 @@ test("issue and void a 2316 certificate", async ({ page }) => {
         issuance = {
           id: "iss-1",
           status: "ISSUED",
+          freshness: "CURRENT",
           version: 1,
           issuedAt: "2027-01-15T00:00:00.000Z",
           statutoryDeadline: "2027-01-31",
@@ -373,3 +379,185 @@ test("issue and void a 2316 certificate", async ({ page }) => {
   await expect(yearEnd.getByText("Certificate voided.")).toBeVisible();
   expect(mutations).toContain("compliance.voidBir2316Issuance");
 });
+
+async function mockReviewPortal(
+  page: Page,
+  options: { own?: boolean; role?: string; freshness?: string } = {},
+) {
+  const actor = { ...user, role: options.role ?? user.role };
+  let signedIn = false;
+  let pending = [
+    {
+      id: "request-1",
+      kind: "DECLARATION",
+      requestedById: options.own ? user.id : "different-hr",
+      originalEvidence: {
+        hasPriorEmployer: true,
+        sourceReference: "Original signed declaration",
+      },
+      payload: {
+        hasPriorEmployer: false,
+        sourceReference: "Proposed signed declaration",
+        correctionReason: "Synthetic corrected source document",
+      },
+    },
+  ];
+  await page.route("**/trpc/**", async (route) => {
+    const paths = (
+      new URL(route.request().url()).pathname.split("/trpc/")[1] ?? ""
+    ).split(",");
+    const results = paths.map((path) => {
+      if (path === "auth.login") {
+        signedIn = true;
+        return { result: { data: { json: { user: actor } } } };
+      }
+      if (!signedIn) {
+        return {
+          error: {
+            json: {
+              message: "Unauthorized",
+              code: -32001,
+              data: { code: "UNAUTHORIZED", httpStatus: 401 },
+            },
+          },
+        };
+      }
+      if (path === "compliance.reviewTaxCorrection") {
+        pending = [];
+        return {
+          result: { data: { json: { id: "request-1", status: "APPROVED" } } },
+        };
+      }
+      const json =
+        path === "auth.me"
+          ? actor
+          : path === "employees.list"
+            ? [employee]
+            : path === "compliance.listTaxCorrections"
+              ? pending
+              : path === "compliance.listYearEndReconciliations"
+                ? queue
+                : path === "compliance.getTaxEvidence"
+                  ? evidence
+                  : path === "compliance.getBir2316Issuance" &&
+                      options.freshness
+                    ? {
+                        id: "iss-1",
+                        status: "ISSUED",
+                        version: 1,
+                        freshness: options.freshness,
+                        freshnessReason:
+                          "Source evidence must be reviewed; void and re-issue",
+                        issuedAt: "2027-01-15",
+                      }
+                    : null;
+      return { result: { data: { json } } };
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(paths.length === 1 ? results[0] : results),
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("Email").fill(actor.email);
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Payroll navigation" })
+    .getByRole("link", { name: "Year-end tax", exact: true })
+    .click();
+}
+
+test("signed-in reviewer compares the original and proposal before publishing", async ({
+  page,
+}) => {
+  await mockReviewPortal(page);
+  const review = page.getByRole("region", {
+    name: "Tax correction review",
+    exact: true,
+  });
+  await review
+    .getByText("Compare recorded evidence and proposed values")
+    .click();
+  await expect(review.getByText(/Original signed declaration/)).toBeVisible();
+  await expect(review.getByText(/Proposed signed declaration/)).toBeVisible();
+  await review
+    .getByLabel(/Review reason/)
+    .fill("Checked against the signed replacement source declaration");
+  const request = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().includes("compliance.reviewTaxCorrection"),
+  );
+  await review
+    .getByRole("button", { name: "Approve correction", exact: true })
+    .click();
+  expect((await request).postDataJSON()["0"].json).toEqual({
+    id: "request-1",
+    decision: "APPROVE",
+    reviewReason: "Checked against the signed replacement source declaration",
+  });
+  await expect(
+    review.getByText("Correction approved and new evidence version published."),
+  ).toBeVisible();
+  await expect(review.getByText("No pending corrections.")).toBeVisible();
+});
+
+test("requester cannot approve their own proposal in the UI", async ({
+  page,
+}) => {
+  await mockReviewPortal(page, { own: true });
+  const review = page.getByRole("region", {
+    name: "Tax correction review",
+    exact: true,
+  });
+  await expect(
+    review.getByText(
+      "You requested this correction. A different HR/admin must review it.",
+    ),
+  ).toBeVisible();
+  await expect(
+    review.getByRole("button", { name: "Approve correction" }),
+  ).toHaveCount(0);
+});
+
+test("payroll specialist sees the proposal but cannot attest HR review", async ({
+  page,
+}) => {
+  await mockReviewPortal(page, { role: "PAYROLL_SPECIALIST" });
+  const review = page.getByRole("region", {
+    name: "Tax correction review",
+    exact: true,
+  });
+  await expect(review.getByText("HR/admin review is required.")).toBeVisible();
+  await expect(
+    review.getByRole("button", { name: "Approve correction" }),
+  ).toHaveCount(0);
+});
+
+for (const freshness of ["STALE", "UNVERIFIABLE"]) {
+  test(`warns about ${freshness} certificate without offering a duplicate issuance`, async ({
+    page,
+  }) => {
+    await mockReviewPortal(page, { freshness });
+    const yearEnd = page.getByRole("region", {
+      name: "Year-end tax",
+      exact: true,
+    });
+    await yearEnd
+      .getByLabel("Employee", { exact: true })
+      .selectOption(employee.id);
+    await expect(
+      yearEnd
+        .getByRole("alert")
+        .filter({ hasText: "Source evidence must be reviewed" }),
+    ).toBeVisible();
+    await expect(
+      yearEnd.getByRole("button", { name: "Issue certificate", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      yearEnd.getByRole("button", { name: "Void certificate", exact: true }),
+    ).toBeVisible();
+  });
+}
