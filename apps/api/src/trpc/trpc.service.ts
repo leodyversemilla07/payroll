@@ -29,6 +29,22 @@ export class TrpcService {
       });
     }
 
+    // Optional client freshness guard. Authentication still comes only from
+    // the server-verified session, never from these caller-supplied values.
+    const expected = ctx.req.headers?.['x-payroll-principal'];
+    const actual = JSON.stringify([
+      ctx.user.id,
+      ctx.user.organizationId,
+      ctx.user.role,
+      ctx.user.employeeId ?? null,
+    ]);
+    if (expected !== undefined && expected !== actual) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message:
+          'Session changed. Recheck your signed-in account before accessing payroll records.',
+      });
+    }
     return next({
       ctx: {
         ...ctx,

@@ -308,7 +308,7 @@ function CreateEmployeeForm({
       <CardContent>
         {options.isPending ? (
           <p role="status">Loading branches and departments…</p>
-        ) : options.isError ? (
+        ) : options.isError && !options.data ? (
           <p role="alert">
             Could not load branches and departments.{" "}
             <Button
@@ -319,7 +319,7 @@ function CreateEmployeeForm({
               Retry
             </Button>
           </p>
-        ) : !options.data.branches.length ||
+        ) : !options.data?.branches.length ||
           !options.data.departments.length ? (
           <p role="alert">
             A branch and department must be configured for this organization
@@ -327,6 +327,21 @@ function CreateEmployeeForm({
           </p>
         ) : (
           <form onSubmit={submit}>
+            {options.isError && (
+              <p role="alert" className="mb-4">
+                Could not refresh branches and departments. Previously loaded
+                choices and your draft have been kept; the API still validates
+                the selected organization choices when saving.{" "}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={create.isPending}
+                  onClick={() => void options.refetch()}
+                >
+                  Retry choices
+                </Button>
+              </p>
+            )}
             <FieldGroup>
               <FieldSet disabled={create.isPending}>
                 <FieldLegend>Personal information</FieldLegend>

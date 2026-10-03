@@ -70,8 +70,12 @@ PostgreSQL, without request interception. It creates a synthetic employee throug
 the UI, records 11 explicit approved attendance days, allocates/files/approves
 leave, processes payroll, signs in as a different checker, marks disbursement,
 reloads the persisted run, reads the payslip and verifies database/audit records.
-Only tenant setup and staff accounts are provisioned directly; the test cleans
-up only its own UUID-scoped tenant. This is integration verification, **not**
+The onboarding workflow provisions only tenant setup and staff accounts directly.
+A separate session-isolation workflow provisions synthetic employees in two test
+tenants, switches the real shared cookie in another tab, holds the employee SQL
+read, and verifies that the new account never sees the former tenant's cached
+row. It also verifies that a stale principal hint cannot post payroll. Both
+workflows clean up only their own UUID-scoped tenants. This is integration verification, **not**
 regulatory validation or a real bank payment. CI runs both browser suites.
 The portal reads persisted data via the API (requires a running API and a staff
 account); its year-end tax section also records evidence, previews worksheets,
@@ -597,6 +601,30 @@ pnpm --filter @workspace/api start:prod
 ```
 
 Production deployments must provide at least `DATABASE_URL`; see `.env.example` for the complete configuration. Run `pnpm db:migrate:deploy` before starting the API.
+
+## Portal session and cache isolation
+
+Authentication queries use a stable root cache; business queries/mutations use
+an independently disposable cache keyed by verified user, organization, role
+and linked employee. Focus session checks remain enabled. A scope change or
+expiry discards business drafts/cache and cancels reads before another account
+can observe them; returning to an earlier account starts a fresh cache. Display
+name/email changes alone do not discard same-account drafts. Failed background
+session/data refreshes retain same-principal drafts; employee registration
+choices show a cached-data warning rather than unmounting the editor. No
+business drafts, identifiers or passwords are added to browser storage.
+
+Portal business requests include `x-payroll-principal`, non-secret identity
+freshness metadata. The API compares it with its **server-authenticated** user
+before protected reads/writes and rejects mismatches with UNAUTHORIZED. This is
+not a credential or a trusted role/tenant assertion; existing clients without
+the optional hint still require normal authentication and authorization. A
+rejection causes the portal to recheck authentication, not automatically retry
+a mutation as another user. Requests already authorized before an account
+switch may still commit server-side; cancelling/discarding client state cannot
+undo those writes. Their original actor and server transaction safeguards still
+apply. Cached identity accompanying an expired-session error never redirects
+the sign-in screen back into the portal.
 
 ## Authentication and authorization
 

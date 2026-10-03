@@ -30,6 +30,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect } from "react";
 import { usePortalSection } from "@/lib/portal-navigation";
+import {
+  PrincipalQueryProvider,
+  principalKey,
+} from "@/lib/principal-query-provider";
 import { trpc } from "@/lib/trpc";
 import { PortalSidebar } from "./portal-sidebar";
 
@@ -62,6 +66,7 @@ export function PayrollPortal({
   const hasStaffNavigation =
     !!me.data && !signedOut && staffRoles.includes(me.data.role);
   const activeSection = usePortalSection();
+  const scope = me.data ? principalKey(me.data) : "";
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
       queryClient.clear();
@@ -83,7 +88,7 @@ export function PayrollPortal({
       >
         {hasStaffNavigation && me.data && (
           <PortalSidebar
-            key={me.data.id}
+            key={scope}
             user={me.data}
             activeSection={activeSection.id}
           />
@@ -179,7 +184,7 @@ export function PayrollPortal({
                 )}
                 {staffRoles.includes(me.data.role) ? (
                   <PortalUserContext.Provider
-                    key={me.data.id}
+                    key={scope}
                     value={{
                       user: me.data,
                       canManageEmployees:
@@ -187,17 +192,19 @@ export function PayrollPortal({
                         me.data.role === "HR_ADMIN",
                     }}
                   >
-                    <div className="space-y-6">
-                      <div className="space-y-1">
-                        <h1 className="text-2xl font-semibold tracking-tight">
-                          {activeSection.label}
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                          {activeSection.description}
-                        </p>
+                    <PrincipalQueryProvider scope={scope}>
+                      <div className="space-y-6">
+                        <div className="space-y-1">
+                          <h1 className="text-2xl font-semibold tracking-tight">
+                            {activeSection.label}
+                          </h1>
+                          <p className="text-sm text-muted-foreground">
+                            {activeSection.description}
+                          </p>
+                        </div>
+                        {children}
                       </div>
-                      {children}
-                    </div>
+                    </PrincipalQueryProvider>
                   </PortalUserContext.Provider>
                 ) : (
                   <Card>

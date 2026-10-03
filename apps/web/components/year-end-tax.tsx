@@ -23,6 +23,7 @@ import {
 import { Separator } from "@workspace/ui/components/separator";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { usePortalUser } from "./payroll-portal";
 
 export interface YearEndEmployeeOption {
   id: string;
@@ -200,7 +201,7 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
     { taxYear },
     { retry: false },
   );
-  const me = trpc.auth.me.useQuery(undefined, { retry: false });
+  const { user } = usePortalUser();
   const invalidate = useInvalidateEvidence();
   const [notice, setNotice] = useState("");
   const review = trpc.compliance.reviewTaxCorrection.useMutation({
@@ -213,8 +214,7 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
       invalidate();
     },
   });
-  const canReview =
-    me.data?.role === "SUPER_ADMIN" || me.data?.role === "HR_ADMIN";
+  const canReview = user.role === "SUPER_ADMIN" || user.role === "HR_ADMIN";
   return (
     <section
       aria-label="Tax correction review"
@@ -244,7 +244,7 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
           <TaxCorrectionReview
             key={request.id}
             request={request}
-            own={request.requestedById === me.data?.id}
+            own={request.requestedById === user.id}
             canReview={canReview}
             busy={review.isPending}
             submit={(decision, reviewReason) =>

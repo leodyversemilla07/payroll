@@ -71,10 +71,13 @@ export function LoginForm() {
   }, [sessionSettled]);
 
   useEffect(() => {
-    if (me.data) {
+    // An expired session may leave previous data in React Query alongside
+    // its UNAUTHORIZED error. Cached identity alone must not redirect back
+    // into the portal and create a sign-in/portal navigation loop.
+    if (me.isSuccess && me.data) {
       void router.replace("/portal");
     }
-  }, [me.data, router]);
+  }, [me.data, me.isSuccess, router]);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
