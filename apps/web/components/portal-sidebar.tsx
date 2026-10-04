@@ -121,7 +121,6 @@ export function PortalSidebar({
         </nav>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarSeparator />
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail aria-label="Collapse or expand navigation" />

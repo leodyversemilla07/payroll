@@ -672,3 +672,59 @@ test("HR admin sidebar shows full workspace including payroll operations", async
     nav.getByRole("link", { name: "My Attendance", exact: true }),
   ).toBeVisible();
 });
+
+// ── Test: RBAC Route Guard & Maker-Checker ────────────────────────────────────
+
+test("employee directly accessing unauthorized payroll routes sees Access Restricted card", async ({
+  page,
+}) => {
+  await setupAndLogin(page, employeeUser);
+
+  await page.goto("/portal/process-payroll");
+  const restrictedCard = page.getByRole("region", {
+    name: "Access restricted",
+  });
+  await expect(restrictedCard).toBeVisible();
+  await expect(restrictedCard.getByText("Access Restricted")).toBeVisible();
+  await expect(
+    restrictedCard.getByRole("link", { name: "Return to Overview" }),
+  ).toBeVisible();
+
+  await page.goto("/portal/payroll-runs");
+  await expect(
+    page.getByRole("region", { name: "Access restricted" }),
+  ).toBeVisible();
+});
+
+test("department manager directly accessing payroll process sees Access Restricted card", async ({
+  page,
+}) => {
+  await setupAndLogin(page, managerUser);
+
+  await page.goto("/portal/process-payroll");
+  const restrictedCard = page.getByRole("region", {
+    name: "Access restricted",
+  });
+  await expect(restrictedCard).toBeVisible();
+  await expect(restrictedCard.getByText("Access Restricted")).toBeVisible();
+});
+
+test("HR admin accessing process-payroll sees Maker-Checker separation of duties card", async ({
+  page,
+}) => {
+  await setupAndLogin(page, hrUser);
+
+  await page.goto("/portal/process-payroll");
+  const makerCheckerCard = page.getByRole("region", {
+    name: "Process payroll run",
+  });
+  await expect(makerCheckerCard).toBeVisible();
+  await expect(
+    makerCheckerCard.getByText("Maker-Checker Separation of Duties", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    makerCheckerCard.getByRole("link", { name: "Review Payroll Runs" }),
+  ).toBeVisible();
+});

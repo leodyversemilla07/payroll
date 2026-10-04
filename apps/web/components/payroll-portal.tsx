@@ -11,7 +11,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@workspace/ui/components/breadcrumb";
-import { Button } from "@workspace/ui/components/button";
+import { Button, buttonVariants } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
@@ -29,7 +29,10 @@ import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect } from "react";
-import { usePortalSection } from "@/lib/portal-navigation";
+import {
+  isSectionAllowedForRole,
+  usePortalSection,
+} from "@/lib/portal-navigation";
 import {
   PrincipalQueryProvider,
   principalKey,
@@ -49,6 +52,12 @@ type PortalUser = inferRouterOutputs<AppRouter>["auth"]["me"];
 export interface PortalUserContextValue {
   user: PortalUser;
   canManageEmployees: boolean;
+  canTriggerPayroll: boolean;
+  canApprovePayroll: boolean;
+  canManageHolidays: boolean;
+  canManageLeavePolicies: boolean;
+  canApproveLeaves: boolean;
+  canViewStaffRecords: boolean;
   isManager: boolean;
   isStaff: boolean;
   isEmployee: boolean;
@@ -150,8 +159,8 @@ export function PayrollPortal({
                 </Breadcrumb>
               )}
             </div>
-            <div className="flex items-center gap-4">
-              {me.data && (
+            {!hasNavigation && me.data && (
+              <div className="flex items-center gap-4">
                 <Button
                   type="button"
                   variant="secondary"
@@ -160,8 +169,8 @@ export function PayrollPortal({
                 >
                   {logout.isPending ? "Signing out…" : "Sign out"}
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </header>
           <div
             id="workspace-content"
@@ -201,6 +210,27 @@ export function PayrollPortal({
                       canManageEmployees:
                         me.data.role === "SUPER_ADMIN" ||
                         me.data.role === "HR_ADMIN",
+                      canTriggerPayroll:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "PAYROLL_SPECIALIST",
+                      canApprovePayroll:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN",
+                      canManageHolidays:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN",
+                      canManageLeavePolicies:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN",
+                      canApproveLeaves:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN" ||
+                        me.data.role === "DEPARTMENT_MANAGER",
+                      canViewStaffRecords:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN" ||
+                        me.data.role === "PAYROLL_SPECIALIST" ||
+                        me.data.role === "DEPARTMENT_MANAGER",
                       isManager: me.data.role === "DEPARTMENT_MANAGER",
                       isStaff:
                         me.data.role === "SUPER_ADMIN" ||
@@ -219,7 +249,39 @@ export function PayrollPortal({
                             {activeSection.description}
                           </p>
                         </div>
-                        {children}
+                        {isSectionAllowedForRole(
+                          activeSection.id,
+                          me.data.role,
+                        ) ? (
+                          children
+                        ) : (
+                          <Card role="region" aria-label="Access restricted">
+                            <CardHeader>
+                              <CardTitle>Access Restricted</CardTitle>
+                              <CardDescription>
+                                No staff records available. Your role (
+                                {me.data.role.replaceAll("_", " ")}) does not
+                                have permission to access the{" "}
+                                {activeSection.label} workspace.
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <p className="text-sm text-muted-foreground">
+                                If you need access to this resource, please
+                                contact your system administrator or HR
+                                department.
+                              </p>
+                              <Link
+                                href="/portal"
+                                className={buttonVariants({
+                                  variant: "default",
+                                })}
+                              >
+                                Return to Overview
+                              </Link>
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
                     </PrincipalQueryProvider>
                   </PortalUserContext.Provider>

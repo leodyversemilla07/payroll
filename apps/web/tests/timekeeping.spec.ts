@@ -297,7 +297,8 @@ test("load and correct DTR using Manila punches, explicit totals and the loaded 
   expect(state.saves[0]).not.toHaveProperty("organizationId");
   await expect(editor).toHaveCount(0);
   await expect(row).toContainText("450");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: /^Account:/ }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(
     page.getByRole("heading", { name: "Login to your account" }),
   ).toBeVisible();

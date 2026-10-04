@@ -206,7 +206,8 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
       .getByText("₱1,000.00")
       .first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: /^Account:/ }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(
     page.getByRole("heading", { name: "Login to your account" }),
   ).toBeVisible();

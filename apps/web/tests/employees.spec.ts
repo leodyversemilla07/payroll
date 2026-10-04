@@ -369,7 +369,8 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
   await expect(details).not.toContainText(employee.bankAccountNumber);
   await expect(details).not.toContainText(employee.tin);
   await expect(form).toHaveCount(0);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: /^Account:/ }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(
     page.getByRole("heading", { name: "Login to your account" }),
   ).toBeVisible();

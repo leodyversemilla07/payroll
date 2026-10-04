@@ -267,7 +267,9 @@ test("sidebar routes replace page content, share the layout and preserve history
   await expect(
     page.getByRole("heading", { name: "Year-end tax", exact: true }),
   ).toBeInViewport();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  const accountBtn = page.getByRole("button", { name: /^Account:/ });
+  await accountBtn.click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(nav).toHaveCount(0);
   expect(exceptions).toEqual([]);
 });

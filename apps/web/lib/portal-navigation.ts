@@ -98,6 +98,57 @@ const sectionMap = Object.fromEntries(
   portalSections.map((s) => [s.id, s]),
 ) as Record<PortalSection, (typeof portalSections)[number]>;
 
+export const SECTION_PERMISSIONS: Record<PortalSection, readonly string[]> = {
+  overview: [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+    "EMPLOYEE",
+  ],
+  employees: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+  attendance: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+  leaves: [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+  ],
+  holidays: [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+    "EMPLOYEE",
+  ],
+  "process-payroll": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+  "payroll-runs": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+  "year-end-tax": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+  "my-profile": [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+    "EMPLOYEE",
+  ],
+  "my-attendance": [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+    "EMPLOYEE",
+  ],
+};
+
+export function isSectionAllowedForRole(
+  sectionId: PortalSection,
+  role?: string,
+): boolean {
+  if (!role) return false;
+  const allowed = SECTION_PERMISSIONS[sectionId];
+  return allowed ? allowed.includes(role) : false;
+}
+
 export function getNavigationGroupsForRole(role?: string) {
   if (role === "EMPLOYEE") {
     return [

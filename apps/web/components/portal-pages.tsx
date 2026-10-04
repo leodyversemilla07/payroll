@@ -18,7 +18,10 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { portalSections } from "@/lib/portal-navigation";
+import {
+  isSectionAllowedForRole,
+  portalSections,
+} from "@/lib/portal-navigation";
 import { trpc } from "@/lib/trpc";
 import { EmployeesSection } from "./employees-section";
 import { HolidaysSection } from "./holidays-section";
@@ -383,7 +386,11 @@ export function PortalOverview() {
         </h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {portalSections
-            .filter((section) => section.id !== "overview")
+            .filter(
+              (section) =>
+                section.id !== "overview" &&
+                isSectionAllowedForRole(section.id, user.role),
+            )
             .map((section) => (
               <Card
                 key={section.id}
@@ -484,17 +491,16 @@ export function PortalAttendance() {
 
 export function PortalLeaves() {
   const props = useStaffEmployees();
-  const { user, canManageEmployees, isManager } = usePortalUser();
-  const canDecide = canManageEmployees || isManager;
+  const { user, canManageLeavePolicies, canApproveLeaves } = usePortalUser();
   return (
     <div className="space-y-6">
-      {canDecide && <PendingLeaveApprovalsSection />}
+      {canApproveLeaves && <PendingLeaveApprovalsSection />}
       <LeavesSection
         {...props}
-        canDecide={canDecide}
+        canDecide={canApproveLeaves}
         actorEmployeeId={user.employeeId}
       />
-      <LeavePoliciesSection canManage={canManageEmployees} />
+      <LeavePoliciesSection canManage={canManageLeavePolicies} />
     </div>
   );
 }
@@ -505,6 +511,6 @@ export function PortalYearEndTax() {
 }
 
 export function PortalHolidays() {
-  const { canManageEmployees } = usePortalUser();
-  return <HolidaysSection canManage={canManageEmployees} />;
+  const { canManageHolidays } = usePortalUser();
+  return <HolidaysSection canManage={canManageHolidays} />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@workspace/ui/components/button";
+import { Button, buttonVariants } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
@@ -22,6 +22,7 @@ import {
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { usePortalUser } from "./payroll-portal";
 
 function MutationError({ error }: { error: { message: string } | null }) {
   if (!error) return null;
@@ -37,6 +38,7 @@ function useInvalidateRuns() {
 }
 
 export function TriggerRunForms() {
+  const { canTriggerPayroll } = usePortalUser();
   const invalidate = useInvalidateRuns();
   const [sequence, setSequence] = useState("FIRST_CUTOFF");
   const [start, setStart] = useState("");
@@ -59,6 +61,35 @@ export function TriggerRunForms() {
       invalidate();
     },
   });
+
+  if (!canTriggerPayroll) {
+    return (
+      <Card role="region" aria-label="Process payroll run">
+        <CardHeader>
+          <CardTitle>Maker-Checker Separation of Duties</CardTitle>
+          <CardDescription>
+            Payroll calculation triggering is limited to Payroll Specialists and
+            Super Admins.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            In accordance with Philippine statutory audit standards and
+            maker-checker separation of duties, HR administrators review and
+            approve payroll runs rather than initiating calculation execution.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/portal/payroll-runs"
+              className={buttonVariants({ variant: "default" })}
+            >
+              Review Payroll Runs
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -254,6 +285,7 @@ export function RunLifecycleActions({
   status: string;
   clearSelection: () => void;
 }) {
+  const { canApprovePayroll } = usePortalUser();
   const invalidate = useInvalidateRuns();
   const [message, setMessage] = useState<string | null>(null);
   const [armCancel, setArmCancel] = useState(false);
@@ -281,18 +313,23 @@ export function RunLifecycleActions({
   return (
     <section aria-label="Run lifecycle actions" className="mb-4 space-y-3">
       <div className="flex flex-wrap gap-2">
-        {status === "AUDITED" && (
-          <Button
-            type="button"
-            disabled={approve.isPending}
-            onClick={() => {
-              setMessage(null);
-              approve.mutate({ runId });
-            }}
-          >
-            {approve.isPending ? "Approving…" : "Approve run"}
-          </Button>
-        )}
+        {status === "AUDITED" &&
+          (canApprovePayroll ? (
+            <Button
+              type="button"
+              disabled={approve.isPending}
+              onClick={() => {
+                setMessage(null);
+                approve.mutate({ runId });
+              }}
+            >
+              {approve.isPending ? "Approving…" : "Approve run"}
+            </Button>
+          ) : (
+            <p className="self-center text-sm text-muted-foreground italic">
+              Awaiting approval from an HR Admin or Super Admin.
+            </p>
+          ))}
         {status === "APPROVED" && (
           <Button
             type="button"
