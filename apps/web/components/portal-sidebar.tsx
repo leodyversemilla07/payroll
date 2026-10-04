@@ -18,6 +18,7 @@ import {
 } from "@workspace/ui/components/sidebar";
 import { X } from "lucide-react";
 import Link from "next/link";
+import { NavUser } from "@/components/nav-user";
 import {
   getNavigationGroupsForRole,
   type PortalSection,
@@ -27,19 +28,17 @@ export function PortalSidebar({
   user,
   activeSection,
 }: {
-  user: { name: string; role: string };
+  user: {
+    name: string;
+    role: string;
+    email?: string;
+    employeeId?: string;
+    avatarUrl?: string | null;
+  };
   activeSection: PortalSection;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
   const groups = getNavigationGroupsForRole(user.role);
-  const initials =
-    user.name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase() || "U";
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -123,32 +122,7 @@ export function PortalSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarSeparator />
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              render={<Link href="/portal" />}
-              aria-label={`Account: ${user.name}`}
-              tooltip={`${user.name} · ${user.role.replaceAll("_", " ")}`}
-              onClick={() => {
-                if (isMobile) setOpenMobile(false);
-              }}
-            >
-              <div
-                aria-hidden="true"
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
-              >
-                {initials}
-              </div>
-              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs text-sidebar-foreground/70">
-                  {user.role.replaceAll("_", " ")}
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail aria-label="Collapse or expand navigation" />
     </Sidebar>

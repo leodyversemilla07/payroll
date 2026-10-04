@@ -210,9 +210,23 @@ test("sidebar routes replace page content, share the layout and preserve history
         ),
     )
     .toBe(66);
+  const accountButton = page.getByRole("button", {
+    name: "Account: Sidebar Tester",
+    exact: true,
+  });
+  await expect(accountButton).toBeVisible();
+  await accountButton.click();
   await expect(
-    page.getByRole("link", { name: "Account: Sidebar Tester", exact: true }),
+    page.getByRole("menuitem", { name: "Profile & Account" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Security & 2FA" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Holidays & Calendar" }),
+  ).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Log out" })).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(
     (await page.context().cookies()).find(
       (cookie) => cookie.name === "sidebar_state",
@@ -255,6 +269,45 @@ test("sidebar routes replace page content, share the layout and preserve history
   ).toBeInViewport();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(nav).toHaveCount(0);
+  expect(exceptions).toEqual([]);
+});
+
+test("sidebar profile dropdown navigates to profile, security, and signs out", async ({
+  page,
+}) => {
+  const exceptions: string[] = [];
+  page.on("pageerror", (error) => exceptions.push(error.message));
+  await portal(page);
+
+  const accountButton = page.getByRole("button", {
+    name: "Account: Sidebar Tester",
+    exact: true,
+  });
+  await expect(accountButton).toBeVisible();
+
+  // Test opening profile dropdown and navigating to Profile & Account
+  await accountButton.click();
+  const profileItem = page.getByRole("menuitem", { name: "Profile & Account" });
+  await expect(profileItem).toBeVisible();
+  await profileItem.click();
+  await expect(page).toHaveURL(/\/portal\/my-profile$/);
+
+  // Test navigating to Security & 2FA from profile dropdown
+  await accountButton.click();
+  const securityItem = page.getByRole("menuitem", { name: "Security & 2FA" });
+  await expect(securityItem).toBeVisible();
+  await securityItem.click();
+  await expect(page).toHaveURL(/\/portal\/my-profile#mfa$/);
+
+  // Test log out from profile dropdown
+  await accountButton.click();
+  const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+  await expect(logoutItem).toBeVisible();
+  await logoutItem.click();
+  await expect(page).toHaveURL("/");
+  await expect(
+    page.getByRole("heading", { name: "Login to your account" }),
+  ).toBeVisible();
   expect(exceptions).toEqual([]);
 });
 
@@ -370,7 +423,7 @@ for (const colorScheme of ["light", "dark"] as const) {
           .evaluate((element) => element.getBoundingClientRect().height),
       )
       .toBe(48);
-    const account = page.getByRole("link", {
+    const account = page.getByRole("button", {
       name: "Account: Sidebar Tester",
       exact: true,
     });
