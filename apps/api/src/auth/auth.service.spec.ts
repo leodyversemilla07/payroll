@@ -1,0 +1,365 @@
+import {
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { prisma, Role } from '@workspace/db';
+import type { Request, Response } from 'express';
+import { AuthService } from './auth.service';
+import { hashPassword } from './password';
+import {
+  generateBackupCodes,
+  generateTotpCode,
+  generateTotpSecret,
+  hashBackupCode,
+} from './totp';
+
+jest.mock('@workspace/db', () => ({
+  Role: {
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    HR_ADMIN: 'HR_ADMIN',
+    PAYROLL_SPECIALIST: 'PAYROLL_SPECIALIST',
+    DEPARTMENT_MANAGER: 'DEPARTMENT_MANAGER',
+    EMPLOYEE: 'EMPLOYEE',
+  },
+  prisma: {
+    user: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    authSession: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      deleteMany: jest.fn(),
+      update: jest.fn(),
+    },
+  },
+}));
+
+describe('AuthService MFA', () => {
+  let service: AuthService;
+  let mockRequest: Partial<Request>;
+  let mockResponse: {
+    cookie: jest.Mock;
+    clearCookie: jest.Mock;
+  };
+
+  const testPassword = 'Password123456!';
+  let passwordHash: string;
+
+  beforeAll(async () => {
+    passwordHash = await hashPassword(testPassword);
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new AuthService();
+    mockRequest = {
+      ip: '127.0.0.1',
+      get: jest.fn().mockReturnValue('Jest-Agent'),
+      headers: {},
+    };
+    mockResponse = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
+  });
+
+  describe('setupMfa', () => {
+    it('generates a secret and otpauth URI and saves secret to database', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.setupMfa('user-1');
+
+      expect(result.secret).toBeDefined();
+      expect(result.qrUri).toContain(
+        'otpauth://totp/SweldoPH:user%40example.com?secret=',
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { mfaSecret: result.secret },
+      });
+    });
+
+    it('throws NotFoundException if user does not exist', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.setupMfa('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('confirmMfa', () => {
+    it('throws BadRequestException if MFA setup was not initiated', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaSecret: null,
+      });
+
+      await expect(service.confirmMfa('user-1', '123456')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws UnauthorizedException if code is invalid', async () => {
+      const secret = generateTotpSecret();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaSecret: secret,
+      });
+
+      await expect(service.confirmMfa('user-1', '000000')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('activates MFA and returns 10 backup codes upon valid code', async () => {
+      const secret = generateTotpSecret();
+      const currentStep = Math.floor(Date.now() / 1000 / 30);
+      const validCode = generateTotpCode(secret, currentStep);
+
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaSecret: secret,
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.confirmMfa('user-1', validCode);
+
+      expect(result.backupCodes).toHaveLength(10);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          mfaEnabled: true,
+          mfaBackupCodes: expect.any(Array),
+        },
+      });
+    });
+  });
+
+  describe('signIn with MFA', () => {
+    it('authenticates directly without ticket if MFA is disabled', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User One',
+        role: Role.EMPLOYEE,
+        passwordHash,
+        isActive: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        mfaEnabled: false,
+        organizationId: 'org-1',
+      });
+      (prisma.authSession.create as jest.Mock).mockResolvedValue({});
+
+      const result = await service.signIn(
+        'user@example.com',
+        testPassword,
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.requiresMfa).toBe(false);
+      if (result && !result.requiresMfa) {
+        expect(result.user.email).toBe('user@example.com');
+      }
+      expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+
+    it('returns mfaTicket and does not issue session cookie when MFA is enabled', async () => {
+      const secret = generateTotpSecret();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User One',
+        role: Role.EMPLOYEE,
+        passwordHash,
+        isActive: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        mfaEnabled: true,
+        mfaSecret: secret,
+        organizationId: 'org-1',
+      });
+
+      const result = await service.signIn(
+        'user@example.com',
+        testPassword,
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.requiresMfa).toBe(true);
+      if (result?.requiresMfa) {
+        expect(result.mfaTicket).toBeDefined();
+        expect(typeof result.mfaTicket).toBe('string');
+      }
+      expect(mockResponse.cookie).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verifyMfa', () => {
+    it('throws UnauthorizedException for invalid or expired ticket', async () => {
+      await expect(
+        service.verifyMfa(
+          'non-existent-ticket',
+          '123456',
+          mockRequest as Request,
+          mockResponse as unknown as Response,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('validates TOTP code and creates session', async () => {
+      const secret = generateTotpSecret();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User One',
+        role: Role.EMPLOYEE,
+        passwordHash,
+        isActive: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        mfaEnabled: true,
+        mfaSecret: secret,
+        mfaBackupCodes: [],
+        organizationId: 'org-1',
+      });
+
+      const loginResult = await service.signIn(
+        'user@example.com',
+        testPassword,
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+      expect(loginResult?.requiresMfa).toBe(true);
+      const ticket = (loginResult as { requiresMfa: true; mfaTicket: string })
+        .mfaTicket;
+
+      const currentStep = Math.floor(Date.now() / 1000 / 30);
+      const validCode = generateTotpCode(secret, currentStep);
+
+      const authResult = await service.verifyMfa(
+        ticket,
+        validCode,
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(authResult.user.id).toBe('user-1');
+      expect(authResult.user.mfaEnabled).toBe(true);
+      expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+
+    it('validates backup code, consumes it, and creates session', async () => {
+      const secret = generateTotpSecret();
+      const rawCodes = generateBackupCodes(2);
+      const hashedCodes = rawCodes.map(hashBackupCode);
+
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User One',
+        role: Role.EMPLOYEE,
+        passwordHash,
+        isActive: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        mfaEnabled: true,
+        mfaSecret: secret,
+        mfaBackupCodes: hashedCodes,
+        organizationId: 'org-1',
+      });
+
+      const loginResult = await service.signIn(
+        'user@example.com',
+        testPassword,
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+      const ticket = (loginResult as { requiresMfa: true; mfaTicket: string })
+        .mfaTicket;
+
+      const authResult = await service.verifyMfa(
+        ticket,
+        rawCodes[0],
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(authResult.user.id).toBe('user-1');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { mfaBackupCodes: [hashedCodes[1]] },
+      });
+      expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+  });
+
+  describe('disableMfa', () => {
+    it('throws BadRequestException if MFA is not enabled', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: false,
+      });
+
+      await expect(
+        service.disableMfa('user-1', testPassword, '123456'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws UnauthorizedException for invalid password', async () => {
+      const secret = generateTotpSecret();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: secret,
+        passwordHash,
+      });
+
+      await expect(
+        service.disableMfa('user-1', 'WrongPassword123!', '123456'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('disables MFA when password and code are valid', async () => {
+      const secret = generateTotpSecret();
+      const currentStep = Math.floor(Date.now() / 1000 / 30);
+      const validCode = generateTotpCode(secret, currentStep);
+
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: secret,
+        passwordHash,
+        mfaBackupCodes: [],
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.disableMfa(
+        'user-1',
+        testPassword,
+        validCode,
+      );
+      expect(result.success).toBe(true);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          mfaEnabled: false,
+          mfaSecret: null,
+          mfaBackupCodes: [],
+        },
+      });
+    });
+  });
+});

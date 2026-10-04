@@ -23,6 +23,10 @@ jest.mock('@workspace/db', () => ({
 const EXPECTED_PROCEDURES = [
   'health',
   'auth.login',
+  'auth.verifyMfa',
+  'auth.setupMfa',
+  'auth.confirmMfa',
+  'auth.disableMfa',
   'auth.me',
   'auth.logout',
   'users.list',
@@ -100,6 +104,10 @@ const EXPECTED_PROCEDURES = [
 const EXPECTED_PROCEDURE_TYPES: Record<string, 'query' | 'mutation'> = {
   health: 'query',
   'auth.login': 'mutation',
+  'auth.verifyMfa': 'mutation',
+  'auth.setupMfa': 'mutation',
+  'auth.confirmMfa': 'mutation',
+  'auth.disableMfa': 'mutation',
   'auth.me': 'query',
   'auth.logout': 'mutation',
   'users.list': 'query',

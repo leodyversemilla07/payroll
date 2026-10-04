@@ -29,6 +29,7 @@ import {
 import { useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
+import { MfaSettingsCard } from "./mfa-settings-card";
 import { usePortalUser } from "./payroll-portal";
 
 function pesos(cents: bigint | number | null | undefined) {
@@ -1053,6 +1054,8 @@ export function MyProfileSection() {
           )}
         </CardContent>
       </Card>
+
+      <MfaSettingsCard />
     </section>
   );
 }

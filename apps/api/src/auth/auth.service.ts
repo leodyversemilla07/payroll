@@ -1,13 +1,23 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import { hashPassword, verifyPassword } from './password';
+import {
+  formatOtpauthUri,
+  generateBackupCodes,
+  generateTotpSecret,
+  hashBackupCode,
+  verifyAndConsumeBackupCode,
+  verifyTotpCode,
+} from './totp';
 
 const DEFAULT_COOKIE_NAME = 'sweldoph_session';
 const DEFAULT_SESSION_TTL_HOURS = 8;
@@ -23,6 +33,7 @@ export interface AuthenticatedUser {
   email: string;
   name: string;
   role: Role;
+  mfaEnabled?: boolean;
 }
 
 export interface AuthResult {
@@ -30,8 +41,16 @@ export interface AuthResult {
   expiresAt: Date;
 }
 
+export type SignInResult =
+  | ({ requiresMfa: false } & AuthResult)
+  | { requiresMfa: true; mfaTicket: string };
+
 @Injectable()
 export class AuthService {
+  private readonly mfaTickets = new Map<
+    string,
+    { userId: string; expiresAt: number }
+  >();
   async listUsers(organizationId: string) {
     return prisma.user.findMany({
       where: { organizationId },
@@ -180,7 +199,7 @@ export class AuthService {
     password: string,
     request: Request,
     response: Response,
-  ): Promise<AuthResult | null> {
+  ): Promise<SignInResult | null> {
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
@@ -218,6 +237,87 @@ export class AuthService {
       });
     }
 
+    if (user.mfaEnabled && user.mfaSecret) {
+      this.cleanExpiredTickets();
+      const mfaTicket = randomBytes(32).toString('base64url');
+      this.mfaTickets.set(mfaTicket, {
+        userId: user.id,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+      return {
+        requiresMfa: true,
+        mfaTicket,
+      };
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    const ttlHours = this.getSessionTtlHours();
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+    await prisma.authSession.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(token),
+        expiresAt,
+        ipAddress: request.ip,
+        userAgent: request.get('user-agent')?.slice(0, 512),
+      },
+    });
+
+    response.cookie(this.getCookieName(), token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: expiresAt,
+    });
+
+    return {
+      requiresMfa: false,
+      user: this.toAuthenticatedUser(user),
+      expiresAt,
+    };
+  }
+
+  async verifyMfa(
+    mfaTicket: string,
+    code: string,
+    request: Request,
+    response: Response,
+  ): Promise<AuthResult> {
+    this.cleanExpiredTickets();
+    const ticket = this.mfaTickets.get(mfaTicket);
+    if (!ticket || ticket.expiresAt <= Date.now()) {
+      throw new UnauthorizedException(
+        'MFA verification session expired. Please sign in again.',
+      );
+    }
+    this.mfaTickets.delete(mfaTicket);
+
+    const user = await prisma.user.findUnique({
+      where: { id: ticket.userId },
+    });
+    if (!user?.isActive || !user.mfaSecret) {
+      throw new UnauthorizedException('Authentication failed');
+    }
+
+    const cleanCode = code.trim();
+    const isTotpValid = verifyTotpCode(user.mfaSecret, cleanCode);
+    const backupResult = isTotpValid
+      ? null
+      : verifyAndConsumeBackupCode(cleanCode, user.mfaBackupCodes);
+
+    if (!isTotpValid && !backupResult) {
+      throw new UnauthorizedException('Invalid authenticator or backup code');
+    }
+
+    if (backupResult) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { mfaBackupCodes: backupResult.remainingHashes },
+      });
+    }
+
     const token = randomBytes(32).toString('base64url');
     const ttlHours = this.getSessionTtlHours();
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
@@ -246,6 +346,105 @@ export class AuthService {
     };
   }
 
+  async setupMfa(userId: string): Promise<{ secret: string; qrUri: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const secret = generateTotpSecret();
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaSecret: secret },
+    });
+
+    const qrUri = formatOtpauthUri(user.email, secret, 'SweldoPH');
+    return { secret, qrUri };
+  }
+
+  async confirmMfa(
+    userId: string,
+    code: string,
+  ): Promise<{ backupCodes: string[] }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user?.mfaSecret) {
+      throw new BadRequestException('MFA setup has not been initiated');
+    }
+
+    const isValid = verifyTotpCode(user.mfaSecret, code.trim());
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+
+    const rawBackupCodes = generateBackupCodes(10);
+    const hashedCodes = rawBackupCodes.map(hashBackupCode);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        mfaEnabled: true,
+        mfaBackupCodes: hashedCodes,
+      },
+    });
+
+    return { backupCodes: rawBackupCodes };
+  }
+
+  async disableMfa(
+    userId: string,
+    password: string,
+    code: string,
+  ): Promise<{ success: boolean }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      throw new BadRequestException('MFA is not enabled for this account');
+    }
+
+    const passwordMatches = await verifyPassword(password, user.passwordHash);
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid password');
+    }
+
+    const cleanCode = code.trim();
+    const isTotpValid = verifyTotpCode(user.mfaSecret, cleanCode);
+    const backupResult = isTotpValid
+      ? null
+      : verifyAndConsumeBackupCode(cleanCode, user.mfaBackupCodes);
+
+    if (!isTotpValid && !backupResult) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        mfaEnabled: false,
+        mfaSecret: null,
+        mfaBackupCodes: [],
+      },
+    });
+
+    return { success: true };
+  }
+
+  private cleanExpiredTickets(): void {
+    const now = Date.now();
+    for (const [ticket, entry] of this.mfaTickets.entries()) {
+      if (entry.expiresAt <= now) {
+        this.mfaTickets.delete(ticket);
+      }
+    }
+  }
+
   async signOut(request: Request, response: Response): Promise<void> {
     const token = this.readSessionToken(request);
     if (token) {
@@ -269,6 +468,7 @@ export class AuthService {
     email: string;
     name: string;
     role: Role;
+    mfaEnabled?: boolean;
   }): AuthenticatedUser {
     return {
       id: user.id,
@@ -277,6 +477,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      mfaEnabled: Boolean(user.mfaEnabled),
     };
   }
 
