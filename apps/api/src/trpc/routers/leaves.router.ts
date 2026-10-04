@@ -11,6 +11,7 @@ import {
   type LeaveRequest,
   Prisma,
   prisma,
+  Role,
 } from '@workspace/db';
 import { z } from 'zod';
 import { serializePolicy } from '../../modules/leaves/leave-policies';
@@ -274,6 +275,65 @@ export function createLeavesRouter(ctx: RouterContext) {
             )
           ).map(serializeRequest),
         );
+      }),
+
+    listPendingRequests: trpc
+      .procedureForRoles(LEAVE_APPROVAL_ROLES)
+      .query(async ({ ctx }) => {
+        let departmentId: string | undefined;
+        if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
+          const managed = await prisma.department.findFirst({
+            where: {
+              organizationId: ctx.user.organizationId,
+              OR: [
+                { managerId: ctx.user.id },
+                ...(ctx.user.employeeId
+                  ? [{ managerId: ctx.user.employeeId }]
+                  : []),
+              ],
+            },
+            select: { id: true },
+          });
+          if (managed) {
+            departmentId = managed.id;
+          } else if (ctx.user.employeeId) {
+            const emp = await prisma.employee.findUnique({
+              where: { id: ctx.user.employeeId },
+              select: { departmentId: true },
+            });
+            departmentId = emp?.departmentId;
+          }
+          if (!departmentId) {
+            return [];
+          }
+        }
+        return withLeaveErrors(async () => {
+          const requests = await prisma.leaveRequest.findMany({
+            where: {
+              employee: {
+                organizationId: ctx.user.organizationId,
+                ...(departmentId ? { departmentId } : {}),
+              },
+              status: 'PENDING',
+            },
+            include: {
+              employee: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  employeeNumber: true,
+                  department: { select: { id: true, name: true, code: true } },
+                },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          });
+          return requests.map((req) => ({
+            ...serializeRequest(req),
+            employee: req.employee,
+          }));
+        });
       }),
 
     request: protectedProcedure

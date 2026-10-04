@@ -9,7 +9,14 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Banknote, CalendarDays, CreditCard, Users } from "lucide-react";
+import {
+  Banknote,
+  CalendarDays,
+  Clock,
+  CreditCard,
+  UserCircle,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { portalSections } from "@/lib/portal-navigation";
 import { trpc } from "@/lib/trpc";
@@ -18,6 +25,7 @@ import { HolidaysSection } from "./holidays-section";
 import { LeavePoliciesSection } from "./leave-policies-section";
 import { LeavesSection } from "./leaves-section";
 import { usePortalUser } from "./payroll-portal";
+import { PendingLeaveApprovalsSection } from "./pending-leave-approvals";
 import { TimekeepingSection } from "./timekeeping-section";
 import { YearEndTaxSection } from "./year-end-tax";
 
@@ -51,10 +59,93 @@ function useStaffEmployees() {
   };
 }
 
+function EmployeeOverview({ user }: { user: { name: string; email: string } }) {
+  return (
+    <section className="space-y-6" aria-label="Employee overview">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">Welcome, {user.name}!</CardTitle>
+          <CardDescription>
+            Access your employee self-service tools, check your daily attendance
+            records, and review your payroll payslips.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+              href="/portal/my-profile"
+              className="group block rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                  <UserCircle className="size-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    My Profile
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Personal info, statutory IDs, compensation & payslips
+                  </p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              href="/portal/my-attendance"
+              className="group block rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                  <Clock className="size-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    My Attendance
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    DTR punches, worked hours, and tardiness history
+                  </p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              href="/portal/holidays"
+              className="group block rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                  <CalendarDays className="size-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    Holiday Calendar
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Philippine statutory and company non-working holidays
+                  </p>
+                </div>
+              </div>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 export function PortalOverview() {
+  const { user, isEmployee } = usePortalUser();
+
   const overview = trpc.dashboard.getOverview.useQuery(undefined, {
+    enabled: !isEmployee,
     retry: false,
   });
+
+  if (isEmployee) {
+    return <EmployeeOverview user={user} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -323,13 +414,65 @@ export function PortalOverview() {
 }
 
 export function PortalEmployees() {
-  const { canManageEmployees } = usePortalUser();
+  const { canManageEmployees, isStaff } = usePortalUser();
+
+  if (!isStaff) {
+    return (
+      <Card role="region" aria-label="Employee directory restricted">
+        <CardHeader>
+          <CardTitle>No staff records available</CardTitle>
+          <CardDescription>
+            Employee and payroll-run lists require a payroll or HR staff role.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            You can review your personal records, compensation, leave balances,
+            and payslips in your profile.
+          </p>
+          <Link
+            href="/portal/my-profile"
+            className={buttonVariants({ variant: "default" })}
+          >
+            Go to My Profile
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return <EmployeesSection canCreate={canManageEmployees} />;
 }
 
 export function PortalAttendance() {
   const props = useStaffEmployees();
-  const { user } = usePortalUser();
+  const { user, isStaff } = usePortalUser();
+
+  if (!isStaff) {
+    return (
+      <Card role="region" aria-label="Attendance restricted">
+        <CardHeader>
+          <CardTitle>No staff records available</CardTitle>
+          <CardDescription>
+            Employee and payroll-run lists require a payroll or HR staff role.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            You can view your daily time records and punch history in your
+            personal attendance page.
+          </p>
+          <Link
+            href="/portal/my-attendance"
+            className={buttonVariants({ variant: "default" })}
+          >
+            Go to My Attendance
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const canImport = [
     "SUPER_ADMIN",
     "HR_ADMIN",
@@ -341,12 +484,14 @@ export function PortalAttendance() {
 
 export function PortalLeaves() {
   const props = useStaffEmployees();
-  const { user, canManageEmployees } = usePortalUser();
+  const { user, canManageEmployees, isManager } = usePortalUser();
+  const canDecide = canManageEmployees || isManager;
   return (
     <div className="space-y-6">
+      {canDecide && <PendingLeaveApprovalsSection />}
       <LeavesSection
         {...props}
-        canDecide={canManageEmployees}
+        canDecide={canDecide}
         actorEmployeeId={user.employeeId}
       />
       <LeavePoliciesSection canManage={canManageEmployees} />

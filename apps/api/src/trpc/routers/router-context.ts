@@ -63,8 +63,9 @@ export function assertEmployeeAccess(
   employeeId: string,
   staffRoles: readonly Role[],
 ): void {
-  const isOwnRecord =
-    user.role === Role.EMPLOYEE && user.employeeId === employeeId;
+  const isOwnRecord = Boolean(
+    user.employeeId && user.employeeId === employeeId,
+  );
   if (!isOwnRecord && !staffRoles.includes(user.role)) {
     throw new TRPCError({
       code: 'FORBIDDEN',

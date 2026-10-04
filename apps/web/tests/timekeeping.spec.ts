@@ -548,7 +548,7 @@ test("imports biometric CSV with preview, uploads punch logs, shows metrics and 
     .getByRole("button", { name: "Upload and Process", exact: true })
     .click();
 
-  expect(state.imports).toHaveLength(1);
+  await expect.poll(() => state.imports.length).toBe(1);
   expect(state.imports[0]).toMatchObject({
     csvContent: csvData,
   });

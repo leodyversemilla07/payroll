@@ -43,7 +43,13 @@ async function withPayrollErrors<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export function createPayrollRouter(ctx: RouterContext) {
-  const { trpc, payrollProcedure, payrollService, auditService } = ctx;
+  const {
+    trpc,
+    protectedProcedure,
+    payrollProcedure,
+    payrollService,
+    auditService,
+  } = ctx;
   const payrollTriggerProcedure = trpc.procedureForRoles(PAYROLL_TRIGGER_ROLES);
   const auditRun =
     (
@@ -69,6 +75,45 @@ export function createPayrollRouter(ctx: RouterContext) {
     listRuns: payrollProcedure.query(({ ctx }) =>
       payrollService.listPayrollRuns(ctx.user.organizationId),
     ),
+
+    getMyPayslips: protectedProcedure.query(async ({ ctx }) => {
+      const employeeId = ctx.user.employeeId;
+      if (!employeeId) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No employee profile is linked to your user account.',
+        });
+      }
+      return withPayrollErrors(() =>
+        payrollService.getEmployeePayslips(employeeId, ctx.user.organizationId),
+      );
+    }),
+
+    getMyPayslipById: protectedProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(async ({ input, ctx }) => {
+        const employeeId = ctx.user.employeeId;
+        if (!employeeId) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'No employee profile is linked to your user account.',
+          });
+        }
+        const payslip = await withPayrollErrors(() =>
+          payrollService.getEmployeePayslipById(
+            input.id,
+            employeeId,
+            ctx.user.organizationId,
+          ),
+        );
+        if (!payslip) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Payslip not found',
+          });
+        }
+        return payslip;
+      }),
 
     getRunDetails: payrollProcedure
       .input(z.object({ runId: z.string().uuid() }))

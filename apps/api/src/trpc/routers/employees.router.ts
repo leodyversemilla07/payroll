@@ -4,31 +4,134 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
-import { Prisma, prisma } from '@workspace/db';
+import { Prisma, prisma, Role } from '@workspace/db';
 import { z } from 'zod';
 import { finalPayPreviewSchema } from '../../modules/employees/final-pay.inputs';
 import type { RouterContext } from './router-context';
-import { assertEmployeeAccess, EMPLOYEE_RECORD_ROLES } from './router-context';
+import { EMPLOYEE_RECORD_ROLES } from './router-context';
 
 export function createEmployeesRouter(ctx: RouterContext) {
   const {
     trpc,
     protectedProcedure,
-    employeeRecordProcedure,
     hrProcedure,
+    staffProcedure,
     employeesService,
     auditService,
   } = ctx;
 
   return trpc.router({
-    list: employeeRecordProcedure.query(({ ctx }) =>
-      employeesService.listEmployees(ctx.user.organizationId),
-    ),
+    list: staffProcedure.query(async ({ ctx }) => {
+      let departmentId: string | undefined;
+      if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
+        const managed = await prisma.department.findFirst({
+          where: {
+            organizationId: ctx.user.organizationId,
+            OR: [
+              { managerId: ctx.user.id },
+              ...(ctx.user.employeeId
+                ? [{ managerId: ctx.user.employeeId }]
+                : []),
+            ],
+          },
+          select: { id: true },
+        });
+        if (managed) {
+          departmentId = managed.id;
+        } else if (ctx.user.employeeId) {
+          const emp = await prisma.employee.findUnique({
+            where: { id: ctx.user.employeeId },
+            select: { departmentId: true },
+          });
+          departmentId = emp?.departmentId;
+        }
+        if (!departmentId) {
+          return [];
+        }
+      }
+      return departmentId
+        ? employeesService.listEmployees(ctx.user.organizationId, departmentId)
+        : employeesService.listEmployees(ctx.user.organizationId);
+    }),
+
+    getMyProfile: protectedProcedure.query(async ({ ctx }) => {
+      if (!ctx.user.employeeId) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No employee profile is linked to your user account.',
+        });
+      }
+      const employee = await employeesService.getEmployeeById(
+        ctx.user.employeeId,
+        ctx.user.organizationId,
+      );
+      if (!employee) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Employee record not found.',
+        });
+      }
+      return employee;
+    }),
 
     getById: protectedProcedure
       .input(z.object({ id: z.string().uuid() }))
-      .query(({ input, ctx }) => {
-        assertEmployeeAccess(ctx.user, input.id, EMPLOYEE_RECORD_ROLES);
+      .query(async ({ input, ctx }) => {
+        const isOwn = Boolean(
+          ctx.user.employeeId && ctx.user.employeeId === input.id,
+        );
+        if (
+          !isOwn &&
+          !(EMPLOYEE_RECORD_ROLES as readonly Role[]).includes(ctx.user.role)
+        ) {
+          if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
+            const target = await prisma.employee.findFirst({
+              where: { id: input.id, organizationId: ctx.user.organizationId },
+              select: { departmentId: true },
+            });
+            if (!target) {
+              throw new TRPCError({
+                code: 'NOT_FOUND',
+                message: 'Employee not found',
+              });
+            }
+            let managerDeptId: string | undefined;
+            const managed = await prisma.department.findFirst({
+              where: {
+                organizationId: ctx.user.organizationId,
+                OR: [
+                  { managerId: ctx.user.id },
+                  ...(ctx.user.employeeId
+                    ? [{ managerId: ctx.user.employeeId }]
+                    : []),
+                ],
+              },
+              select: { id: true },
+            });
+            if (managed) {
+              managerDeptId = managed.id;
+            } else if (ctx.user.employeeId) {
+              const emp = await prisma.employee.findUnique({
+                where: { id: ctx.user.employeeId },
+                select: { departmentId: true },
+              });
+              managerDeptId = emp?.departmentId;
+            }
+            if (!managerDeptId || target.departmentId !== managerDeptId) {
+              throw new TRPCError({
+                code: 'FORBIDDEN',
+                message:
+                  'You do not have permission to access employees outside your department',
+              });
+            }
+          } else {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message:
+                'You do not have permission to access this employee record',
+            });
+          }
+        }
         return employeesService.getEmployeeById(
           input.id,
           ctx.user.organizationId,

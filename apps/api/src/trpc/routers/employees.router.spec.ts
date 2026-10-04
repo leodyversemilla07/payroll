@@ -41,7 +41,7 @@ const input = {
   employmentType: 'PROBATIONARY' as const,
 };
 
-function context(role: Role | null): Context {
+function context(role: Role | null, employeeId?: string): Context {
   return {
     req: {
       ip: '127.0.0.1',
@@ -56,6 +56,7 @@ function context(role: Role | null): Context {
           name: 'HR',
           email: 'hr@test.invalid',
           role,
+          employeeId,
         }
       : null,
   };
@@ -65,6 +66,8 @@ describe('employee registration tRPC workflow', () => {
   const registerEmployee = jest.fn();
   const updateEmployee = jest.fn();
   const getRegistrationOptions = jest.fn();
+  const listEmployees = jest.fn();
+  const getEmployeeById = jest.fn();
   const record = jest.fn();
   const transaction = {} as Prisma.TransactionClient;
   const router = createApiRouter(
@@ -73,6 +76,8 @@ describe('employee registration tRPC workflow', () => {
       registerEmployee,
       updateEmployee,
       getRegistrationOptions,
+      listEmployees,
+      getEmployeeById,
     } as unknown as EmployeesService,
     {} as TimekeepingService,
     {} as PayrollService,
@@ -323,6 +328,47 @@ describe('employee registration tRPC workflow', () => {
         message: 'An employee record already exists with this email.',
       });
       expect(record).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMyProfile', () => {
+    it('returns the profile for the linked employee', async () => {
+      const profile = {
+        id: 'emp-123',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+      };
+      getEmployeeById.mockResolvedValue(profile);
+
+      const result = await router
+        .createCaller(context(Role.EMPLOYEE, 'emp-123'))
+        .employees.getMyProfile();
+
+      expect(getEmployeeById).toHaveBeenCalledWith('emp-123', 'org-1');
+      expect(result).toEqual(profile);
+    });
+
+    it('throws NOT_FOUND when the user has no employeeId', async () => {
+      await expect(
+        router.createCaller(context(Role.EMPLOYEE)).employees.getMyProfile(),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'No employee profile is linked to your user account.',
+      });
+      expect(getEmployeeById).not.toHaveBeenCalled();
+    });
+
+    it('throws NOT_FOUND when the employee record is not found in the database', async () => {
+      getEmployeeById.mockResolvedValue(null);
+
+      await expect(
+        router
+          .createCaller(context(Role.EMPLOYEE, 'emp-missing'))
+          .employees.getMyProfile(),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'Employee record not found.',
+      });
     });
   });
 });

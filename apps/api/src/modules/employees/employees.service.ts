@@ -90,9 +90,12 @@ export interface RegisterEmployeeInput {
 
 @Injectable()
 export class EmployeesService {
-  async listEmployees(organizationId: string) {
+  async listEmployees(organizationId: string, departmentId?: string) {
     return prisma.employee.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(departmentId ? { departmentId } : {}),
+      },
       include: {
         department: true,
         branch: true,

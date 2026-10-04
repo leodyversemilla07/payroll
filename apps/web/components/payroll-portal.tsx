@@ -37,18 +37,29 @@ import {
 import { trpc } from "@/lib/trpc";
 import { PortalSidebar } from "./portal-sidebar";
 
-const staffRoles = ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"];
+const supportedRoles = [
+  "SUPER_ADMIN",
+  "HR_ADMIN",
+  "PAYROLL_SPECIALIST",
+  "DEPARTMENT_MANAGER",
+  "EMPLOYEE",
+];
 
 type PortalUser = inferRouterOutputs<AppRouter>["auth"]["me"];
-const PortalUserContext = createContext<{
+export interface PortalUserContextValue {
   user: PortalUser;
   canManageEmployees: boolean;
-} | null>(null);
+  isManager: boolean;
+  isStaff: boolean;
+  isEmployee: boolean;
+}
+
+const PortalUserContext = createContext<PortalUserContextValue | null>(null);
 
 export function usePortalUser() {
   const context = useContext(PortalUserContext);
   if (!context)
-    throw new Error("Portal pages require an authenticated staff layout.");
+    throw new Error("Portal pages require an authenticated layout.");
   return context;
 }
 
@@ -63,8 +74,8 @@ export function PayrollPortal({
   const queryClient = useQueryClient();
   const me = trpc.auth.me.useQuery(undefined, { retry: false });
   const signedOut = me.error?.data?.code === "UNAUTHORIZED";
-  const hasStaffNavigation =
-    !!me.data && !signedOut && staffRoles.includes(me.data.role);
+  const hasNavigation =
+    !!me.data && !signedOut && supportedRoles.includes(me.data.role);
   const activeSection = usePortalSection();
   const scope = me.data ? principalKey(me.data) : "";
   const logout = trpc.auth.logout.useMutation({
@@ -86,7 +97,7 @@ export function PayrollPortal({
         defaultOpen={defaultSidebarOpen}
         className="text-foreground"
       >
-        {hasStaffNavigation && me.data && (
+        {hasNavigation && me.data && (
           <PortalSidebar
             key={scope}
             user={me.data}
@@ -102,7 +113,7 @@ export function PayrollPortal({
           </a>
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[height] ease-linear md:rounded-t-2xl md:group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex min-w-0 items-center gap-2">
-              {hasStaffNavigation && (
+              {hasNavigation && (
                 <>
                   <SidebarTrigger
                     aria-label="Toggle navigation"
@@ -116,12 +127,12 @@ export function PayrollPortal({
               )}
               <span
                 className={
-                  hasStaffNavigation ? "sr-only" : "text-base font-semibold"
+                  hasNavigation ? "sr-only" : "text-base font-semibold"
                 }
               >
                 Payroll
               </span>
-              {hasStaffNavigation && (
+              {hasNavigation && (
                 <Breadcrumb className="min-w-0">
                   <BreadcrumbList className="flex-nowrap">
                     <BreadcrumbItem className="hidden md:inline-flex">
@@ -182,7 +193,7 @@ export function PayrollPortal({
                 {logout.isError && (
                   <p role="alert">Sign out failed. Please retry.</p>
                 )}
-                {staffRoles.includes(me.data.role) ? (
+                {supportedRoles.includes(me.data.role) ? (
                   <PortalUserContext.Provider
                     key={scope}
                     value={{
@@ -190,6 +201,12 @@ export function PayrollPortal({
                       canManageEmployees:
                         me.data.role === "SUPER_ADMIN" ||
                         me.data.role === "HR_ADMIN",
+                      isManager: me.data.role === "DEPARTMENT_MANAGER",
+                      isStaff:
+                        me.data.role === "SUPER_ADMIN" ||
+                        me.data.role === "HR_ADMIN" ||
+                        me.data.role === "PAYROLL_SPECIALIST",
+                      isEmployee: me.data.role === "EMPLOYEE",
                     }}
                   >
                     <PrincipalQueryProvider scope={scope}>

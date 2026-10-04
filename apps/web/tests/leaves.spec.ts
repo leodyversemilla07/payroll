@@ -150,10 +150,12 @@ async function mockLeaves(
       }
       if (!signedIn) return apiError("UNAUTHORIZED", "Unauthorized");
       if (path.startsWith("leaves.") && request.method() === "GET") {
-        const payload = JSON.parse(url.searchParams.get("input") ?? "{}")[
-          String(index)
-        ].json;
-        reads.push(payload);
+        if (path === "leaves.listPendingRequests") {
+          return { result: { data: { json: [] } } };
+        }
+        const inputMap = JSON.parse(url.searchParams.get("input") ?? "{}");
+        const payload = inputMap[String(index)]?.json;
+        if (payload) reads.push(payload);
         if (path === "leaves.getBalances") {
           balanceReads++;
           if (

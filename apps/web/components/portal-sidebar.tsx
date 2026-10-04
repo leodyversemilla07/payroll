@@ -19,8 +19,8 @@ import {
 import { X } from "lucide-react";
 import Link from "next/link";
 import {
+  getNavigationGroupsForRole,
   type PortalSection,
-  portalNavigationGroups,
 } from "@/lib/portal-navigation";
 
 export function PortalSidebar({
@@ -31,6 +31,7 @@ export function PortalSidebar({
   activeSection: PortalSection;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
+  const groups = getNavigationGroupsForRole(user.role);
   const initials =
     user.name
       .trim()
@@ -84,7 +85,7 @@ export function PortalSidebar({
       <SidebarSeparator />
       <SidebarContent>
         <nav aria-label="Payroll navigation">
-          {portalNavigationGroups.map((group) => (
+          {groups.map((group) => (
             <SidebarGroup key={group.label}>
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
               <SidebarGroupContent>

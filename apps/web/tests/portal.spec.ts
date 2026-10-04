@@ -227,12 +227,32 @@ test("overview page displays error banner when dashboard metrics fail to load an
   page,
 }) => {
   let failOverview = true;
+  let signedIn = false;
   await page.route("**/trpc/**", async (route) => {
     const paths = (
       new URL(route.request().url()).pathname.split("/trpc/")[1] ?? ""
     ).split(",");
     const results = paths.map((path) => {
-      if (path === "auth.login" || path === "auth.me") {
+      if (path === "auth.login") {
+        signedIn = true;
+        return { result: { data: { json: { user } } } };
+      }
+      if (path === "auth.logout") {
+        signedIn = false;
+        return { result: { data: { json: { success: true } } } };
+      }
+      if (!signedIn) {
+        return {
+          error: {
+            json: {
+              message: "Unauthorized",
+              code: -32001,
+              data: { code: "UNAUTHORIZED", httpStatus: 401 },
+            },
+          },
+        };
+      }
+      if (path === "auth.me") {
         return { result: { data: { json: user } } };
       }
       if (path === "dashboard.getOverview") {
@@ -252,7 +272,7 @@ test("overview page displays error banner when dashboard metrics fail to load an
       return { result: { data: { json: null } } };
     });
     await route.fulfill({
-      status: 200,
+      status: !signedIn && paths.includes("auth.me") ? 401 : 200,
       contentType: "application/json",
       body: JSON.stringify(paths.length === 1 ? results[0] : results),
     });

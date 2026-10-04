@@ -8,7 +8,12 @@ import { createRouterContext, type RouterServices } from './router-context';
 
 jest.mock('@workspace/db', () => ({
   ...jest.requireActual('@workspace/db'),
-  prisma: { $transaction: jest.fn() },
+  prisma: {
+    $transaction: jest.fn(),
+    leaveRequest: { findMany: jest.fn() },
+    department: { findFirst: jest.fn() },
+    employee: { findUnique: jest.fn() },
+  },
 }));
 const employeeId = '11111111-1111-4111-8111-111111111111';
 const requestId = '22222222-2222-4222-8222-222222222222';
@@ -759,6 +764,83 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           entityType: 'LeaveCarryover',
         }),
       );
+    });
+  });
+
+  describe('listPendingRequests', () => {
+    const mockRequest = {
+      id: 'req-1',
+      employeeId: 'emp-1',
+      leaveType: 'VACATION',
+      startDate: new Date('2026-09-10'),
+      endDate: new Date('2026-09-11'),
+      daysCount: 2,
+      partialDate: null,
+      debitedDays: null,
+      refundedDays: null,
+      status: 'PENDING',
+      isPaid: true,
+      reason: 'Vacation trip',
+      employee: {
+        id: 'emp-1',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        employeeNumber: 'EMP-001',
+        department: { id: 'dept-1', name: 'Engineering', code: 'ENG' },
+      },
+    };
+
+    it('allows HR_ADMIN to list all pending leave requests in the organization', async () => {
+      jest
+        .mocked(prisma.leaveRequest.findMany)
+        .mockResolvedValue([mockRequest as never]);
+
+      const result = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .listPendingRequests();
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            employee: { organizationId: 'org-1' },
+            status: 'PENDING',
+          },
+        }),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.daysCount).toBe('2');
+      expect(result[0]?.employee.firstName).toBe('Juan');
+    });
+
+    it('scopes listPendingRequests to manager department for DEPARTMENT_MANAGER', async () => {
+      jest
+        .mocked(prisma.department.findFirst)
+        .mockResolvedValue({ id: 'dept-eng' } as never);
+      jest
+        .mocked(prisma.leaveRequest.findMany)
+        .mockResolvedValue([mockRequest as never]);
+
+      const result = await router
+        .createCaller(context(Role.DEPARTMENT_MANAGER, 'mgr-1'))
+        .listPendingRequests();
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            employee: { organizationId: 'org-1', departmentId: 'dept-eng' },
+            status: 'PENDING',
+          },
+        }),
+      );
+      expect(result).toHaveLength(1);
+    });
+
+    it('denies listPendingRequests to EMPLOYEE', async () => {
+      await expect(
+        router
+          .createCaller(context(Role.EMPLOYEE, 'emp-1'))
+          .listPendingRequests(),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
   });
 });

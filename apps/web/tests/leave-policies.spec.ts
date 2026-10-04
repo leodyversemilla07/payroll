@@ -93,6 +93,9 @@ async function mockPoliciesPortal(
         if (path === "leaves.listRequests") {
           return { result: { data: { json: [] } } };
         }
+        if (path === "leaves.listPendingRequests") {
+          return { result: { data: { json: [] } } };
+        }
         return { result: { data: { json: null } } };
       }
 

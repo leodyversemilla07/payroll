@@ -290,4 +290,39 @@ describe('timekeeping tRPC permissions and audit', () => {
       message: 'Timekeeping request failed. Please retry.',
     });
   });
+
+  describe('getMyDTR', () => {
+    it('returns DTR records for the authenticated employee', async () => {
+      const records = [{ id: 'dtr-1', actualWorkedMinutes: 480 }];
+      getEmployeeDTR.mockResolvedValue(records);
+
+      const result = await router
+        .createCaller(context(Role.EMPLOYEE, input.employeeId))
+        .getMyDTR({
+          startDate: '2026-09-01',
+          endDate: '2026-09-15',
+        });
+
+      expect(getEmployeeDTR).toHaveBeenCalledWith(
+        input.employeeId,
+        'org-1',
+        new Date('2026-09-01'),
+        new Date('2026-09-15'),
+      );
+      expect(result).toEqual(records);
+    });
+
+    it('throws NOT_FOUND when the user has no employeeId', async () => {
+      await expect(
+        router.createCaller(context(Role.EMPLOYEE)).getMyDTR({
+          startDate: '2026-09-01',
+          endDate: '2026-09-15',
+        }),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'No employee profile is linked to your user account.',
+      });
+      expect(getEmployeeDTR).not.toHaveBeenCalled();
+    });
+  });
 });

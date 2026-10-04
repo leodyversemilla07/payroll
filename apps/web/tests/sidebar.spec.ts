@@ -429,7 +429,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
-for (const role of ["EMPLOYEE", "DEPARTMENT_MANAGER"]) {
+for (const role of ["UNASSIGNED", "ANONYMOUS"]) {
   test(`${role} cannot see staff sidebar destinations or fetch staff lists`, async ({
     page,
   }) => {

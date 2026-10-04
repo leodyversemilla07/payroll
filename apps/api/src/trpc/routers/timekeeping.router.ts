@@ -88,6 +88,31 @@ export function createTimekeepingRouter(ctx: RouterContext) {
       );
     }),
 
+    getMyDTR: protectedProcedure
+      .input(
+        z.object({
+          startDate: z.string().date(),
+          endDate: z.string().date(),
+        }),
+      )
+      .query(({ input, ctx }) => {
+        const employeeId = ctx.user.employeeId;
+        if (!employeeId) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'No employee profile is linked to your user account.',
+          });
+        }
+        return withTimekeepingErrors(() =>
+          timekeepingService.getEmployeeDTR(
+            employeeId,
+            ctx.user.organizationId,
+            new Date(input.startDate),
+            new Date(input.endDate),
+          ),
+        );
+      }),
+
     recordPunch: timekeepingWriteProcedure
       .input(
         z.object({

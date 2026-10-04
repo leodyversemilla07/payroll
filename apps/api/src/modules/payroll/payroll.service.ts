@@ -142,6 +142,74 @@ export class PayrollService {
     });
   }
 
+  async getEmployeePayslips(employeeId: string, organizationId: string) {
+    return prisma.payslip.findMany({
+      where: {
+        employeeId,
+        payrollRun: {
+          organizationId,
+          status: { in: ['APPROVED', 'DISBURSED'] },
+        },
+      },
+      include: {
+        payrollRun: {
+          select: {
+            id: true,
+            cutoffSequence: true,
+            cutoffStartDate: true,
+            cutoffEndDate: true,
+            paymentDate: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { payrollRun: { paymentDate: 'desc' } },
+    });
+  }
+
+  async getEmployeePayslipById(
+    payslipId: string,
+    employeeId: string,
+    organizationId: string,
+  ) {
+    return prisma.payslip.findFirst({
+      where: {
+        id: payslipId,
+        employeeId,
+        payrollRun: {
+          organizationId,
+          status: { in: ['APPROVED', 'DISBURSED'] },
+        },
+      },
+      include: {
+        payrollRun: {
+          select: {
+            id: true,
+            cutoffSequence: true,
+            cutoffStartDate: true,
+            cutoffEndDate: true,
+            paymentDate: true,
+            status: true,
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+            tin: true,
+            sssNo: true,
+            philhealthNo: true,
+            pagibigNo: true,
+            branch: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+  }
+
   /**
    * Approves an audited run for disbursement: the checker step of
    * maker-checker. The approver must differ from the processor.
