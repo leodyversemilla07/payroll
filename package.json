@@ -5,6 +5,8 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "db:start": "powershell -ExecutionPolicy Bypass -File scripts/start-local-db.ps1",
+    "db:seed": "pnpm --filter @workspace/db db:seed && pnpm --filter @workspace/db exec tsx prisma/seed-demo-users.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "auth:bootstrap": "pnpm build && pnpm --filter @workspace/api auth:bootstrap:prod",

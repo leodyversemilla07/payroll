@@ -1,5 +1,16 @@
+import { resolve } from 'node:path';
 import { prisma } from '@workspace/db';
+import { config as loadDotEnv } from 'dotenv';
 import { hashPassword } from './password';
+
+loadDotEnv({
+  path: [
+    resolve(process.cwd(), '.env'),
+    resolve(process.cwd(), '../../.env'),
+    resolve(__dirname, '../../../../.env'),
+  ],
+  quiet: true,
+});
 
 async function bootstrapAdmin(): Promise<void> {
   const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
