@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma, prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import type { AuditService } from '../../audit/audit.service';
@@ -36,6 +36,7 @@ const input = {
   bankName: 'Test Bank',
   bankAccountNumber: '1234567890',
   bankAccountName: 'Ana Santos',
+  payBasis: 'MONTHLY' as const,
   monthlyBasicRatePesos: 30000.25,
   employmentType: 'PROBATIONARY' as const,
 };
@@ -62,12 +63,17 @@ function context(role: Role | null): Context {
 
 describe('employee registration tRPC workflow', () => {
   const registerEmployee = jest.fn();
+  const updateEmployee = jest.fn();
   const getRegistrationOptions = jest.fn();
   const record = jest.fn();
   const transaction = {} as Prisma.TransactionClient;
   const router = createApiRouter(
     new TrpcService(),
-    { registerEmployee, getRegistrationOptions } as unknown as EmployeesService,
+    {
+      registerEmployee,
+      updateEmployee,
+      getRegistrationOptions,
+    } as unknown as EmployeesService,
     {} as TimekeepingService,
     {} as PayrollService,
     {} as LoansService,
@@ -92,6 +98,21 @@ describe('employee registration tRPC workflow', () => {
         ),
       );
     registerEmployee.mockResolvedValue(employee);
+    updateEmployee.mockResolvedValue({
+      previous: {
+        ...employee,
+        branchId: input.branchId,
+        departmentId: input.departmentId,
+        employmentStatus: 'ACTIVE',
+      },
+      current: {
+        ...employee,
+        firstName: 'Maria',
+        branchId: input.branchId,
+        departmentId: input.departmentId,
+        employmentStatus: 'RESIGNED',
+      },
+    });
     record.mockResolvedValue(undefined);
     getRegistrationOptions.mockResolvedValue({ branches: [], departments: [] });
   });
@@ -207,5 +228,101 @@ describe('employee registration tRPC workflow', () => {
       message: 'Employee creation failed. Please retry.',
     });
     expect(record).toHaveBeenCalledWith(expect.anything(), transaction);
+  });
+
+  describe('employee update tRPC workflow', () => {
+    const updateInput = {
+      id: '11111111-1111-4111-8111-111111111111',
+      firstName: 'Maria',
+      employmentStatus: 'RESIGNED' as const,
+      monthlyBasicRatePesos: 45000,
+    };
+
+    it.each([
+      null,
+      Role.EMPLOYEE,
+      Role.DEPARTMENT_MANAGER,
+      Role.PAYROLL_SPECIALIST,
+    ])('denies update to %s', async (role) => {
+      const caller = router.createCaller(context(role));
+      const code = role ? 'FORBIDDEN' : 'UNAUTHORIZED';
+      await expect(caller.employees.update(updateInput)).rejects.toMatchObject({
+        code,
+      });
+      expect(updateEmployee).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([Role.HR_ADMIN, Role.SUPER_ADMIN])(
+      'derives tenant and audit actor from the %s session on update',
+      async (role) => {
+        const caller = router.createCaller(context(role));
+        await caller.employees.update(updateInput);
+        expect(updateEmployee).toHaveBeenCalledWith(
+          { ...updateInput, organizationId: 'org-1' },
+          transaction,
+        );
+        expect(record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            user: expect.objectContaining({
+              id: 'user-1',
+              organizationId: 'org-1',
+            }),
+            action: 'UPDATE',
+            entityType: 'Employee',
+            entityId: employee.id,
+            previousValue: expect.objectContaining({
+              employmentStatus: 'ACTIVE',
+            }),
+            newValue: expect.objectContaining({
+              employmentStatus: 'RESIGNED',
+            }),
+          }),
+          transaction,
+        );
+      },
+    );
+
+    it('rejects invalid update data before writing', async () => {
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.update({ ...updateInput, monthlyBasicRatePesos: -100 }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('maps employee not found to NOT_FOUND', async () => {
+      updateEmployee.mockRejectedValue(
+        new NotFoundException('Employee not found'),
+      );
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.update(updateInput),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'Employee not found',
+      });
+      expect(record).not.toHaveBeenCalled();
+    });
+
+    it('maps uniqueness conflicts without exposing database internals on update', async () => {
+      updateEmployee.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('private database details', {
+          code: 'P2002',
+          clientVersion: '6',
+        }),
+      );
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.update(updateInput),
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message: 'An employee record already exists with this email.',
+      });
+      expect(record).not.toHaveBeenCalled();
+    });
   });
 });

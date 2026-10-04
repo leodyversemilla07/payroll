@@ -46,6 +46,13 @@ async function mockDtr(
     refreshFailure?: boolean;
     premium?: boolean;
     blockSave?: Promise<void>;
+    importResult?: {
+      totalPunchesParsed: number;
+      daysImported: number;
+      anomaliesDetected: number;
+      details: Array<Record<string, unknown>>;
+    };
+    importError?: { code: string; message: string };
   } = {},
 ) {
   let signedIn = false;
@@ -63,6 +70,7 @@ async function mockDtr(
   let reads = 0;
   const requests: string[] = [];
   const saves: Record<string, unknown>[] = [];
+  const imports: Record<string, unknown>[] = [];
   const user = {
     id: "u1",
     organizationId: "o1",
@@ -122,6 +130,54 @@ async function mockDtr(
         rows = [...rows.filter((row) => row.date !== saved.date), saved];
         return { result: { data: { json: saved } } };
       }
+      if (path === "timekeeping.importBiometricsCsv") {
+        const payload = request.postDataJSON()[String(index)].json;
+        imports.push(payload);
+        if (options.importError) {
+          return apiError(
+            options.importError.code,
+            options.importError.message,
+          );
+        }
+        const defaultResult = {
+          totalPunchesParsed: 4,
+          daysImported: 2,
+          anomaliesDetected: 0,
+          details: [
+            {
+              employeeNumber: employee.employeeNumber,
+              dateStr: "2026-09-21",
+              timeIn: "2026-09-21T01:00:00.000Z",
+              timeOut: "2026-09-21T10:00:00.000Z",
+              actualWorkedMinutes: 480,
+              tardinessMinutes: 0,
+              undertimeMinutes: 0,
+              overtimeMinutes: 0,
+              nightDiffMinutes: 0,
+              hasMissingPunch: false,
+              remarks: [],
+            },
+            {
+              employeeNumber: employee.employeeNumber,
+              dateStr: "2026-09-22",
+              timeIn: "2026-09-22T01:00:00.000Z",
+              timeOut: "2026-09-22T10:00:00.000Z",
+              actualWorkedMinutes: 480,
+              tardinessMinutes: 0,
+              undertimeMinutes: 0,
+              overtimeMinutes: 0,
+              nightDiffMinutes: 0,
+              hasMissingPunch: false,
+              remarks: [],
+            },
+          ],
+        };
+        return {
+          result: {
+            data: { json: options.importResult ?? defaultResult },
+          },
+        };
+      }
       const json =
         path === "auth.me"
           ? user
@@ -144,7 +200,7 @@ async function mockDtr(
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
   await page.goto("/portal/attendance");
-  return { requests, saves };
+  return { requests, saves, imports };
 }
 async function loadDtr(page: Page) {
   const section = page.getByRole("region", {
@@ -453,6 +509,181 @@ test("double-holiday rows are read-only and attendance fits a mobile viewport", 
       ),
     )
     .toBe(true);
+});
+
+test("imports biometric CSV with preview, uploads punch logs, shows metrics and invalidates attendance", async ({
+  page,
+}) => {
+  const state = await mockDtr(page);
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await expect(section).toBeVisible();
+
+  await section
+    .getByRole("button", { name: "Import biometrics", exact: true })
+    .click();
+
+  const importPanel = page.getByRole("region", {
+    name: "Biometric CSV import",
+    exact: true,
+  });
+  await expect(importPanel).toBeVisible();
+
+  const csvData =
+    "Employee_ID,Timestamp,Punch_Type\nEMP-001,2026-09-21T01:00:00Z,CHECK_IN\nEMP-001,2026-09-21T10:00:00Z,CHECK_OUT\nEMP-001,2026-09-22,09:00:00,CHECK_IN\nEMP-001,2026-09-22,18:00:00,CHECK_OUT";
+
+  await importPanel.locator('input[type="file"]').setInputFiles({
+    name: "punches.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csvData),
+  });
+
+  await expect(importPanel.getByText("punches.csv")).toBeVisible();
+  await expect(importPanel.getByText("5 row(s) detected")).toBeVisible();
+  await expect(importPanel.getByText("EMP-001").first()).toBeVisible();
+
+  await importPanel
+    .getByRole("button", { name: "Upload and Process", exact: true })
+    .click();
+
+  expect(state.imports).toHaveLength(1);
+  expect(state.imports[0]).toMatchObject({
+    csvContent: csvData,
+  });
+
+  await expect(
+    importPanel
+      .getByRole("status")
+      .filter({ hasText: "Biometric import complete" }),
+  ).toBeVisible();
+  await expect(importPanel.getByText("Punches Parsed")).toBeVisible();
+  await expect(importPanel.getByText("Days Imported")).toBeVisible();
+
+  await importPanel.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(importPanel).toHaveCount(0);
+
+  await expect(
+    section
+      .getByRole("status")
+      .filter({ hasText: "Biometric import completed" }),
+  ).toBeVisible();
+});
+
+test("displays anomalies table when imported CSV has missing punches", async ({
+  page,
+}) => {
+  const state = await mockDtr(page, {
+    importResult: {
+      totalPunchesParsed: 3,
+      daysImported: 2,
+      anomaliesDetected: 1,
+      details: [
+        {
+          employeeNumber: employee.employeeNumber,
+          dateStr: "2026-09-21",
+          timeIn: "2026-09-21T01:00:00.000Z",
+          timeOut: "2026-09-21T10:00:00.000Z",
+          actualWorkedMinutes: 480,
+          tardinessMinutes: 0,
+          undertimeMinutes: 0,
+          overtimeMinutes: 0,
+          nightDiffMinutes: 0,
+          hasMissingPunch: false,
+          remarks: [],
+        },
+        {
+          employeeNumber: employee.employeeNumber,
+          dateStr: "2026-09-22",
+          timeIn: "2026-09-22T01:00:00.000Z",
+          timeOut: null,
+          actualWorkedMinutes: 0,
+          tardinessMinutes: 0,
+          undertimeMinutes: 0,
+          overtimeMinutes: 0,
+          nightDiffMinutes: 0,
+          hasMissingPunch: true,
+          remarks: ["Missing time out punch"],
+        },
+      ],
+    },
+  });
+
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await section.getByRole("button", { name: "Import biometrics" }).click();
+
+  const importPanel = page.getByRole("region", {
+    name: "Biometric CSV import",
+    exact: true,
+  });
+
+  await importPanel.locator('input[type="file"]').setInputFiles({
+    name: "punches_anomaly.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "EMP-001,2026-09-21 09:00,CHECK_IN\nEMP-001,2026-09-22 09:00,CHECK_IN",
+    ),
+  });
+
+  await importPanel.getByRole("button", { name: "Upload and Process" }).click();
+
+  await expect(
+    importPanel.getByText("Anomalies Requiring Review (1)"),
+  ).toBeVisible();
+  await expect(importPanel.getByText("Missing time out punch")).toBeVisible();
+  expect(state.imports).toHaveLength(1);
+});
+
+test("rejects invalid file type and displays server import errors", async ({
+  page,
+}) => {
+  await mockDtr(page, {
+    importError: {
+      code: "UNPROCESSABLE_CONTENT",
+      message:
+        "Biometric CSV line 2: supply an employee number, valid YYYY-MM-DD timestamp and CHECK_IN/CHECK_OUT/AUTO punch type",
+    },
+  });
+
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await section.getByRole("button", { name: "Import biometrics" }).click();
+
+  const importPanel = page.getByRole("region", {
+    name: "Biometric CSV import",
+    exact: true,
+  });
+
+  await importPanel.locator('input[type="file"]').setInputFiles({
+    name: "document.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("not a csv"),
+  });
+
+  await expect(
+    importPanel
+      .getByRole("alert")
+      .filter({ hasText: "Please upload a valid .csv file." }),
+  ).toBeVisible();
+
+  await importPanel.locator('input[type="file"]').setInputFiles({
+    name: "bad.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("bad,csv,data"),
+  });
+
+  await expect(importPanel.getByText("bad.csv")).toBeVisible();
+  await importPanel.getByRole("button", { name: "Upload and Process" }).click();
+
+  await expect(
+    importPanel.getByRole("alert").filter({ hasText: "Biometric CSV line 2" }),
+  ).toBeVisible();
 });
 
 for (const role of ["EMPLOYEE", "DEPARTMENT_MANAGER"]) {

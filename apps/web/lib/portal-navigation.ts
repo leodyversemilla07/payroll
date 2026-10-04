@@ -2,6 +2,7 @@
 
 import {
   Banknote,
+  CalendarCheck,
   CalendarDays,
   ClipboardList,
   Clock,
@@ -41,6 +42,13 @@ export const portalSections = [
     description: "Manage recorded credits, requests and decisions.",
   },
   {
+    id: "holidays",
+    href: "/portal/holidays",
+    label: "Holiday calendar",
+    icon: CalendarCheck,
+    description: "Configure Philippine statutory and company holidays.",
+  },
+  {
     id: "process-payroll",
     href: "/portal/process-payroll",
     label: "Process payroll",
@@ -66,8 +74,8 @@ export const portalSections = [
 export type PortalSection = (typeof portalSections)[number]["id"];
 
 export const portalNavigationGroups = [
-  { label: "Workspace", items: portalSections.slice(0, 4) },
-  { label: "Payroll operations", items: portalSections.slice(4) },
+  { label: "Workspace", items: portalSections.slice(0, 5) },
+  { label: "Payroll operations", items: portalSections.slice(5) },
 ];
 
 export function usePortalSection() {

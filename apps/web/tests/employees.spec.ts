@@ -86,6 +86,7 @@ async function mockPortal(
   let detailFailures = options.detailFailures ?? 0;
   const requests: string[] = [];
   const creations: Record<string, unknown>[] = [];
+  const updates: Record<string, unknown>[] = [];
   const user = {
     id: "u1",
     organizationId: "o1",
@@ -139,8 +140,90 @@ async function mockPortal(
         creations.push(payload);
         if (createFailures-- > 0)
           return apiError("CONFLICT", "Duplicate email");
+        const basis = payload.payBasis ?? "MONTHLY";
+        let monthlyCents = 0;
+        let dailyCents = 0;
+        let hourlyCents = 0;
+        if (basis === "DAILY") {
+          dailyCents = Math.round((payload.dailyBasicRatePesos ?? 0) * 100);
+          monthlyCents = Math.round((dailyCents * 261) / 12);
+          hourlyCents = Math.round(dailyCents / 8);
+        } else if (basis === "HOURLY") {
+          hourlyCents = Math.round((payload.hourlyBasicRatePesos ?? 0) * 100);
+          dailyCents = hourlyCents * 8;
+          monthlyCents = Math.round((dailyCents * 261) / 12);
+        } else {
+          monthlyCents = Math.round((payload.monthlyBasicRatePesos ?? 0) * 100);
+          dailyCents = Math.round((monthlyCents * 12) / 261);
+          hourlyCents = Math.round(dailyCents / 8);
+        }
         employees = [
-          { ...employee, ...payload, employeeNumber: "EMP-TEST-NEW" },
+          {
+            ...employee,
+            ...payload,
+            payBasis: basis,
+            employeeNumber: "EMP-TEST-NEW",
+            compensation: {
+              basicRateMonthlyCents: monthlyCents,
+              basicRateDailyCents: dailyCents,
+              basicRateHourlyCents: hourlyCents,
+              isTaxExempt: payload.isTaxExempt ?? false,
+              effectiveDate: "2026-01-01",
+            },
+          },
+        ];
+        return { result: { data: { json: employees[0] } } };
+      }
+      if (path === "employees.update") {
+        const payload = request.postDataJSON()[String(index)].json;
+        updates.push(payload);
+        const currentEmp = employees[0] ?? employee;
+        const basis = payload.payBasis ?? currentEmp.payBasis ?? "MONTHLY";
+        let monthlyCents = Number(
+          currentEmp.compensation?.basicRateMonthlyCents ?? 0,
+        );
+        let dailyCents = Number(
+          currentEmp.compensation?.basicRateDailyCents ?? 0,
+        );
+        let hourlyCents = Number(
+          currentEmp.compensation?.basicRateHourlyCents ?? 0,
+        );
+        if (
+          payload.payBasis ||
+          payload.monthlyBasicRatePesos !== undefined ||
+          payload.dailyBasicRatePesos !== undefined ||
+          payload.hourlyBasicRatePesos !== undefined
+        ) {
+          if (basis === "DAILY") {
+            dailyCents = Math.round((payload.dailyBasicRatePesos ?? 0) * 100);
+            monthlyCents = Math.round((dailyCents * 261) / 12);
+            hourlyCents = Math.round(dailyCents / 8);
+          } else if (basis === "HOURLY") {
+            hourlyCents = Math.round((payload.hourlyBasicRatePesos ?? 0) * 100);
+            dailyCents = hourlyCents * 8;
+            monthlyCents = Math.round((dailyCents * 261) / 12);
+          } else if (payload.monthlyBasicRatePesos !== undefined) {
+            monthlyCents = Math.round(payload.monthlyBasicRatePesos * 100);
+            dailyCents = Math.round((monthlyCents * 12) / 261);
+            hourlyCents = Math.round(dailyCents / 8);
+          }
+        }
+        employees = [
+          {
+            ...currentEmp,
+            ...payload,
+            payBasis: basis,
+            compensation: {
+              basicRateMonthlyCents: monthlyCents,
+              basicRateDailyCents: dailyCents,
+              basicRateHourlyCents: hourlyCents,
+              isTaxExempt:
+                payload.isTaxExempt ??
+                currentEmp.compensation?.isTaxExempt ??
+                false,
+              effectiveDate: "2026-01-01",
+            },
+          },
         ];
         return { result: { data: { json: employees[0] } } };
       }
@@ -173,7 +256,7 @@ async function mockPortal(
   } else {
     await expect(page.getByText("No staff records available")).toBeVisible();
   }
-  return { requests, creations };
+  return { requests, creations, updates };
 }
 
 async function fillEmployee(page: Page) {
@@ -426,6 +509,106 @@ test("employee profiles and the creation form fit a mobile viewport", async ({
   await page.getByRole("button", { name: "Add employee" }).click();
   await fillEmployee(page);
   await expect.poll(fitsViewport).toBe(true);
+});
+
+test("HR edits an existing employee profile and sees updated details", async ({
+  page,
+}) => {
+  const state = await mockPortal(page);
+  await page
+    .getByRole("region", { name: "Employees", exact: true })
+    .getByRole("button", { name: /Ana Santos/ })
+    .click();
+  const details = page.getByRole("region", {
+    name: "Employee details",
+    exact: true,
+  });
+  await expect(details).toContainText("Ana Santos");
+  await expect(details).toContainText("₱30,000.25");
+  await details.getByRole("button", { name: "Edit employee" }).click();
+  await expect(
+    details.getByRole("button", { name: "Save changes" }),
+  ).toBeVisible();
+
+  await details.getByLabel("First name").fill("Ana Maria");
+  await details.getByLabel("Monthly basic rate (PHP)").fill("35000.00");
+  await details
+    .getByRole("checkbox", {
+      name: "Managerial employee (PD 851 exclusion)",
+      exact: true,
+    })
+    .check();
+  await details.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(details).toContainText("Ana Maria Santos");
+  await expect(details).toContainText("₱35,000.00");
+  await expect(details).toContainText("Yes");
+  expect(state.updates).toHaveLength(1);
+  expect(state.updates[0]).toMatchObject({
+    id: employee.id,
+    firstName: "Ana Maria",
+    monthlyBasicRatePesos: 35000,
+    isManagerial: true,
+  });
+});
+
+test("HR creates a daily-paid employee and views computed rates", async ({
+  page,
+}) => {
+  const state = await mockPortal(page, { empty: true });
+  await page.getByRole("button", { name: "Add employee" }).click();
+  const form = await fillEmployee(page);
+  await form.getByLabel("Pay basis", { exact: true }).selectOption("DAILY");
+  await form
+    .getByLabel("Daily basic rate (PHP)", { exact: true })
+    .fill("1000.00");
+  await form
+    .getByRole("button", { name: "Create employee", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "No login account was created." }),
+  ).toContainText(
+    "Employee EMP-TEST-NEW created. No login account was created.",
+  );
+  expect(state.creations).toHaveLength(1);
+  expect(state.creations[0]).toMatchObject({
+    payBasis: "DAILY",
+    dailyBasicRatePesos: 1000,
+  });
+  const details = page.getByRole("region", {
+    name: "Employee details",
+    exact: true,
+  });
+  await expect(details).toContainText("DAILY");
+  await expect(details).toContainText("₱1,000.00");
+});
+
+test("HR updates an employee pay basis to HOURLY", async ({ page }) => {
+  const state = await mockPortal(page);
+  await page
+    .getByRole("region", { name: "Employees", exact: true })
+    .getByRole("button", { name: /Ana Santos/ })
+    .click();
+  const details = page.getByRole("region", {
+    name: "Employee details",
+    exact: true,
+  });
+  await details.getByRole("button", { name: "Edit employee" }).click();
+  await details.getByLabel("Pay basis", { exact: true }).selectOption("HOURLY");
+  await details
+    .getByLabel("Hourly basic rate (PHP)", { exact: true })
+    .fill("250.00");
+  await details.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(details).toContainText("HOURLY");
+  await expect(details).toContainText("₱250.00");
+  expect(state.updates[0]).toMatchObject({
+    id: employee.id,
+    payBasis: "HOURLY",
+    hourlyBasicRatePesos: 250,
+  });
 });
 
 for (const role of ["EMPLOYEE", "DEPARTMENT_MANAGER"]) {

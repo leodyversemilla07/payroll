@@ -6,7 +6,9 @@ import { AuditService } from './audit/audit.service';
 import { AuthService } from './auth/auth.service';
 import { validateEnvironment } from './config/environment';
 import { ComplianceService } from './modules/compliance/compliance.service';
+import { DashboardService } from './modules/dashboard/dashboard.service';
 import { EmployeesService } from './modules/employees/employees.service';
+import { HolidaysService } from './modules/holidays/holidays.service';
 import { LeavesService } from './modules/leaves/leaves.service';
 import { LoansService } from './modules/loans/loans.service';
 import { PayrollService } from './modules/payroll/payroll.service';
@@ -32,6 +34,8 @@ async function bootstrap() {
   const loansService = app.get(LoansService);
   const complianceService = app.get(ComplianceService);
   const leavesService = app.get(LeavesService);
+  const dashboardService = app.get(DashboardService);
+  const holidaysService = app.get(HolidaysService);
 
   const appRouter = createApiRouter(
     trpcService,
@@ -43,6 +47,8 @@ async function bootstrap() {
     leavesService,
     authService,
     auditService,
+    dashboardService,
+    holidaysService,
   );
 
   app.use(

@@ -51,6 +51,13 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
   const setEmployeeLeaveCredits = jest.fn();
   const listEmployeeCreditChanges = jest.fn();
   const cancelLeaveRequest = jest.fn();
+  const listLeavePolicies = jest.fn();
+  const getLeavePolicyById = jest.fn();
+  const createLeavePolicy = jest.fn();
+  const updateLeavePolicy = jest.fn();
+  const deleteLeavePolicy = jest.fn();
+  const runLeaveAccrual = jest.fn();
+  const runLeaveCarryover = jest.fn();
   const record = jest.fn();
   const database = {} as Prisma.TransactionClient;
   const router = createLeavesRouter(
@@ -64,6 +71,13 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         setEmployeeLeaveCredits,
         listEmployeeCreditChanges,
         cancelLeaveRequest,
+        listLeavePolicies,
+        getLeavePolicyById,
+        createLeavePolicy,
+        updateLeavePolicy,
+        deleteLeavePolicy,
+        runLeaveAccrual,
+        runLeaveCarryover,
       },
       auditService: { record },
     } as unknown as RouterServices),
@@ -526,6 +540,225 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Leave request failed. Please retry.',
+    });
+  });
+
+  describe('leave policies, accruals, and carryover procedures', () => {
+    const policyId = '33333333-3333-4333-8333-333333333333';
+    const mockPolicy = {
+      id: policyId,
+      organizationId: 'org-1',
+      leaveType: 'VACATION',
+      annualCredits: new Prisma.Decimal(15),
+      accrualFrequency: 'MONTHLY',
+      carryoverPolicy: 'CAPPED',
+      maxCarryoverDays: new Prisma.Decimal(5),
+      eligibleAfterMonths: 6,
+      isActive: true,
+      createdById: 'user-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('listPolicies returns serialized policies for authenticated users', async () => {
+      listLeavePolicies.mockResolvedValue([mockPolicy]);
+
+      const result = await router
+        .createCaller(context(Role.EMPLOYEE))
+        .listPolicies();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        leaveType: 'VACATION',
+        annualCredits: '15',
+        maxCarryoverDays: '5',
+      });
+      expect(listLeavePolicies).toHaveBeenCalledWith('org-1', undefined);
+    });
+
+    it('denies createPolicy, updatePolicy, deletePolicy to non-HR roles', async () => {
+      await expect(
+        router.createCaller(context(Role.EMPLOYEE)).createPolicy({
+          leaveType: 'VACATION',
+          annualCredits: 15,
+          accrualFrequency: 'ANNUAL',
+          carryoverPolicy: 'NO_CARRYOVER',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      await expect(
+        router.createCaller(context(Role.PAYROLL_SPECIALIST)).deletePolicy({
+          id: policyId,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('permits HR_ADMIN to create a policy and audits creation', async () => {
+      createLeavePolicy.mockResolvedValue(mockPolicy);
+
+      const result = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .createPolicy({
+          leaveType: 'VACATION',
+          annualCredits: 15,
+          accrualFrequency: 'MONTHLY',
+          carryoverPolicy: 'CAPPED',
+          maxCarryoverDays: 5,
+          eligibleAfterMonths: 6,
+        });
+
+      expect(result.leaveType).toBe('VACATION');
+      expect(createLeavePolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'org-1',
+          leaveType: 'VACATION',
+          annualCredits: 15,
+        }),
+        'user-1',
+      );
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CREATE',
+          entityType: 'LeavePolicy',
+          entityId: policyId,
+        }),
+      );
+    });
+
+    it('permits HR_ADMIN to update a policy and audits update', async () => {
+      getLeavePolicyById.mockResolvedValue(mockPolicy);
+      updateLeavePolicy.mockResolvedValue({
+        ...mockPolicy,
+        annualCredits: new Prisma.Decimal(18),
+      });
+
+      const result = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .updatePolicy({
+          id: policyId,
+          annualCredits: 18,
+        });
+
+      expect(result.annualCredits).toBe('18');
+      expect(updateLeavePolicy).toHaveBeenCalledWith(policyId, 'org-1', {
+        annualCredits: 18,
+      });
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'UPDATE',
+          entityType: 'LeavePolicy',
+          entityId: policyId,
+        }),
+      );
+    });
+
+    it('permits HR_ADMIN to delete a policy and audits deletion', async () => {
+      deleteLeavePolicy.mockResolvedValue(mockPolicy);
+
+      const result = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .deletePolicy({ id: policyId });
+
+      expect(result).toEqual({ id: policyId, leaveType: 'VACATION' });
+      expect(deleteLeavePolicy).toHaveBeenCalledWith(policyId, 'org-1');
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'DELETE',
+          entityType: 'LeavePolicy',
+          entityId: policyId,
+        }),
+      );
+    });
+
+    it('runs accrual preview (dryRun: true) without audit and execution (dryRun: false) with audit', async () => {
+      const accrualResult = {
+        year: 2026,
+        frequency: 'MONTHLY' as const,
+        period: 6,
+        dryRun: true,
+        totalEmployees: 5,
+        eligibleCount: 4,
+        processedCount: 4,
+        totalCreditsAccrued: 5,
+        items: [],
+      };
+      runLeaveAccrual.mockResolvedValue(accrualResult);
+
+      // 1. Dry run
+      const preview = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .runAccrual({
+          year: 2026,
+          frequency: 'MONTHLY',
+          period: 6,
+          dryRun: true,
+        });
+
+      expect(preview.dryRun).toBe(true);
+      expect(record).not.toHaveBeenCalled();
+
+      // 2. Real run
+      runLeaveAccrual.mockResolvedValue({ ...accrualResult, dryRun: false });
+      const executed = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .runAccrual({
+          year: 2026,
+          frequency: 'MONTHLY',
+          period: 6,
+          dryRun: false,
+        });
+
+      expect(executed.dryRun).toBe(false);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CREATE',
+          entityType: 'LeaveAccrual',
+        }),
+      );
+    });
+
+    it('runs carryover preview without audit and execution with audit', async () => {
+      const carryoverResult = {
+        fromYear: 2025,
+        toYear: 2026,
+        dryRun: true,
+        totalEvaluated: 5,
+        processedCount: 3,
+        totalCreditsCarriedOver: 15,
+        items: [],
+      };
+      runLeaveCarryover.mockResolvedValue(carryoverResult);
+
+      const preview = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .runCarryover({
+          fromYear: 2025,
+          toYear: 2026,
+          dryRun: true,
+        });
+
+      expect(preview.dryRun).toBe(true);
+      expect(record).not.toHaveBeenCalled();
+
+      runLeaveCarryover.mockResolvedValue({
+        ...carryoverResult,
+        dryRun: false,
+      });
+      const executed = await router
+        .createCaller(context(Role.HR_ADMIN))
+        .runCarryover({
+          fromYear: 2025,
+          toYear: 2026,
+          dryRun: false,
+        });
+
+      expect(executed.dryRun).toBe(false);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CREATE',
+          entityType: 'LeaveCarryover',
+        }),
+      );
     });
   });
 });

@@ -4,7 +4,9 @@ import { AppService } from './app.service';
 import { AuditService } from './audit/audit.service';
 import { AuthService } from './auth/auth.service';
 import { ComplianceService } from './modules/compliance/compliance.service';
+import { DashboardService } from './modules/dashboard/dashboard.service';
 import { EmployeesService } from './modules/employees/employees.service';
+import { HolidaysService } from './modules/holidays/holidays.service';
 import { LeavesService } from './modules/leaves/leaves.service';
 import { LoansService } from './modules/loans/loans.service';
 import { PayrollService } from './modules/payroll/payroll.service';
@@ -24,6 +26,8 @@ import { TrpcModule } from './trpc/trpc.module';
     LoansService,
     ComplianceService,
     LeavesService,
+    DashboardService,
+    HolidaysService,
   ],
   exports: [
     AuthService,
@@ -34,6 +38,8 @@ import { TrpcModule } from './trpc/trpc.module';
     LoansService,
     ComplianceService,
     LeavesService,
+    DashboardService,
+    HolidaysService,
   ],
 })
 export class AppModule {}

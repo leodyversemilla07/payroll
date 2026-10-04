@@ -88,6 +88,7 @@ describe('EmployeesService registration and details', () => {
           organizationId: 'org-1',
           branchId: 'branch-1',
           departmentId: 'department-1',
+          payBasis: 'MONTHLY',
           employeeNumber: expect.stringMatching(/^EMP-\d{4}-[0-9a-f-]{36}$/),
           tin: input.tin,
           bankName: input.bankName,
@@ -99,6 +100,54 @@ describe('EmployeesService registration and details', () => {
               basicRateMonthlyCents: 3000025n,
               basicRateDailyCents: (3000025n * 12n) / 261n,
               basicRateHourlyCents: (3000025n * 12n) / 261n / 8n,
+              isTaxExempt: false,
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('calculates compensation correctly for DAILY pay basis', async () => {
+    await service.registerEmployee({
+      ...input,
+      payBasis: 'DAILY',
+      dailyBasicRatePesos: 800,
+      monthlyBasicRatePesos: undefined,
+    });
+    expect(prisma.employee.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payBasis: 'DAILY',
+          compensation: {
+            create: {
+              basicRateDailyCents: 80000n,
+              basicRateMonthlyCents: (80000n * 261n) / 12n,
+              basicRateHourlyCents: 10000n,
+              isTaxExempt: false,
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('calculates compensation correctly for HOURLY pay basis', async () => {
+    await service.registerEmployee({
+      ...input,
+      payBasis: 'HOURLY',
+      hourlyBasicRatePesos: 150,
+      monthlyBasicRatePesos: undefined,
+    });
+    expect(prisma.employee.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payBasis: 'HOURLY',
+          compensation: {
+            create: {
+              basicRateHourlyCents: 15000n,
+              basicRateDailyCents: 120000n,
+              basicRateMonthlyCents: (120000n * 261n) / 12n,
               isTaxExempt: false,
             },
           },

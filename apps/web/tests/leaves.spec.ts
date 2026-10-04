@@ -169,6 +169,9 @@ async function mockLeaves(
             return apiError("INTERNAL_SERVER_ERROR", "History failed");
           return { result: { data: { json: changes } } };
         }
+        if (path === "leaves.listPolicies") {
+          return { result: { data: { json: [] } } };
+        }
         requestReads++;
         if (
           requestFailures-- > 0 ||

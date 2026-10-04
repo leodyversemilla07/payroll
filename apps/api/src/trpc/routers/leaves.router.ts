@@ -13,6 +13,7 @@ import {
   prisma,
 } from '@workspace/db';
 import { z } from 'zod';
+import { serializePolicy } from '../../modules/leaves/leave-policies';
 import type { RouterContext } from './router-context';
 import {
   assertEmployeeAccess,
@@ -421,5 +422,208 @@ export function createLeavesRouter(ctx: RouterContext) {
           ),
         );
       }),
+
+    listPolicies: protectedProcedure
+      .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+      .query(({ input, ctx }) =>
+        withLeaveErrors(async () =>
+          (
+            await leavesService.listLeavePolicies(
+              ctx.user.organizationId,
+              input?.includeInactive,
+            )
+          ).map(serializePolicy),
+        ),
+      ),
+
+    createPolicy: ctx.hrProcedure
+      .input(
+        z.object({
+          leaveType: z.string().trim().min(1).max(50),
+          annualCredits: z.number().finite().min(0).max(365).multipleOf(0.5),
+          accrualFrequency: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']),
+          carryoverPolicy: z.enum(['NO_CARRYOVER', 'CAPPED', 'UNLIMITED']),
+          maxCarryoverDays: z
+            .number()
+            .finite()
+            .min(0.5)
+            .max(365)
+            .multipleOf(0.5)
+            .nullable()
+            .optional(),
+          eligibleAfterMonths: z.number().int().min(0).max(120).default(6),
+          isActive: z.boolean().default(true),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        withLeaveErrors(async () => {
+          const policy = await leavesService.createLeavePolicy(
+            {
+              ...input,
+              organizationId: ctx.user.organizationId,
+            },
+            ctx.user.id,
+          );
+          await auditService.record({
+            user: ctx.user,
+            request: ctx.req,
+            action: 'CREATE',
+            entityType: 'LeavePolicy',
+            entityId: policy.id,
+            previousValue: undefined,
+            newValue: policy,
+          });
+          return serializePolicy(policy);
+        }),
+      ),
+
+    updatePolicy: ctx.hrProcedure
+      .input(
+        z.object({
+          id: z.string().uuid(),
+          annualCredits: z
+            .number()
+            .finite()
+            .min(0)
+            .max(365)
+            .multipleOf(0.5)
+            .optional(),
+          accrualFrequency: z
+            .enum(['MONTHLY', 'QUARTERLY', 'ANNUAL'])
+            .optional(),
+          carryoverPolicy: z
+            .enum(['NO_CARRYOVER', 'CAPPED', 'UNLIMITED'])
+            .optional(),
+          maxCarryoverDays: z
+            .number()
+            .finite()
+            .min(0.5)
+            .max(365)
+            .multipleOf(0.5)
+            .nullable()
+            .optional(),
+          eligibleAfterMonths: z.number().int().min(0).max(120).optional(),
+          isActive: z.boolean().optional(),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        withLeaveErrors(async () => {
+          const { id, ...data } = input;
+          const previous = await leavesService.getLeavePolicyById(
+            id,
+            ctx.user.organizationId,
+          );
+          const policy = await leavesService.updateLeavePolicy(
+            id,
+            ctx.user.organizationId,
+            data,
+          );
+          await auditService.record({
+            user: ctx.user,
+            request: ctx.req,
+            action: 'UPDATE',
+            entityType: 'LeavePolicy',
+            entityId: policy.id,
+            previousValue: previous,
+            newValue: policy,
+          });
+          return serializePolicy(policy);
+        }),
+      ),
+
+    deletePolicy: ctx.hrProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withLeaveErrors(async () => {
+          const policy = await leavesService.deleteLeavePolicy(
+            input.id,
+            ctx.user.organizationId,
+          );
+          await auditService.record({
+            user: ctx.user,
+            request: ctx.req,
+            action: 'DELETE',
+            entityType: 'LeavePolicy',
+            entityId: policy.id,
+            previousValue: policy,
+            newValue: undefined,
+          });
+          return { id: policy.id, leaveType: policy.leaveType };
+        }),
+      ),
+
+    runAccrual: ctx.hrProcedure
+      .input(
+        z.object({
+          year,
+          frequency: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']),
+          period: z.number().int().min(1).max(12).optional(),
+          leaveType: z.string().trim().min(1).max(50).optional(),
+          dryRun: z.boolean().default(false),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        withLeaveErrors(async () => {
+          const result = await leavesService.runLeaveAccrual({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            actorId: ctx.user.id,
+          });
+          if (!input.dryRun) {
+            await auditService.record({
+              user: ctx.user,
+              request: ctx.req,
+              action: 'CREATE',
+              entityType: 'LeaveAccrual',
+              entityId: `${ctx.user.organizationId}-${input.year}-${input.frequency}`,
+              previousValue: undefined,
+              newValue: {
+                year: result.year,
+                frequency: result.frequency,
+                period: result.period,
+                processedCount: result.processedCount,
+                totalCreditsAccrued: result.totalCreditsAccrued,
+              },
+            });
+          }
+          return result;
+        }),
+      ),
+
+    runCarryover: ctx.hrProcedure
+      .input(
+        z.object({
+          fromYear: year,
+          toYear: year,
+          leaveType: z.string().trim().min(1).max(50).optional(),
+          dryRun: z.boolean().default(false),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        withLeaveErrors(async () => {
+          const result = await leavesService.runLeaveCarryover({
+            ...input,
+            organizationId: ctx.user.organizationId,
+            actorId: ctx.user.id,
+          });
+          if (!input.dryRun) {
+            await auditService.record({
+              user: ctx.user,
+              request: ctx.req,
+              action: 'CREATE',
+              entityType: 'LeaveCarryover',
+              entityId: `${ctx.user.organizationId}-${input.fromYear}-TO-${input.toYear}`,
+              previousValue: undefined,
+              newValue: {
+                fromYear: result.fromYear,
+                toYear: result.toYear,
+                processedCount: result.processedCount,
+                totalCreditsCarriedOver: result.totalCreditsCarriedOver,
+              },
+            });
+          }
+          return result;
+        }),
+      ),
   });
 }

@@ -18,6 +18,21 @@ import {
   listEmployeeCreditChanges,
   setEmployeeLeaveCredits,
 } from './leave-credits';
+import {
+  type CreateLeavePolicyInput,
+  createLeavePolicy,
+  deleteLeavePolicy,
+  getLeavePolicyById,
+  listLeavePolicies,
+  type RunAccrualInput,
+  type RunAccrualResult,
+  type RunCarryoverInput,
+  type RunCarryoverResult,
+  runLeaveAccrual,
+  runLeaveCarryover,
+  type UpdateLeavePolicyInput,
+  updateLeavePolicy,
+} from './leave-policies';
 
 export interface LeaveRequestInput {
   employeeId: string;
@@ -55,6 +70,38 @@ type DecisionAudit = (data: {
 
 @Injectable()
 export class LeavesService {
+  listLeavePolicies(organizationId: string, includeInactive = false) {
+    return listLeavePolicies(organizationId, includeInactive);
+  }
+
+  getLeavePolicyById(id: string, organizationId: string) {
+    return getLeavePolicyById(id, organizationId);
+  }
+
+  createLeavePolicy(input: CreateLeavePolicyInput, actorId?: string) {
+    return createLeavePolicy(input, actorId);
+  }
+
+  updateLeavePolicy(
+    id: string,
+    organizationId: string,
+    input: UpdateLeavePolicyInput,
+  ) {
+    return updateLeavePolicy(id, organizationId, input);
+  }
+
+  deleteLeavePolicy(id: string, organizationId: string) {
+    return deleteLeavePolicy(id, organizationId);
+  }
+
+  runLeaveAccrual(input: RunAccrualInput): Promise<RunAccrualResult> {
+    return runLeaveAccrual(input);
+  }
+
+  runLeaveCarryover(input: RunCarryoverInput): Promise<RunCarryoverResult> {
+    return runLeaveCarryover(input);
+  }
+
   setEmployeeLeaveCredits(input: LeaveCreditInput, audit: CreditAudit) {
     return setEmployeeLeaveCredits(input, audit);
   }

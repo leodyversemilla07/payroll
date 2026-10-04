@@ -3,7 +3,9 @@ import { Role } from '@workspace/db';
 import { AuditService } from '../../audit/audit.service';
 import { type AuthenticatedUser, AuthService } from '../../auth/auth.service';
 import { ComplianceService } from '../../modules/compliance/compliance.service';
+import { DashboardService } from '../../modules/dashboard/dashboard.service';
 import { EmployeesService } from '../../modules/employees/employees.service';
+import { HolidaysService } from '../../modules/holidays/holidays.service';
 import { LeavesService } from '../../modules/leaves/leaves.service';
 import { LoansService } from '../../modules/loans/loans.service';
 import { PayrollService } from '../../modules/payroll/payroll.service';
@@ -49,6 +51,12 @@ export const LEAVE_APPROVAL_ROLES = [
   Role.HR_ADMIN,
   Role.DEPARTMENT_MANAGER,
 ] as const;
+export const STAFF_ROLES = [
+  Role.SUPER_ADMIN,
+  Role.HR_ADMIN,
+  Role.PAYROLL_SPECIALIST,
+  Role.DEPARTMENT_MANAGER,
+] as const;
 
 export function assertEmployeeAccess(
   user: AuthenticatedUser,
@@ -74,6 +82,8 @@ export interface RouterServices {
   loansService: LoansService;
   complianceService: ComplianceService;
   leavesService: LeavesService;
+  dashboardService: DashboardService;
+  holidaysService: HolidaysService;
 }
 
 export type RoleProcedure = ReturnType<TrpcService['procedureForRoles']>;
@@ -87,6 +97,7 @@ export interface RouterContext extends RouterServices {
   hrProcedure: RoleProcedure;
   timekeepingWriteProcedure: RoleProcedure;
   payrollProcedure: RoleProcedure;
+  staffProcedure: RoleProcedure;
 }
 
 export function createRouterContext(
@@ -103,5 +114,6 @@ export function createRouterContext(
     hrProcedure: trpc.procedureForRoles(HR_ROLES),
     timekeepingWriteProcedure: trpc.procedureForRoles(TIMEKEEPING_WRITE_ROLES),
     payrollProcedure: trpc.procedureForRoles(PAYROLL_ROLES),
+    staffProcedure: trpc.procedureForRoles(STAFF_ROLES),
   };
 }

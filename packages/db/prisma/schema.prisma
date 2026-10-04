@@ -63,6 +63,8 @@ model Organization {
   yearEndTaxSettlements YearEndTaxSettlement[]
   bir2316Issuances Bir2316Issuance[]
   taxEvidenceCorrections TaxEvidenceCorrection[]
+  holidayCalendars  HolidayCalendar[]
+  leavePolicies     LeavePolicy[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -316,6 +318,55 @@ model OvertimeRequest {
   updatedAt         DateTime     @updatedAt
 
   @@index([employeeId])
+}
+
+model HolidayCalendar {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  date            DateTime     @db.Date
+  name            String
+  dayType         DayType
+  isRecurring     Boolean      @default(false)
+  createdById     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([organizationId, date])
+  @@index([organizationId])
+  @@index([date])
+}
+
+enum AccrualFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum CarryoverPolicy {
+  NO_CARRYOVER
+  CAPPED
+  UNLIMITED
+}
+
+model LeavePolicy {
+  id                  String           @id @default(uuid())
+  organizationId      String
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaveType           String           // SIL, VACATION, SICK, etc.
+  annualCredits       Decimal          @db.Decimal(5, 2)
+  accrualFrequency    AccrualFrequency @default(ANNUAL)
+  carryoverPolicy     CarryoverPolicy  @default(NO_CARRYOVER)
+  maxCarryoverDays    Decimal?         @db.Decimal(5, 2)
+  eligibleAfterMonths Int              @default(6)
+  isActive            Boolean          @default(true)
+  createdById         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@unique([organizationId, leaveType])
+  @@index([organizationId])
+  @@index([isActive])
 }
 
 model LeaveBalance {

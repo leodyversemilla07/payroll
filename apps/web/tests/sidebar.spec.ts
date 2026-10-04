@@ -21,6 +21,12 @@ const destinations = [
     query: "employees.list",
   },
   {
+    label: "Holiday calendar",
+    href: "/portal/holidays",
+    region: "Holiday calendar",
+    query: "holidays.list",
+  },
+  {
     label: "Process payroll",
     href: "/portal/process-payroll",
     region: "Process payroll run",
@@ -79,7 +85,9 @@ async function portal(page: Page, role = "HR_ADMIN", login = true) {
       const json =
         path === "auth.me"
           ? user
-          : path === "employees.list" || path === "payroll.listRuns"
+          : path === "employees.list" ||
+              path === "payroll.listRuns" ||
+              path === "holidays.list"
             ? []
             : path === "employees.getRegistrationOptions"
               ? {

@@ -55,6 +55,55 @@ const slip = {
   netPayCents: 100000,
 };
 
+const overviewData = {
+  employees: {
+    total: 10,
+    active: 8,
+    onLeave: 1,
+    resigned: 1,
+    terminated: 0,
+    other: 0,
+  },
+  payroll: {
+    latestRun: {
+      id: runId,
+      status: "AUDITED",
+      cutoffStartDate: "2026-09-16T00:00:00.000Z",
+      cutoffEndDate: "2026-09-30T00:00:00.000Z",
+      paymentDate: "2026-09-30T00:00:00.000Z",
+      cutoffSequence: "SECOND_CUTOFF",
+      totalGrossCents: 120000,
+      totalNetCents: 100000,
+      totalDeductionsCents: 20000,
+      totalEmployerCostCents: 130000,
+      payslipCount: 1,
+    },
+    recentRuns: [
+      {
+        id: runId,
+        status: "AUDITED",
+        cutoffStartDate: "2026-09-16T00:00:00.000Z",
+        cutoffEndDate: "2026-09-30T00:00:00.000Z",
+        paymentDate: "2026-09-30T00:00:00.000Z",
+        cutoffSequence: "SECOND_CUTOFF",
+        totalGrossCents: 120000,
+        totalNetCents: 100000,
+        totalDeductionsCents: 20000,
+        payslipCount: 1,
+        createdAt: "2026-09-30T00:00:00.000Z",
+      },
+    ],
+  },
+  leaves: {
+    pendingCount: 2,
+  },
+  loans: {
+    activeCount: 1,
+    totalOutstandingCents: 500000,
+  },
+  audit: [],
+};
+
 // Exercise the real browser UI, tRPC batch transport and auth transitions without a database.
 test("sign in, read API-backed lists and payslip, then sign out", async ({
   page,
@@ -86,13 +135,15 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
       const json =
         path === "auth.me"
           ? user
-          : path === "employees.list"
-            ? [employee]
-            : path === "payroll.listRuns"
-              ? [run]
-              : path === "payroll.getRunDetails"
-                ? { ...run, payslips: [slip] }
-                : null;
+          : path === "dashboard.getOverview"
+            ? overviewData
+            : path === "employees.list"
+              ? [employee]
+              : path === "payroll.listRuns"
+                ? [run]
+                : path === "payroll.getRunDetails"
+                  ? { ...run, payslips: [slip] }
+                  : null;
       return { result: { data: { json } } };
     });
     await route.fulfill({
@@ -126,6 +177,11 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Dashboard metrics" }),
+  ).toBeVisible();
+  await expect(page.getByText("8 / 10 total")).toBeVisible();
+  await expect(page.getByText("Recent Payroll Runs")).toBeVisible();
   await expect(page.getByText("Signed in as")).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
   await nav.getByRole("link", { name: "Employees", exact: true }).click();
@@ -165,4 +221,66 @@ test("removed demo returns 404 and sign-in has no demo link", async ({
   expect(response?.status()).toBe(404);
   await page.goto("/");
   await expect(page.locator('a[href="/demo"]')).toHaveCount(0);
+});
+
+test("overview page displays error banner when dashboard metrics fail to load and recovers on retry", async ({
+  page,
+}) => {
+  let failOverview = true;
+  await page.route("**/trpc/**", async (route) => {
+    const paths = (
+      new URL(route.request().url()).pathname.split("/trpc/")[1] ?? ""
+    ).split(",");
+    const results = paths.map((path) => {
+      if (path === "auth.login" || path === "auth.me") {
+        return { result: { data: { json: user } } };
+      }
+      if (path === "dashboard.getOverview") {
+        if (failOverview) {
+          return {
+            error: {
+              json: {
+                message: "Internal server error",
+                code: -32603,
+                data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 },
+              },
+            },
+          };
+        }
+        return { result: { data: { json: overviewData } } };
+      }
+      return { result: { data: { json: null } } };
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(paths.length === 1 ? results[0] : results),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("staff@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Overview", exact: true }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByText("Dashboard statistics unavailable"),
+  ).toBeVisible();
+
+  // Navigation cards are still accessible even when stats fail
+  await expect(
+    page.getByRole("link", { name: "Open Employees" }),
+  ).toBeVisible();
+
+  // Retry loading overview
+  failOverview = false;
+  await page.getByRole("button", { name: "Retry" }).click();
+
+  await expect(
+    page.getByRole("region", { name: "Dashboard metrics" }),
+  ).toBeVisible();
+  await expect(page.getByText("8 / 10 total")).toBeVisible();
 });

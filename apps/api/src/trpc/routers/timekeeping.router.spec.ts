@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma, prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import { type Context, TrpcService } from '../trpc.service';
@@ -50,6 +54,7 @@ describe('timekeeping tRPC permissions and audit', () => {
   const correctAttendanceRecord = jest.fn();
   const getEmployeeDTR = jest.fn();
   const listRecentRecords = jest.fn();
+  const importBiometricsCsv = jest.fn();
   const record = jest.fn();
   const transaction = {} as Prisma.TransactionClient;
   const router = createTimekeepingRouter(
@@ -58,6 +63,7 @@ describe('timekeeping tRPC permissions and audit', () => {
         correctAttendanceRecord,
         getEmployeeDTR,
         listRecentRecords,
+        importBiometricsCsv,
       },
       auditService: { record },
     } as unknown as RouterServices),
@@ -200,6 +206,68 @@ describe('timekeeping tRPC permissions and audit', () => {
       router.createCaller(context(Role.HR_ADMIN)).adjustAttendance(input),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(record).not.toHaveBeenCalled();
+  });
+  it('imports biometrics CSV and writes an audit log', async () => {
+    const importResult = {
+      totalPunchesParsed: 4,
+      daysImported: 2,
+      anomaliesDetected: 1,
+      details: [],
+    };
+    importBiometricsCsv.mockResolvedValue(importResult);
+    const csvContent =
+      'Employee_ID,Timestamp,Punch_Type\nEMP-001,2026-09-21T01:00:00Z,CHECK_IN';
+    const caller = router.createCaller(context(Role.HR_ADMIN));
+    const result = await caller.importBiometricsCsv({ csvContent });
+
+    expect(result).toEqual(importResult);
+    expect(importBiometricsCsv).toHaveBeenCalledWith(
+      csvContent,
+      'org-1',
+      transaction,
+    );
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: expect.objectContaining({
+          id: 'user-1',
+          organizationId: 'org-1',
+        }),
+        action: 'IMPORT',
+        entityType: 'BiometricsCsv',
+        entityId: 'org-1',
+        newValue: {
+          daysImported: 2,
+          anomaliesDetected: 1,
+        },
+      }),
+      transaction,
+    );
+  });
+  it.each([null, Role.EMPLOYEE])(
+    'denies biometric CSV import to %s',
+    async (role) => {
+      await expect(
+        router
+          .createCaller(context(role))
+          .importBiometricsCsv({ csvContent: 'test,csv' }),
+      ).rejects.toMatchObject({ code: role ? 'FORBIDDEN' : 'UNAUTHORIZED' });
+      expect(importBiometricsCsv).not.toHaveBeenCalled();
+    },
+  );
+  it('maps unprocessable entity exceptions to UNPROCESSABLE_CONTENT for biometrics CSV', async () => {
+    importBiometricsCsv.mockRejectedValue(
+      new UnprocessableEntityException(
+        'Biometric CSV contains no punch records',
+      ),
+    );
+    await expect(
+      router
+        .createCaller(context(Role.HR_ADMIN))
+        .importBiometricsCsv({ csvContent: 'empty' }),
+    ).rejects.toMatchObject({
+      code: 'UNPROCESSABLE_CONTENT',
+      message: 'Biometric CSV contains no punch records',
+    });
   });
   it('distinguishes inaccessible employee reads from an empty date range', async () => {
     getEmployeeDTR.mockRejectedValue(

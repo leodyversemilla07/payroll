@@ -4,7 +4,12 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { type DailyTimeRecord, Prisma, prisma } from '@workspace/db';
+import {
+  type DailyTimeRecord,
+  type DayType,
+  Prisma,
+  prisma,
+} from '@workspace/db';
 import type {
   AttendanceSummary,
   ProcessedDtrDay,
@@ -500,15 +505,23 @@ export class TimekeepingService {
 
       if (!emp) continue;
 
-      // CSV imports cannot silently replace an already-recorded/approved DTR.
-      // Corrections need the loaded revision and a reason through the HR API.
+      const holidayDayType = await this.getHolidayDayType(
+        organizationId,
+        new Date(day.dateStr),
+        database,
+      );
+      const dayType: Exclude<DailyTimeRecord['dayType'], 'DOUBLE_HOLIDAY'> =
+        holidayDayType === 'DOUBLE_HOLIDAY'
+          ? 'REGULAR_HOLIDAY'
+          : holidayDayType;
+
       await this.correctAttendanceRecord(
         {
           employeeId: emp.id,
           organizationId,
           expectedUpdatedAt: null,
           date: new Date(day.dateStr),
-          dayType: 'REGULAR_WORKDAY',
+          dayType,
           timeIn: day.timeIn ?? null,
           timeOut: day.timeOut ?? null,
           actualWorkedMinutes: day.actualWorkedMinutes,
@@ -548,6 +561,41 @@ export class TimekeepingService {
     if (!employee) {
       throw new NotFoundException('Employee not found');
     }
+  }
+
+  private async getHolidayDayType(
+    organizationId: string,
+    date: Date,
+    database: Prisma.TransactionClient,
+  ): Promise<DayType> {
+    const targetDate = new Date(
+      `${date.toISOString().slice(0, 10)}T00:00:00.000Z`,
+    );
+    const exact = await database.holidayCalendar.findUnique({
+      where: {
+        organizationId_date: {
+          organizationId,
+          date: targetDate,
+        },
+      },
+    });
+    if (exact) return exact.dayType;
+
+    const targetMonth = targetDate.getUTCMonth();
+    const targetDay = targetDate.getUTCDate();
+    const recurring = await database.holidayCalendar.findMany({
+      where: {
+        organizationId,
+        isRecurring: true,
+      },
+    });
+    const match = recurring.find((h) => {
+      const hDate = new Date(h.date);
+      return (
+        hDate.getUTCMonth() === targetMonth && hDate.getUTCDate() === targetDay
+      );
+    });
+    return match ? match.dayType : 'REGULAR_WORKDAY';
   }
 }
 

@@ -32,6 +32,7 @@ import {
   toManilaInput,
 } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
+import { BiometricImportPanel } from "./biometric-import-panel";
 
 type DTRRecord = inferRouterOutputs<AppRouter>["timekeeping"]["getDTR"][number];
 type EmployeeOption = {
@@ -85,9 +86,11 @@ function needsManualReview(record: DTRRecord) {
 export function TimekeepingSection({
   employees,
   employeeListFailed,
+  canImport = true,
 }: {
   employees: EmployeeOption[];
   employeeListFailed: boolean;
+  canImport?: boolean;
 }) {
   const today = manilaToday();
   const [employeeId, setEmployeeId] = useState("");
@@ -100,6 +103,8 @@ export function TimekeepingSection({
   );
   const [saving, setSaving] = useState(false);
   const [savedDate, setSavedDate] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const dtr = trpc.timekeeping.getDTR.useQuery(
     range ?? { employeeId: "", startDate: "", endDate: "" },
     { enabled: !!range, retry: false },
@@ -137,15 +142,51 @@ export function TimekeepingSection({
 
   return (
     <Card role="region" aria-label="Attendance and DTR">
-      <CardHeader>
-        <CardTitle>Attendance and DTR</CardTitle>
-        <CardDescription>
-          Recorded attendance only. Missing dates are not assumed to be full
-          attendance or absence. Punches are displayed and entered in
-          Asia/Manila (UTC+08:00).
-        </CardDescription>
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle>Attendance and DTR</CardTitle>
+          <CardDescription>
+            Recorded attendance only. Missing dates are not assumed to be full
+            attendance or absence. Punches are displayed and entered in
+            Asia/Manila (UTC+08:00).
+          </CardDescription>
+        </div>
+        {canImport && (
+          <Button
+            type="button"
+            variant="outline"
+            aria-expanded={showImport}
+            aria-controls="biometric-import-panel"
+            disabled={saving}
+            onClick={() => {
+              setShowImport((value) => !value);
+              setImportNotice(null);
+            }}
+          >
+            {showImport ? "Close biometric import" : "Import biometrics"}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
+        {importNotice && (
+          <p
+            role="status"
+            className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-300"
+          >
+            {importNotice}
+          </p>
+        )}
+        {showImport && (
+          <div id="biometric-import-panel">
+            <BiometricImportPanel
+              onSuccess={(notice) => {
+                setImportNotice(notice);
+                if (range) void dtr.refetch();
+              }}
+              onClose={() => setShowImport(false)}
+            />
+          </div>
+        )}
         <form onSubmit={load}>
           <FieldSet disabled={saving}>
             <FieldLegend>Load employee DTR</FieldLegend>

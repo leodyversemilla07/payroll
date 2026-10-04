@@ -140,6 +140,7 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
         <EmployeeDetails
           key={selectedId}
           id={selectedId}
+          canEdit={canCreate}
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -214,6 +215,9 @@ function CreateEmployeeForm({
   });
   const utils = trpc.useUtils();
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [payBasis, setPayBasis] = useState<"MONTHLY" | "DAILY" | "HOURLY">(
+    "MONTHLY",
+  );
   const [isManagerial, setIsManagerial] = useState(false);
   const [isTaxExempt, setIsTaxExempt] = useState(false);
   const create = trpc.employees.create.useMutation({
@@ -230,7 +234,6 @@ function CreateEmployeeForm({
     if (create.isPending) return;
     const data = new FormData(event.currentTarget);
     const text = (name: string) => String(data.get(name) ?? "").trim();
-    const monthlyBasicRatePesos = Number(text("monthlyBasicRatePesos"));
     const birth = text("dateOfBirth");
     const hire = text("hireDate");
     if (birth > new Date().toISOString().slice(0, 10) || hire < birth) {
@@ -239,17 +242,52 @@ function CreateEmployeeForm({
       );
       return;
     }
-    if (
-      !/^\d+(?:\.\d{1,2})?$/.test(text("monthlyBasicRatePesos")) ||
-      !Number.isFinite(monthlyBasicRatePesos) ||
-      monthlyBasicRatePesos <= 0 ||
-      !Number.isSafeInteger(Math.round(monthlyBasicRatePesos * 100))
-    ) {
-      setValidationError(
-        "Enter a positive monthly basic rate with at most two decimal places.",
-      );
-      return;
+
+    let monthlyBasicRatePesos: number | undefined;
+    let dailyBasicRatePesos: number | undefined;
+    let hourlyBasicRatePesos: number | undefined;
+
+    if (payBasis === "MONTHLY") {
+      monthlyBasicRatePesos = Number(text("monthlyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("monthlyBasicRatePesos")) ||
+        !Number.isFinite(monthlyBasicRatePesos) ||
+        monthlyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(monthlyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive monthly basic rate with at most two decimal places.",
+        );
+        return;
+      }
+    } else if (payBasis === "DAILY") {
+      dailyBasicRatePesos = Number(text("dailyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("dailyBasicRatePesos")) ||
+        !Number.isFinite(dailyBasicRatePesos) ||
+        dailyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(dailyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive daily basic rate with at most two decimal places.",
+        );
+        return;
+      }
+    } else if (payBasis === "HOURLY") {
+      hourlyBasicRatePesos = Number(text("hourlyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("hourlyBasicRatePesos")) ||
+        !Number.isFinite(hourlyBasicRatePesos) ||
+        hourlyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(hourlyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive hourly basic rate with at most two decimal places.",
+        );
+        return;
+      }
     }
+
     const requiredNames = [...profileFields, ...statutoryFields].map(
       (field) => field.name,
     );
@@ -289,7 +327,10 @@ function CreateEmployeeForm({
         | "CONTRACTUAL"
         | "PROJECT_BASED"
         | "PART_TIME",
+      payBasis,
       monthlyBasicRatePesos,
+      dailyBasicRatePesos,
+      hourlyBasicRatePesos,
       isManagerial,
       isTaxExempt,
     });
@@ -300,9 +341,9 @@ function CreateEmployeeForm({
       <CardHeader>
         <CardTitle>Create employee</CardTitle>
         <CardDescription>
-          HR/admin only. Creates a monthly-paid employee and compensation
-          profile, not a login account. All profile fields are required; do not
-          enter placeholder identifiers.
+          HR/admin only. Creates an employee and compensation profile, not a
+          login account. All profile fields are required; do not enter
+          placeholder identifiers.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -425,24 +466,90 @@ function CreateEmployeeForm({
                   </NativeSelect>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="employee-monthly-rate">
-                    Monthly basic rate (PHP)
+                  <FieldLabel htmlFor="employee-pay-basis">
+                    Pay basis
                   </FieldLabel>
-                  <Input
-                    id="employee-monthly-rate"
-                    name="monthlyBasicRatePesos"
-                    type="number"
-                    min="0.01"
-                    max={Number.MAX_SAFE_INTEGER / 100}
-                    step="0.01"
+                  <NativeSelect
+                    id="employee-pay-basis"
+                    name="payBasis"
+                    value={payBasis}
+                    onChange={(e) =>
+                      setPayBasis(
+                        e.target.value as "MONTHLY" | "DAILY" | "HOURLY",
+                      )
+                    }
+                    className="w-full"
                     required
-                  />
-                  <FieldDescription>
-                    Current API derives the daily rate using 261 days/year and
-                    the hourly rate using 8 hours/day. Daily/hourly hiring is
-                    not supported by this form.
-                  </FieldDescription>
+                  >
+                    <NativeSelectOption value="MONTHLY">
+                      Monthly
+                    </NativeSelectOption>
+                    <NativeSelectOption value="DAILY">Daily</NativeSelectOption>
+                    <NativeSelectOption value="HOURLY">
+                      Hourly
+                    </NativeSelectOption>
+                  </NativeSelect>
                 </Field>
+                {payBasis === "MONTHLY" && (
+                  <Field>
+                    <FieldLabel htmlFor="employee-monthly-rate">
+                      Monthly basic rate (PHP)
+                    </FieldLabel>
+                    <Input
+                      id="employee-monthly-rate"
+                      name="monthlyBasicRatePesos"
+                      type="number"
+                      min="0.01"
+                      max={Number.MAX_SAFE_INTEGER / 100}
+                      step="0.01"
+                      required
+                    />
+                    <FieldDescription>
+                      Daily rate is derived using 261 days/year and hourly rate
+                      using 8 hours/day.
+                    </FieldDescription>
+                  </Field>
+                )}
+                {payBasis === "DAILY" && (
+                  <Field>
+                    <FieldLabel htmlFor="employee-daily-rate">
+                      Daily basic rate (PHP)
+                    </FieldLabel>
+                    <Input
+                      id="employee-daily-rate"
+                      name="dailyBasicRatePesos"
+                      type="number"
+                      min="0.01"
+                      max={Number.MAX_SAFE_INTEGER / 100}
+                      step="0.01"
+                      required
+                    />
+                    <FieldDescription>
+                      Monthly equivalent is derived using 261 days/year and
+                      hourly rate using 8 hours/day.
+                    </FieldDescription>
+                  </Field>
+                )}
+                {payBasis === "HOURLY" && (
+                  <Field>
+                    <FieldLabel htmlFor="employee-hourly-rate">
+                      Hourly basic rate (PHP)
+                    </FieldLabel>
+                    <Input
+                      id="employee-hourly-rate"
+                      name="hourlyBasicRatePesos"
+                      type="number"
+                      min="0.01"
+                      max={Number.MAX_SAFE_INTEGER / 100}
+                      step="0.01"
+                      required
+                    />
+                    <FieldDescription>
+                      Daily rate is derived using 8 hours/day and monthly
+                      equivalent using 261 days/year.
+                    </FieldDescription>
+                  </Field>
+                )}
                 <Field orientation="horizontal">
                   <Checkbox
                     id="employee-managerial"
@@ -497,19 +604,58 @@ function CreateEmployeeForm({
   );
 }
 
-function EmployeeDetails({ id, onClose }: { id: string; onClose: () => void }) {
+function formatDateInput(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+function EmployeeDetails({
+  id,
+  canEdit,
+  onClose,
+}: {
+  id: string;
+  canEdit: boolean;
+  onClose: () => void;
+}) {
   const details = trpc.employees.getById.useQuery({ id }, { retry: false });
+  const [isEditing, setIsEditing] = useState(false);
+
   return (
     <Card role="region" aria-label="Employee details">
       <CardHeader>
         <CardTitle>Employee details</CardTitle>
         <CardDescription>
-          Read-only profile. Editing and login account management are separate
-          workflows.
+          {isEditing
+            ? "Update personal, employment, and statutory information."
+            : canEdit
+              ? "View profile or edit employee details."
+              : "Read-only profile."}
         </CardDescription>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Close employee details
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {canEdit && details.data && !isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditing(true)}
+            >
+              Edit employee
+            </Button>
+          )}
+          {isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditing(false)}
+            >
+              Cancel editing
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close employee details
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {details.isPending ? (
@@ -527,6 +673,12 @@ function EmployeeDetails({ id, onClose }: { id: string; onClose: () => void }) {
           </p>
         ) : !details.data ? (
           <p>Employee not found in this organization.</p>
+        ) : isEditing ? (
+          <EditEmployeeForm
+            employee={details.data}
+            onCancel={() => setIsEditing(false)}
+            onUpdated={() => setIsEditing(false)}
+          />
         ) : (
           <EmployeeProfile employee={details.data} />
         )}
@@ -535,10 +687,650 @@ function EmployeeDetails({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
+function EditEmployeeForm({
+  employee,
+  onCancel,
+  onUpdated,
+}: {
+  employee: EmployeeData;
+  onCancel: () => void;
+  onUpdated: () => void;
+}) {
+  const options = trpc.employees.getRegistrationOptions.useQuery(undefined, {
+    retry: false,
+  });
+  const utils = trpc.useUtils();
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [payBasis, setPayBasis] = useState<"MONTHLY" | "DAILY" | "HOURLY">(
+    employee.payBasis ?? "MONTHLY",
+  );
+  const [isManagerial, setIsManagerial] = useState(
+    employee.isManagerial ?? false,
+  );
+  const [isTaxExempt, setIsTaxExempt] = useState(
+    employee.compensation?.isTaxExempt ?? false,
+  );
+
+  const update = trpc.employees.update.useMutation({
+    onSuccess: () => {
+      void utils.employees.list.invalidate();
+      void utils.employees.getById.invalidate({ id: employee.id });
+      onUpdated();
+    },
+  });
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (update.isPending) return;
+    const data = new FormData(event.currentTarget);
+    const text = (name: string) => String(data.get(name) ?? "").trim();
+    const birth = text("dateOfBirth");
+    const hire = text("hireDate");
+    const regularization = text("regularizationDate") || null;
+    const resignation = text("resignationDate") || null;
+
+    if (birth > new Date().toISOString().slice(0, 10) || hire < birth) {
+      setValidationError(
+        "Date of birth cannot be in the future, and hire date cannot precede date of birth.",
+      );
+      return;
+    }
+    if (regularization && regularization < hire) {
+      setValidationError("Regularization date cannot precede hire date.");
+      return;
+    }
+    if (resignation && resignation < hire) {
+      setValidationError("Resignation date cannot precede hire date.");
+      return;
+    }
+
+    let monthlyBasicRatePesos: number | undefined;
+    let dailyBasicRatePesos: number | undefined;
+    let hourlyBasicRatePesos: number | undefined;
+
+    if (payBasis === "MONTHLY") {
+      monthlyBasicRatePesos = Number(text("monthlyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("monthlyBasicRatePesos")) ||
+        !Number.isFinite(monthlyBasicRatePesos) ||
+        monthlyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(monthlyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive monthly basic rate with at most two decimal places.",
+        );
+        return;
+      }
+    } else if (payBasis === "DAILY") {
+      dailyBasicRatePesos = Number(text("dailyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("dailyBasicRatePesos")) ||
+        !Number.isFinite(dailyBasicRatePesos) ||
+        dailyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(dailyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive daily basic rate with at most two decimal places.",
+        );
+        return;
+      }
+    } else if (payBasis === "HOURLY") {
+      hourlyBasicRatePesos = Number(text("hourlyBasicRatePesos"));
+      if (
+        !/^\d+(?:\.\d{1,2})?$/.test(text("hourlyBasicRatePesos")) ||
+        !Number.isFinite(hourlyBasicRatePesos) ||
+        hourlyBasicRatePesos <= 0 ||
+        !Number.isSafeInteger(Math.round(hourlyBasicRatePesos * 100))
+      ) {
+        setValidationError(
+          "Enter a positive hourly basic rate with at most two decimal places.",
+        );
+        return;
+      }
+    }
+
+    if (
+      !text("firstName") ||
+      !text("lastName") ||
+      !text("email") ||
+      !text("contactNumber") ||
+      !text("residentialAddress") ||
+      !text("branchId") ||
+      !text("departmentId") ||
+      !text("tin") ||
+      !text("sssNo") ||
+      !text("philhealthNo") ||
+      !text("pagibigNo") ||
+      !text("bankName") ||
+      !text("bankAccountNumber") ||
+      !text("bankAccountName")
+    ) {
+      setValidationError(
+        "Complete all required fields and select a branch and department.",
+      );
+      return;
+    }
+
+    setValidationError(null);
+    update.mutate({
+      id: employee.id,
+      branchId: text("branchId"),
+      departmentId: text("departmentId"),
+      firstName: text("firstName"),
+      middleName: text("middleName") || null,
+      lastName: text("lastName"),
+      suffix: text("suffix") || null,
+      email: text("email"),
+      contactNumber: text("contactNumber"),
+      residentialAddress: text("residentialAddress"),
+      dateOfBirth: birth,
+      gender: text("gender"),
+      civilStatus: text("civilStatus"),
+      tin: text("tin"),
+      sssNo: text("sssNo"),
+      philhealthNo: text("philhealthNo"),
+      pagibigNo: text("pagibigNo"),
+      bankName: text("bankName"),
+      bankAccountNumber: text("bankAccountNumber"),
+      bankAccountName: text("bankAccountName"),
+      hireDate: hire,
+      regularizationDate: regularization,
+      resignationDate: resignation,
+      employmentType: text("employmentType") as
+        | "REGULAR"
+        | "PROBATIONARY"
+        | "CONTRACTUAL"
+        | "PROJECT_BASED"
+        | "PART_TIME",
+      employmentStatus: text("employmentStatus") as
+        | "ACTIVE"
+        | "ON_LEAVE"
+        | "SUSPENDED"
+        | "RESIGNED"
+        | "TERMINATED"
+        | "RETIRED",
+      payBasis,
+      monthlyBasicRatePesos,
+      dailyBasicRatePesos,
+      hourlyBasicRatePesos,
+      isManagerial,
+      isTaxExempt,
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-6">
+      {options.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          Could not refresh branches and departments. Loaded choices have been
+          kept.
+        </p>
+      )}
+      <FieldGroup>
+        <FieldSet disabled={update.isPending}>
+          <FieldLegend>Personal information</FieldLegend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="edit-first-name">First name</FieldLabel>
+              <Input
+                id="edit-first-name"
+                name="firstName"
+                defaultValue={employee.firstName}
+                maxLength={100}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-middle-name">Middle name</FieldLabel>
+              <Input
+                id="edit-middle-name"
+                name="middleName"
+                defaultValue={employee.middleName ?? ""}
+                maxLength={100}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-last-name">Last name</FieldLabel>
+              <Input
+                id="edit-last-name"
+                name="lastName"
+                defaultValue={employee.lastName}
+                maxLength={100}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-suffix">Suffix</FieldLabel>
+              <Input
+                id="edit-suffix"
+                name="suffix"
+                defaultValue={employee.suffix ?? ""}
+                maxLength={20}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-email">Employee email</FieldLabel>
+              <Input
+                id="edit-email"
+                name="email"
+                type="email"
+                defaultValue={employee.email}
+                maxLength={320}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-contact-number">
+                Contact number
+              </FieldLabel>
+              <Input
+                id="edit-contact-number"
+                name="contactNumber"
+                type="tel"
+                defaultValue={employee.contactNumber}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field className="sm:col-span-2">
+              <FieldLabel htmlFor="edit-address">
+                Residential address
+              </FieldLabel>
+              <Input
+                id="edit-address"
+                name="residentialAddress"
+                defaultValue={employee.residentialAddress}
+                maxLength={500}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-dob">Date of birth</FieldLabel>
+              <Input
+                id="edit-dob"
+                name="dateOfBirth"
+                type="date"
+                defaultValue={formatDateInput(employee.dateOfBirth)}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-gender">Gender</FieldLabel>
+              <Input
+                id="edit-gender"
+                name="gender"
+                defaultValue={employee.gender}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-civil-status">Civil status</FieldLabel>
+              <Input
+                id="edit-civil-status"
+                name="civilStatus"
+                defaultValue={employee.civilStatus}
+                maxLength={50}
+                required
+              />
+            </Field>
+          </div>
+        </FieldSet>
+
+        <FieldSet disabled={update.isPending}>
+          <FieldLegend>Employment and compensation</FieldLegend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="edit-branch">Branch</FieldLabel>
+              <NativeSelect
+                id="edit-branch"
+                name="branchId"
+                defaultValue={employee.branchId}
+                className="w-full"
+                required
+              >
+                {options.data?.branches.map((b) => (
+                  <NativeSelectOption key={b.id} value={b.id}>
+                    {b.name} · {b.code}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-department">Department</FieldLabel>
+              <NativeSelect
+                id="edit-department"
+                name="departmentId"
+                defaultValue={employee.departmentId}
+                className="w-full"
+                required
+              >
+                {options.data?.departments.map((d) => (
+                  <NativeSelectOption key={d.id} value={d.id}>
+                    {d.name} · {d.code}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-hire-date">Hire date</FieldLabel>
+              <Input
+                id="edit-hire-date"
+                name="hireDate"
+                type="date"
+                defaultValue={formatDateInput(employee.hireDate)}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-regularization-date">
+                Regularization date
+              </FieldLabel>
+              <Input
+                id="edit-regularization-date"
+                name="regularizationDate"
+                type="date"
+                defaultValue={formatDateInput(employee.regularizationDate)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-resignation-date">
+                Resignation / Exit date
+              </FieldLabel>
+              <Input
+                id="edit-resignation-date"
+                name="resignationDate"
+                type="date"
+                defaultValue={formatDateInput(employee.resignationDate)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-employment-type">
+                Employment type
+              </FieldLabel>
+              <NativeSelect
+                id="edit-employment-type"
+                name="employmentType"
+                defaultValue={employee.employmentType}
+                className="w-full"
+                required
+              >
+                {[
+                  "REGULAR",
+                  "PROBATIONARY",
+                  "CONTRACTUAL",
+                  "PROJECT_BASED",
+                  "PART_TIME",
+                ].map((type) => (
+                  <NativeSelectOption key={type} value={type}>
+                    {type.replaceAll("_", " ")}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-employment-status">
+                Employment status
+              </FieldLabel>
+              <NativeSelect
+                id="edit-employment-status"
+                name="employmentStatus"
+                defaultValue={employee.employmentStatus}
+                className="w-full"
+                required
+              >
+                {[
+                  "ACTIVE",
+                  "ON_LEAVE",
+                  "SUSPENDED",
+                  "RESIGNED",
+                  "TERMINATED",
+                  "RETIRED",
+                ].map((status) => (
+                  <NativeSelectOption key={status} value={status}>
+                    {status.replaceAll("_", " ")}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-pay-basis">Pay basis</FieldLabel>
+              <NativeSelect
+                id="edit-pay-basis"
+                name="payBasis"
+                value={payBasis}
+                onChange={(e) =>
+                  setPayBasis(e.target.value as "MONTHLY" | "DAILY" | "HOURLY")
+                }
+                className="w-full"
+                required
+              >
+                <NativeSelectOption value="MONTHLY">Monthly</NativeSelectOption>
+                <NativeSelectOption value="DAILY">Daily</NativeSelectOption>
+                <NativeSelectOption value="HOURLY">Hourly</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            {payBasis === "MONTHLY" && (
+              <Field>
+                <FieldLabel htmlFor="edit-monthly-rate">
+                  Monthly basic rate (PHP)
+                </FieldLabel>
+                <Input
+                  id="edit-monthly-rate"
+                  name="monthlyBasicRatePesos"
+                  type="number"
+                  min="0.01"
+                  max={Number.MAX_SAFE_INTEGER / 100}
+                  step="0.01"
+                  defaultValue={
+                    employee.compensation
+                      ? (
+                          Number(employee.compensation.basicRateMonthlyCents) /
+                          100
+                        ).toFixed(2)
+                      : ""
+                  }
+                  required
+                />
+              </Field>
+            )}
+            {payBasis === "DAILY" && (
+              <Field>
+                <FieldLabel htmlFor="edit-daily-rate">
+                  Daily basic rate (PHP)
+                </FieldLabel>
+                <Input
+                  id="edit-daily-rate"
+                  name="dailyBasicRatePesos"
+                  type="number"
+                  min="0.01"
+                  max={Number.MAX_SAFE_INTEGER / 100}
+                  step="0.01"
+                  defaultValue={
+                    employee.compensation
+                      ? (
+                          Number(employee.compensation.basicRateDailyCents) /
+                          100
+                        ).toFixed(2)
+                      : ""
+                  }
+                  required
+                />
+              </Field>
+            )}
+            {payBasis === "HOURLY" && (
+              <Field>
+                <FieldLabel htmlFor="edit-hourly-rate">
+                  Hourly basic rate (PHP)
+                </FieldLabel>
+                <Input
+                  id="edit-hourly-rate"
+                  name="hourlyBasicRatePesos"
+                  type="number"
+                  min="0.01"
+                  max={Number.MAX_SAFE_INTEGER / 100}
+                  step="0.01"
+                  defaultValue={
+                    employee.compensation
+                      ? (
+                          Number(employee.compensation.basicRateHourlyCents) /
+                          100
+                        ).toFixed(2)
+                      : ""
+                  }
+                  required
+                />
+              </Field>
+            )}
+          </div>
+          <div className="space-y-2 pt-2">
+            <Field orientation="horizontal">
+              <Checkbox
+                id="edit-managerial"
+                checked={isManagerial}
+                onCheckedChange={setIsManagerial}
+              />
+              <FieldLabel htmlFor="edit-managerial">
+                Managerial employee (PD 851 exclusion)
+              </FieldLabel>
+            </Field>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="edit-tax-exempt"
+                checked={isTaxExempt}
+                onCheckedChange={setIsTaxExempt}
+              />
+              <FieldLabel htmlFor="edit-tax-exempt">
+                Tax exempt (requires verified eligibility)
+              </FieldLabel>
+            </Field>
+          </div>
+        </FieldSet>
+
+        <FieldSet disabled={update.isPending}>
+          <FieldLegend>Statutory and bank information</FieldLegend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="edit-tin">TIN</FieldLabel>
+              <Input
+                id="edit-tin"
+                name="tin"
+                defaultValue={employee.tin}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-sss">SSS number</FieldLabel>
+              <Input
+                id="edit-sss"
+                name="sssNo"
+                defaultValue={employee.sssNo}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-philhealth">
+                PhilHealth number
+              </FieldLabel>
+              <Input
+                id="edit-philhealth"
+                name="philhealthNo"
+                defaultValue={employee.philhealthNo}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-pagibig">Pag-IBIG number</FieldLabel>
+              <Input
+                id="edit-pagibig"
+                name="pagibigNo"
+                defaultValue={employee.pagibigNo}
+                maxLength={50}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-bank-name">Bank name</FieldLabel>
+              <Input
+                id="edit-bank-name"
+                name="bankName"
+                defaultValue={employee.bankName}
+                maxLength={100}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="edit-bank-account-number">
+                Bank account number
+              </FieldLabel>
+              <Input
+                id="edit-bank-account-number"
+                name="bankAccountNumber"
+                defaultValue={employee.bankAccountNumber}
+                maxLength={100}
+                required
+              />
+            </Field>
+            <Field className="sm:col-span-2">
+              <FieldLabel htmlFor="edit-bank-account-name">
+                Bank account name
+              </FieldLabel>
+              <Input
+                id="edit-bank-account-name"
+                name="bankAccountName"
+                defaultValue={employee.bankAccountName}
+                maxLength={200}
+                required
+              />
+            </Field>
+          </div>
+        </FieldSet>
+
+        {validationError && <FieldError>{validationError}</FieldError>}
+        {update.isError && (
+          <FieldError>
+            {update.error.data?.code === "CONFLICT"
+              ? "An employee record already exists with this email."
+              : update.error.data?.code === "BAD_REQUEST"
+                ? update.error.message ||
+                  "Employee details were rejected. Please review fields and dates."
+                : "Could not update employee. Please retry."}
+          </FieldError>
+        )}
+        <div className="flex gap-2">
+          <Button type="submit" disabled={update.isPending}>
+            {update.isPending ? "Saving changes…" : "Save changes"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={update.isPending}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      </FieldGroup>
+    </form>
+  );
+}
+
 function EmployeeProfile({ employee }: { employee: EmployeeData }) {
   const compensation = employee.compensation;
+  const fullName = [
+    employee.firstName,
+    employee.middleName,
+    employee.lastName,
+    employee.suffix,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const rows = [
-    ["Name", `${employee.firstName} ${employee.lastName}`],
+    ["Name", fullName],
     ["Employee number", employee.employeeNumber],
     ["Email", employee.email],
     ["Contact number", employee.contactNumber],
@@ -549,6 +1341,18 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
     ["Branch", employee.branch?.name ?? "Not recorded"],
     ["Department", employee.department?.name ?? "Not recorded"],
     ["Hire date", date(employee.hireDate)],
+    [
+      "Regularization date",
+      employee.regularizationDate
+        ? date(employee.regularizationDate)
+        : "Not recorded",
+    ],
+    [
+      "Resignation / Exit date",
+      employee.resignationDate
+        ? date(employee.resignationDate)
+        : "Not recorded",
+    ],
     ["Employment type", employee.employmentType?.replaceAll("_", " ")],
     ["Employment status", employee.employmentStatus?.replaceAll("_", " ")],
     ["Pay basis", employee.payBasis],

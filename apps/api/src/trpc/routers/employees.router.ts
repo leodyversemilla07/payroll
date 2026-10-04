@@ -68,16 +68,64 @@ export function createEmployeesRouter(ctx: RouterContext) {
             bankName: z.string().trim().min(1).max(100),
             bankAccountNumber: z.string().trim().min(1).max(100),
             bankAccountName: z.string().trim().min(1).max(200),
+            payBasis: z.enum(['MONTHLY', 'DAILY', 'HOURLY']).default('MONTHLY'),
             monthlyBasicRatePesos: z
               .number()
               .positive()
               .finite()
               .max(Number.MAX_SAFE_INTEGER / 100)
-              .multipleOf(0.01),
+              .multipleOf(0.01)
+              .optional(),
+            dailyBasicRatePesos: z
+              .number()
+              .positive()
+              .finite()
+              .max(Number.MAX_SAFE_INTEGER / 100)
+              .multipleOf(0.01)
+              .optional(),
+            hourlyBasicRatePesos: z
+              .number()
+              .positive()
+              .finite()
+              .max(Number.MAX_SAFE_INTEGER / 100)
+              .multipleOf(0.01)
+              .optional(),
             isTaxExempt: z.boolean().optional(),
             isManagerial: z.boolean().optional(),
           })
           .superRefine((input, context) => {
+            if (
+              input.payBasis === 'MONTHLY' &&
+              input.monthlyBasicRatePesos === undefined
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['monthlyBasicRatePesos'],
+                message: 'Monthly basic rate is required for monthly pay basis',
+              });
+            }
+            if (
+              input.payBasis === 'DAILY' &&
+              input.dailyBasicRatePesos === undefined &&
+              input.monthlyBasicRatePesos === undefined
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['dailyBasicRatePesos'],
+                message: 'Daily basic rate is required for daily pay basis',
+              });
+            }
+            if (
+              input.payBasis === 'HOURLY' &&
+              input.hourlyBasicRatePesos === undefined &&
+              input.monthlyBasicRatePesos === undefined
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['hourlyBasicRatePesos'],
+                message: 'Hourly basic rate is required for hourly pay basis',
+              });
+            }
             if (input.dateOfBirth > new Date().toISOString().slice(0, 10)) {
               context.addIssue({
                 code: 'custom',
@@ -143,6 +191,193 @@ export function createEmployeesRouter(ctx: RouterContext) {
           throw new TRPCError({
             code: 'INTERNAL_SERVER_ERROR',
             message: 'Employee creation failed. Please retry.',
+            cause: error,
+          });
+        }
+      }),
+
+    update: hrProcedure
+      .input(
+        z
+          .object({
+            id: z.string().uuid(),
+            branchId: z.string().uuid().optional(),
+            departmentId: z.string().uuid().optional(),
+            firstName: z.string().trim().min(1).max(100).optional(),
+            middleName: z.string().trim().max(100).nullable().optional(),
+            lastName: z.string().trim().min(1).max(100).optional(),
+            suffix: z.string().trim().max(20).nullable().optional(),
+            email: z.string().trim().email().max(320).optional(),
+            contactNumber: z.string().trim().min(1).max(50).optional(),
+            residentialAddress: z.string().trim().min(1).max(500).optional(),
+            gender: z.string().trim().min(1).max(50).optional(),
+            civilStatus: z.string().trim().min(1).max(50).optional(),
+            dateOfBirth: z.string().date().optional(),
+            tin: z.string().trim().min(1).max(50).optional(),
+            sssNo: z.string().trim().min(1).max(50).optional(),
+            philhealthNo: z.string().trim().min(1).max(50).optional(),
+            pagibigNo: z.string().trim().min(1).max(50).optional(),
+            hireDate: z.string().date().optional(),
+            regularizationDate: z.string().date().nullable().optional(),
+            resignationDate: z.string().date().nullable().optional(),
+            employmentType: z
+              .enum([
+                'REGULAR',
+                'PROBATIONARY',
+                'CONTRACTUAL',
+                'PROJECT_BASED',
+                'PART_TIME',
+              ])
+              .optional(),
+            employmentStatus: z
+              .enum([
+                'ACTIVE',
+                'ON_LEAVE',
+                'SUSPENDED',
+                'RESIGNED',
+                'TERMINATED',
+                'RETIRED',
+              ])
+              .optional(),
+            bankName: z.string().trim().min(1).max(100).optional(),
+            bankAccountNumber: z.string().trim().min(1).max(100).optional(),
+            bankAccountName: z.string().trim().min(1).max(200).optional(),
+            payBasis: z.enum(['MONTHLY', 'DAILY', 'HOURLY']).optional(),
+            monthlyBasicRatePesos: z
+              .number()
+              .positive()
+              .finite()
+              .max(Number.MAX_SAFE_INTEGER / 100)
+              .multipleOf(0.01)
+              .optional(),
+            dailyBasicRatePesos: z
+              .number()
+              .positive()
+              .finite()
+              .max(Number.MAX_SAFE_INTEGER / 100)
+              .multipleOf(0.01)
+              .optional(),
+            hourlyBasicRatePesos: z
+              .number()
+              .positive()
+              .finite()
+              .max(Number.MAX_SAFE_INTEGER / 100)
+              .multipleOf(0.01)
+              .optional(),
+            isTaxExempt: z.boolean().optional(),
+            isManagerial: z.boolean().optional(),
+          })
+          .superRefine((input, context) => {
+            if (
+              input.dateOfBirth &&
+              input.dateOfBirth > new Date().toISOString().slice(0, 10)
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['dateOfBirth'],
+                message: 'Date of birth cannot be in the future',
+              });
+            }
+            if (
+              input.hireDate &&
+              input.dateOfBirth &&
+              input.hireDate < input.dateOfBirth
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['hireDate'],
+                message: 'Hire date cannot precede date of birth',
+              });
+            }
+            if (
+              input.regularizationDate &&
+              input.hireDate &&
+              input.regularizationDate < input.hireDate
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['regularizationDate'],
+                message: 'Regularization date cannot precede hire date',
+              });
+            }
+            if (
+              input.resignationDate &&
+              input.hireDate &&
+              input.resignationDate < input.hireDate
+            ) {
+              context.addIssue({
+                code: 'custom',
+                path: ['resignationDate'],
+                message: 'Resignation date cannot precede hire date',
+              });
+            }
+          }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        try {
+          return await prisma.$transaction(async (transaction) => {
+            const { previous, current } = await employeesService.updateEmployee(
+              {
+                ...input,
+                organizationId: ctx.user.organizationId,
+              },
+              transaction,
+            );
+            await auditService.record(
+              {
+                user: ctx.user,
+                request: ctx.req,
+                action: 'UPDATE',
+                entityType: 'Employee',
+                entityId: current.id,
+                previousValue: {
+                  employeeNumber: previous.employeeNumber,
+                  email: previous.email,
+                  employmentStatus: previous.employmentStatus,
+                  payBasis: previous.payBasis,
+                  branchId: previous.branchId,
+                  departmentId: previous.departmentId,
+                },
+                newValue: {
+                  employeeNumber: current.employeeNumber,
+                  email: current.email,
+                  employmentStatus: current.employmentStatus,
+                  payBasis: current.payBasis,
+                  branchId: current.branchId,
+                  departmentId: current.departmentId,
+                },
+              },
+              transaction,
+            );
+            return current;
+          });
+        } catch (error) {
+          if (
+            error instanceof BadRequestException ||
+            error instanceof NotFoundException
+          ) {
+            throw new TRPCError({
+              code:
+                error instanceof NotFoundException
+                  ? 'NOT_FOUND'
+                  : 'BAD_REQUEST',
+              message: error.message,
+              cause: error,
+            });
+          }
+          if (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002'
+          ) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'An employee record already exists with this email.',
+              cause: error,
+            });
+          }
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Employee update failed. Please retry.',
             cause: error,
           });
         }
