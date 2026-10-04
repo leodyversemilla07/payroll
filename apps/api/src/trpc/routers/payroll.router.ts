@@ -215,5 +215,44 @@ export function createPayrollRouter(ctx: RouterContext) {
           ),
         ),
       ),
+
+    generatePayslipPdf: payrollProcedure
+      .input(z.object({ payslipId: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.generatePayslipPdf(
+            input.payslipId,
+            ctx.user.organizationId,
+          ),
+        ),
+      ),
+
+    generateRunPdfs: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.generateRunPdfs(input.runId, ctx.user.organizationId),
+        ),
+      ),
+
+    downloadPayslip: protectedProcedure
+      .input(z.object({ payslipId: z.string().uuid() }))
+      .query(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.downloadPayslip(
+            input.payslipId,
+            ctx.user.organizationId,
+            ctx.user,
+          ),
+        ),
+      ),
+
+    downloadRunZip: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.downloadRunZip(input.runId, ctx.user.organizationId),
+        ),
+      ),
   });
 }

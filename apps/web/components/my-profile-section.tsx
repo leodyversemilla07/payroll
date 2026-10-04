@@ -19,15 +19,18 @@ import { Separator } from "@workspace/ui/components/separator";
 import {
   Banknote,
   Calendar,
+  Download,
   Eye,
   EyeOff,
   FileText,
+  Loader2,
   ShieldAlert,
   User,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
+import { downloadBase64File } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
 import { MfaSettingsCard } from "./mfa-settings-card";
 import { usePortalUser } from "./payroll-portal";
@@ -179,6 +182,24 @@ export function MyProfileSection() {
     });
   };
 
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
+  const [downloadPdfError, setDownloadPdfError] = useState<string | null>(null);
+
+  const handleDownloadMyPayslipPdf = async (payslipId: string) => {
+    setDownloadingPdfId(payslipId);
+    setDownloadPdfError(null);
+    try {
+      const data = await utils.payroll.downloadPayslip.fetch({ payslipId });
+      downloadBase64File(data.dataBase64, data.fileName, "application/pdf");
+    } catch (err) {
+      setDownloadPdfError(
+        err instanceof Error ? err.message : "Failed to download payslip PDF.",
+      );
+    } finally {
+      setDownloadingPdfId(null);
+    }
+  };
+
   if (profile.isPending) {
     return (
       <div
@@ -253,7 +274,9 @@ export function MyProfileSection() {
                 {emp.employmentStatus}
               </span>
               <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                {emp.employmentType.replaceAll("_", " ")}
+                {emp.employmentType
+                  ? emp.employmentType.replaceAll("_", " ")
+                  : "REGULAR"}
               </span>
             </div>
           </div>
@@ -842,8 +865,8 @@ export function MyProfileSection() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
+                  <div className="flex items-center gap-2">
+                    <div className="text-right mr-2">
                       <span className="text-xs text-muted-foreground block">
                         Net Pay
                       </span>
@@ -855,9 +878,27 @@ export function MyProfileSection() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setSelectedPayslipId(slip.id)}
+                      onClick={() => {
+                        setSelectedPayslipId(slip.id);
+                        setDownloadPdfError(null);
+                      }}
                     >
                       View Details
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      title="Download PDF"
+                      aria-label={`Download PDF for ${slip.payrollRun.cutoffSequence}`}
+                      onClick={() => handleDownloadMyPayslipPdf(slip.id)}
+                      disabled={downloadingPdfId === slip.id}
+                    >
+                      {downloadingPdfId === slip.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1038,16 +1079,49 @@ export function MyProfileSection() {
                     </span>
                   </div>
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedPayslipId(null)}
+                      onClick={() =>
+                        handleDownloadMyPayslipPdf(activePayslip.id)
+                      }
+                      disabled={downloadingPdfId === activePayslip.id}
+                    >
+                      {downloadingPdfId === activePayslip.id ? (
+                        <>
+                          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                          Downloading PDF…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-1.5 size-3.5" />
+                          Download Official PDF
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedPayslipId(null);
+                        setDownloadPdfError(null);
+                      }}
                     >
                       Close
                     </Button>
                   </div>
+                  {downloadPdfError && (
+                    <p className="text-xs text-destructive">
+                      {downloadPdfError}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground text-center">
+                    Note: Payslip PDF is encrypted. Use your Date of Birth in
+                    MMDDYYYY format to unlock.
+                  </p>
                 </CardContent>
               </Card>
             </div>

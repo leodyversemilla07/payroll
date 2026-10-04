@@ -22,12 +22,15 @@ import {
   PayBasis,
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
+import type { AuthenticatedUser } from '../../auth/auth.service';
+import { StorageService } from '../../storage/storage.service';
 import { TimekeepingService } from '../timekeeping/timekeeping.service';
 import {
   isStandardRegularCutoff,
   resolveCutoffAllowances,
   selectCutoffLoans,
 } from './payroll.inputs';
+import { PayslipPdfService } from './payslip-pdf.service';
 
 const PAYROLL_TRANSACTION_RETRIES = 3;
 
@@ -79,7 +82,39 @@ export function assertValidPayrollTransition(
 
 @Injectable()
 export class PayrollService {
-  constructor(private readonly timekeepingService: TimekeepingService) {}
+  private readonly payslipPdfService: PayslipPdfService;
+
+  constructor(
+    private readonly timekeepingService: TimekeepingService,
+    payslipPdfService?: PayslipPdfService,
+  ) {
+    this.payslipPdfService =
+      payslipPdfService ?? new PayslipPdfService(new StorageService());
+  }
+
+  async generatePayslipPdf(payslipId: string, organizationId: string) {
+    return this.payslipPdfService.generatePayslipPdf(payslipId, organizationId);
+  }
+
+  async generateRunPdfs(runId: string, organizationId: string) {
+    return this.payslipPdfService.generateRunPdfs(runId, organizationId);
+  }
+
+  async downloadPayslip(
+    payslipId: string,
+    organizationId: string,
+    requestingUser: AuthenticatedUser,
+  ) {
+    return this.payslipPdfService.downloadPayslip(
+      payslipId,
+      organizationId,
+      requestingUser,
+    );
+  }
+
+  async downloadRunZip(runId: string, organizationId: string) {
+    return this.payslipPdfService.downloadRunZip(runId, organizationId);
+  }
 
   async listPayrollRuns(organizationId: string) {
     return prisma.payrollRun.findMany({
