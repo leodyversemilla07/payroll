@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@workspace/ui/components/button";
+import { Button, buttonVariants } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
@@ -10,14 +10,18 @@ import {
 } from "@workspace/ui/components/card";
 import { Field, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   AlertCircle,
   Calendar,
   CheckCircle,
   Clock,
+  Loader2,
+  Shield,
   Timer,
   UserCheck,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
@@ -44,7 +48,7 @@ function formatTime(value: Date | string | null | undefined) {
 }
 
 export function MyAttendanceSection() {
-  const { user } = usePortalUser();
+  const { user, isStaff } = usePortalUser();
 
   const today = manilaToday();
   const defaultStart = `${today.slice(0, 7)}-01`;
@@ -66,6 +70,58 @@ export function MyAttendanceSection() {
       retry: false,
     },
   );
+
+  if (!user.employeeId) {
+    return (
+      <section className="space-y-6" aria-label="My Attendance">
+        {isStaff ? (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2 text-foreground font-semibold">
+                <Shield className="size-5 text-primary" />
+                Administrative Account Notice
+              </CardTitle>
+              <CardDescription>
+                You are signed in as an administrator (
+                {user.role.replaceAll("_", " ")}). Personal daily time records
+                and biometric punch tracking are only recorded for staff
+                enrolled in payroll.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                To inspect, correct, or import biometric attendance records for
+                employees across the company, visit the Attendance & DTR
+                workspace.
+              </p>
+              <div>
+                <Link
+                  href="/portal/attendance"
+                  className={buttonVariants({ variant: "default" })}
+                >
+                  Go to Attendance & DTR Workspace &rarr;
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card role="region" aria-label="Attendance unavailable">
+            <CardHeader>
+              <CardTitle className="text-base text-destructive flex items-center gap-2">
+                <AlertCircle className="size-5" />
+                Employee Profile Not Linked
+              </CardTitle>
+              <CardDescription>
+                Your user account is not linked to an employee profile. Please
+                contact your HR administrator to connect your account to your
+                payroll employee file.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+      </section>
+    );
+  }
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,9 +276,35 @@ export function MyAttendanceSection() {
         </CardHeader>
         <CardContent>
           {dtr.isPending ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Loading your daily time records…
-            </p>
+            <div role="status" className="space-y-4 py-2">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading your daily time records…</span>
+              </div>
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex justify-between border-b pb-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between py-2 border-b last:border-0"
+                  >
+                    <Skeleton className="h-3.5 w-24" />
+                    <Skeleton className="h-3.5 w-20" />
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-3.5 w-16" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : dtr.isError ? (
             <div className="space-y-2 py-4">
               <p role="alert" className="text-sm text-destructive">

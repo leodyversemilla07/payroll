@@ -285,13 +285,12 @@ async function fillEmployee(page: Page) {
   };
   for (const [label, value] of Object.entries(values))
     await form.getByLabel(label, { exact: true }).fill(value);
-  await form.getByLabel("Branch", { exact: true }).selectOption(branch.id);
-  await form
-    .getByLabel("Department", { exact: true })
-    .selectOption(department.id);
-  await form
-    .getByLabel("Employment type", { exact: true })
-    .selectOption("PROBATIONARY");
+  await form.getByLabel("Branch", { exact: true }).click();
+  await page.getByRole("option", { name: /Main office/ }).click();
+  await form.getByLabel("Department", { exact: true }).click();
+  await page.getByRole("option", { name: /Operations/ }).click();
+  await form.getByLabel("Employment type", { exact: true }).click();
+  await page.getByRole("option", { name: "PROBATIONARY" }).click();
   return form;
 }
 
@@ -308,8 +307,12 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
     name: "Create employee",
     exact: true,
   });
-  await expect(form.getByLabel("Branch", { exact: true })).toHaveValue("");
-  await expect(form.getByLabel("Department", { exact: true })).toHaveValue("");
+  await expect(form.getByLabel("Branch", { exact: true })).toContainText(
+    "Select a branch",
+  );
+  await expect(form.getByLabel("Department", { exact: true })).toContainText(
+    "Select a department",
+  );
   await form
     .getByRole("button", { name: "Create employee", exact: true })
     .click();
@@ -399,8 +402,8 @@ test("creation conflict keeps the form entries and allows a corrected retry", as
     "Check the email and retry",
   );
   await expect(form.getByLabel("First name")).toHaveValue("Ana");
-  await expect(form.getByLabel("Branch", { exact: true })).toHaveValue(
-    branch.id,
+  await expect(form.getByLabel("Branch", { exact: true })).toContainText(
+    branch.name,
   );
   await form.getByLabel("Employee email").fill("ana.corrected@test.invalid");
   await form
@@ -559,7 +562,8 @@ test("HR creates a daily-paid employee and views computed rates", async ({
   const state = await mockPortal(page, { empty: true });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = await fillEmployee(page);
-  await form.getByLabel("Pay basis", { exact: true }).selectOption("DAILY");
+  await form.getByLabel("Pay basis", { exact: true }).click();
+  await page.getByRole("option", { name: "Daily" }).click();
   await form
     .getByLabel("Daily basic rate (PHP)", { exact: true })
     .fill("1000.00");
@@ -597,7 +601,8 @@ test("HR updates an employee pay basis to HOURLY", async ({ page }) => {
     exact: true,
   });
   await details.getByRole("button", { name: "Edit employee" }).click();
-  await details.getByLabel("Pay basis", { exact: true }).selectOption("HOURLY");
+  await details.getByLabel("Pay basis", { exact: true }).click();
+  await page.getByRole("option", { name: "Hourly" }).click();
   await details
     .getByLabel("Hourly basic rate (PHP)", { exact: true })
     .fill("250.00");

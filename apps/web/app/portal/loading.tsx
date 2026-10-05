@@ -1,3 +1,5 @@
+import { WorkspaceLoadingSkeleton } from "@/components/workspace-loading-skeleton";
+
 export default function PortalLoading() {
-  return <p role="status">Loading workspace page…</p>;
+  return <WorkspaceLoadingSkeleton title="Loading workspace page…" />;
 }

@@ -170,13 +170,13 @@ test("review queue, preview, settlement and correction", async ({ page }) => {
     yearEnd.getByRole("button", { name: /Ana Santos/ }),
   ).toContainText("DEFICIENCY REVIEW");
 
-  await yearEnd
-    .getByLabel("Employee", { exact: true })
-    .selectOption(employee.id);
+  await yearEnd.getByLabel("Employee", { exact: true }).click();
+  await page.getByRole("option", { name: /Ana Santos/ }).click();
   await expect(
     yearEnd.getByRole("button", { name: /Ana Santos/ }),
   ).toHaveAttribute("aria-pressed", "true");
-  await yearEnd.getByLabel("Employee", { exact: true }).selectOption("");
+  await yearEnd.getByLabel("Employee", { exact: true }).click();
+  await page.getByRole("option", { name: "Select an employee" }).click();
   await expect(yearEnd.getByText("Prior-employer declaration:")).toHaveCount(0);
   await yearEnd.getByRole("button", { name: /Ana Santos/ }).click();
   await expect(yearEnd.getByText("Prior-employer declaration:")).toContainText(
@@ -545,9 +545,8 @@ for (const freshness of ["STALE", "UNVERIFIABLE"]) {
       name: "Year-end tax",
       exact: true,
     });
-    await yearEnd
-      .getByLabel("Employee", { exact: true })
-      .selectOption(employee.id);
+    await yearEnd.getByLabel("Employee", { exact: true }).click();
+    await page.getByRole("option", { name: /Ana Santos/ }).click();
     await expect(
       yearEnd
         .getByRole("alert")

@@ -32,6 +32,7 @@ const EXPECTED_PROCEDURES = [
   'users.list',
   'users.create',
   'users.updateAccess',
+  'users.linkEmployee',
   'employees.list',
   'employees.getById',
   'employees.getMyProfile',

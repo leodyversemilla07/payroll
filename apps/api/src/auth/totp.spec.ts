@@ -52,9 +52,9 @@ describe('TOTP (RFC 6238 / RFC 4226)', () => {
 
   it('formats standard otpauth URI correctly', () => {
     const secret = 'JBSWY3DPEHPK3PXP';
-    const uri = formatOtpauthUri('user@example.com', secret, 'SweldoPH');
+    const uri = formatOtpauthUri('user@example.com', secret, 'Payroll');
     expect(uri).toBe(
-      'otpauth://totp/SweldoPH:user%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=SweldoPH&algorithm=SHA1&digits=6&period=30',
+      'otpauth://totp/Payroll:user%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Payroll&algorithm=SHA1&digits=6&period=30',
     );
   });
 

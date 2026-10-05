@@ -401,9 +401,8 @@ async function load(page: Page) {
     name: "Leave management",
     exact: true,
   });
-  await section
-    .getByLabel("Leave employee", { exact: true })
-    .selectOption(employee.id);
+  await section.getByLabel("Leave employee", { exact: true }).click();
+  await page.getByRole("option", { name: /Ana Santos/ }).click();
   await section.getByLabel("Leave year").fill("2026");
   await section
     .getByRole("button", { name: "Load leave records", exact: true })
@@ -418,10 +417,17 @@ async function newRequest(page: Page, paid = true) {
     name: "File leave request",
     exact: true,
   });
-  await form.getByLabel("Pay treatment").selectOption(paid ? "PAID" : "UNPAID");
-  if (paid)
-    await form.getByLabel("Leave type", { exact: true }).selectOption("SIL");
-  else
+  await form.getByLabel("Pay treatment").click();
+  await page
+    .getByRole("option", {
+      name: paid ? "Paid leave" : "Unpaid leave",
+      exact: true,
+    })
+    .click();
+  if (paid) {
+    await form.getByLabel("Leave type", { exact: true }).click();
+    await page.getByRole("option", { name: /SIL/ }).click();
+  } else
     await form.getByLabel("Leave type", { exact: true }).fill("SPECIAL_UNPAID");
   await form.getByLabel("Leave start date").fill("2026-09-14");
   await form.getByLabel("Leave end date").fill("2026-09-14");
@@ -758,7 +764,8 @@ test("mobile leave cards fit without horizontal overflow and status filters reac
   await page.setViewportSize({ width: 390, height: 844 });
   const { reads } = await mockLeaves(page);
   const section = await load(page);
-  await section.getByLabel("Request status").selectOption("PENDING");
+  await section.getByLabel("Request status").click();
+  await page.getByRole("option", { name: "PENDING" }).click();
   await expect(
     section.getByRole("heading", { name: "SIL · PENDING", exact: true }),
   ).toBeVisible();
@@ -789,9 +796,8 @@ async function creditEditor(page: Page, allocate = false) {
       .getByRole("button", { name: "Allocate leave credits", exact: true })
       .click();
   else {
-    await section
-      .getByLabel("Recorded balance to adjust")
-      .selectOption("balance-1");
+    await section.getByLabel("Recorded balance to adjust").click();
+    await page.getByRole("option", { name: /SIL/ }).click();
     await section
       .getByRole("button", { name: "Adjust recorded credits", exact: true })
       .click();
@@ -1127,7 +1133,8 @@ test("HR reverses approved half-day leave with recorded restoration and retained
     section.getByText("Approved by user: original-approver"),
   ).toBeVisible();
   expect(saves[0]?.path).toBe("leaves.cancelApproved");
-  await section.getByLabel("Request status").selectOption("CANCELLED");
+  await section.getByLabel("Request status").click();
+  await page.getByRole("option", { name: "CANCELLED" }).click();
   await expect(
     section.getByRole("heading", { name: "SIL · CANCELLED", exact: true }),
   ).toBeVisible();

@@ -78,5 +78,28 @@ export function createUsersRouter(ctx: RouterContext) {
         });
         return user;
       }),
+
+    linkEmployee: hrProcedure
+      .input(
+        z.object({
+          userId: z.string().uuid(),
+          employeeId: z.string().uuid().nullable(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const user = await authService.linkEmployee({
+          ...input,
+          organizationId: ctx.user.organizationId,
+        });
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'UPDATE',
+          entityType: 'User',
+          entityId: user.id,
+          newValue: { employeeId: user.employeeId },
+        });
+        return user;
+      }),
   });
 }

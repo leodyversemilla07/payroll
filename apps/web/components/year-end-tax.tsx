@@ -17,10 +17,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import { Separator } from "@workspace/ui/components/separator";
+import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePortalUser } from "./payroll-portal";
@@ -122,7 +126,13 @@ export function YearEndTaxSection({
         {!taxYearValid ? (
           <p role="alert">Enter a tax year from 2023 to 2100.</p>
         ) : queue.isPending ? (
-          <p role="status">Loading review queue…</p>
+          <div
+            role="status"
+            className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+          >
+            <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+            <span>Loading review queue…</span>
+          </div>
         ) : queue.isError ? (
           <p role="alert">
             Could not load the review queue.{" "}
@@ -166,21 +176,22 @@ export function YearEndTaxSection({
         <div>
           <Field>
             <FieldLabel htmlFor="tax-employee">Employee</FieldLabel>
-            <NativeSelect
-              id="tax-employee"
-              value={employeeId}
-              onChange={(event) => setEmployeeId(event.currentTarget.value)}
-              className="w-full"
+            <Select
+              value={employeeId || "NONE"}
+              onValueChange={(val) => setEmployeeId(val === "NONE" ? "" : (val ?? ""))}
             >
-              <NativeSelectOption value="">
-                Select an employee
-              </NativeSelectOption>
-              {employees.map((entry) => (
-                <NativeSelectOption key={entry.id} value={entry.id}>
-                  {entry.firstName} {entry.lastName} · {entry.employeeNumber}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger id="tax-employee" className="w-full">
+                <SelectValue placeholder="Select an employee" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Select an employee</SelectItem>
+                {employees.map((entry) => (
+                  <SelectItem key={entry.id} value={entry.id}>
+                    {entry.firstName} {entry.lastName} · {entry.employeeNumber}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         </div>
         {selected && taxYearValid && (
@@ -229,7 +240,13 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
       {notice && <p role="status">{notice}</p>}
       <MutationError error={review.error} />
       {pending.isPending ? (
-        <p role="status">Loading corrections…</p>
+        <div
+          role="status"
+          className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+        >
+          <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+          <span>Loading corrections…</span>
+        </div>
       ) : pending.isError ? (
         <p role="alert">
           Could not load corrections.{" "}
@@ -383,7 +400,13 @@ function EmployeeTaxDetail({
         {employee.firstName} {employee.lastName} · {taxYear}
       </h3>
       {evidence.isPending ? (
-        <p role="status">Loading tax evidence…</p>
+        <div
+          role="status"
+          className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+        >
+          <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+          <span>Loading tax evidence…</span>
+        </div>
       ) : evidence.isError ? (
         <p role="alert">
           Could not load tax evidence.{" "}
@@ -1352,7 +1375,13 @@ function PreviewCard({
           {issued && <p role="status">Certificate issued.</p>}
           {voided && <p role="status">Certificate voided.</p>}
           {issuanceQuery.isPending ? (
-            <p role="status">Loading issuance…</p>
+            <div
+              role="status"
+              className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+            >
+              <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+              <span>Loading issuance…</span>
+            </div>
           ) : issuanceQuery.isError ? (
             <p role="alert">
               Could not verify certificate issuance.{" "}

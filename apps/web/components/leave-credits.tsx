@@ -20,9 +20,12 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -82,24 +85,24 @@ export function LeaveCreditTools({
                   <FieldLabel htmlFor="credit-balance">
                     Recorded balance to adjust
                   </FieldLabel>
-                  <NativeSelect
-                    id="credit-balance"
-                    className="w-full"
+                  <Select
                     value={selectedId}
                     disabled={disabled}
-                    onChange={(event) =>
-                      setSelectedId(event.currentTarget.value)
-                    }
+                    onValueChange={(val) => {
+                      if (val) setSelectedId(val);
+                    }}
                   >
-                    <NativeSelectOption value="">
-                      Select recorded type
-                    </NativeSelectOption>
-                    {balances.map((balance) => (
-                      <NativeSelectOption key={balance.id} value={balance.id}>
-                        {balance.leaveType}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="credit-balance" className="w-full">
+                      <SelectValue placeholder="Select recorded type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {balances.map((balance) => (
+                        <SelectItem key={balance.id} value={balance.id}>
+                          {balance.leaveType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="outline"

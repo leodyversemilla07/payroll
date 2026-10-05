@@ -38,7 +38,8 @@ import {
   principalKey,
 } from "@/lib/principal-query-provider";
 import { trpc } from "@/lib/trpc";
-import { PortalSidebar } from "./portal-sidebar";
+import { PortalSidebar, PortalSidebarSkeleton } from "./portal-sidebar";
+import { WorkspaceLoadingSkeleton } from "./workspace-loading-skeleton";
 
 const supportedRoles = [
   "SUPER_ADMIN",
@@ -86,6 +87,7 @@ export function PayrollPortal({
   const hasNavigation =
     !!me.data && !signedOut && supportedRoles.includes(me.data.role);
   const activeSection = usePortalSection();
+  const isEmployee = me.data?.role === "EMPLOYEE";
   const scope = me.data ? principalKey(me.data) : "";
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -106,13 +108,15 @@ export function PayrollPortal({
         defaultOpen={defaultSidebarOpen}
         className="text-foreground"
       >
-        {hasNavigation && me.data && (
+        {hasNavigation && me.data ? (
           <PortalSidebar
             key={scope}
             user={me.data}
             activeSection={activeSection.id}
           />
-        )}
+        ) : me.isPending ? (
+          <PortalSidebarSkeleton />
+        ) : null}
         <SidebarInset className="min-w-0">
           <a
             href="#workspace-content"
@@ -122,11 +126,12 @@ export function PayrollPortal({
           </a>
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[height] ease-linear md:rounded-t-2xl md:group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex min-w-0 items-center gap-2">
-              {hasNavigation && (
+              {(hasNavigation || me.isPending) && (
                 <>
                   <SidebarTrigger
                     aria-label="Toggle navigation"
                     className="-ml-1"
+                    disabled={me.isPending}
                   />
                   <Separator
                     orientation="vertical"
@@ -136,12 +141,14 @@ export function PayrollPortal({
               )}
               <span
                 className={
-                  hasNavigation ? "sr-only" : "text-base font-semibold"
+                  hasNavigation || me.isPending
+                    ? "sr-only"
+                    : "text-base font-semibold"
                 }
               >
                 Payroll
               </span>
-              {hasNavigation && (
+              {(hasNavigation || me.isPending) && (
                 <Breadcrumb className="min-w-0">
                   <BreadcrumbList className="flex-nowrap">
                     <BreadcrumbItem className="hidden md:inline-flex">
@@ -152,7 +159,9 @@ export function PayrollPortal({
                     <BreadcrumbSeparator className="hidden md:block" />
                     <BreadcrumbItem className="min-w-0">
                       <BreadcrumbPage className="truncate">
-                        {activeSection.label}
+                        {isEmployee && activeSection.id === "overview"
+                          ? "Dashboard"
+                          : activeSection.label}
                       </BreadcrumbPage>
                     </BreadcrumbItem>
                   </BreadcrumbList>
@@ -196,7 +205,13 @@ export function PayrollPortal({
               )}
             </div>
             {me.isPending || signedOut ? (
-              <p role="status">Checking your session…</p>
+              <WorkspaceLoadingSkeleton
+                title={
+                  signedOut
+                    ? "Redirecting to sign-in…"
+                    : "Checking your session…"
+                }
+              />
             ) : me.data ? (
               <>
                 {logout.isError && (
@@ -243,10 +258,14 @@ export function PayrollPortal({
                       <div className="space-y-6">
                         <div className="space-y-1">
                           <h1 className="text-2xl font-semibold tracking-tight">
-                            {activeSection.label}
+                            {isEmployee && activeSection.id === "overview"
+                              ? "Dashboard"
+                              : activeSection.label}
                           </h1>
                           <p className="text-sm text-muted-foreground">
-                            {activeSection.description}
+                            {isEmployee && activeSection.id === "overview"
+                              ? "View your employee self-service dashboard, leave balances, attendance summary, and payslips."
+                              : activeSection.description}
                           </p>
                         </div>
                         {isSectionAllowedForRole(

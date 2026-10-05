@@ -172,9 +172,8 @@ test("trigger, approve, cancel and disburse payroll runs", async ({ page }) => {
   const processRegion = page.getByRole("region", {
     name: "Process payroll run",
   });
-  await processRegion
-    .getByLabel("Cutoff", { exact: true })
-    .selectOption("SECOND_CUTOFF");
+  await processRegion.getByLabel("Cutoff", { exact: true }).click();
+  await page.getByRole("option", { name: /Second cutoff/ }).click();
   await processRegion.getByLabel("Regular run cutoff start").fill("2026-10-16");
   await processRegion.getByLabel("Regular run cutoff end").fill("2026-10-31");
   await processRegion.getByLabel("Regular run payment date").fill("2026-11-01");

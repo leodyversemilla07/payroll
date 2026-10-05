@@ -14,6 +14,8 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   KeyRound,
   ShieldAlert,
   ShieldCheck,
@@ -40,6 +42,7 @@ export function MfaSettingsCard() {
   // Disable state
   const [disableState, setDisableState] = useState<"IDLE" | "CONFIRM">("IDLE");
   const [disablePassword, setDisablePassword] = useState("");
+  const [showDisablePassword, setShowDisablePassword] = useState(false);
   const [disableCode, setDisableCode] = useState("");
 
   // Mutations
@@ -384,14 +387,36 @@ export function MfaSettingsCard() {
                     <FieldLabel htmlFor="disablePassword">
                       Current Password
                     </FieldLabel>
-                    <Input
-                      id="disablePassword"
-                      type="password"
-                      value={disablePassword}
-                      onChange={(e) => setDisablePassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="disablePassword"
+                        type={showDisablePassword ? "text" : "password"}
+                        value={disablePassword}
+                        onChange={(e) => setDisablePassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        required
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowDisablePassword((prev) => !prev)}
+                        className="absolute right-0 top-0 h-full w-9 text-muted-foreground hover:text-foreground"
+                        aria-label={showDisablePassword ? "Hide" : "Show"}
+                        title={
+                          showDisablePassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        {showDisablePassword ? (
+                          <EyeOff className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Eye className="size-4" aria-hidden="true" />
+                        )}
+                      </Button>
+                    </div>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="disableCode">

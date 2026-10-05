@@ -69,6 +69,7 @@ describe('holidays.router', () => {
       Role.HR_ADMIN,
       Role.PAYROLL_SPECIALIST,
       Role.DEPARTMENT_MANAGER,
+      Role.EMPLOYEE,
     ])('allows %s to list holidays', async (role) => {
       mockHolidaysService.list.mockResolvedValue([sampleHoliday]);
       const caller = router.createCaller(context(role));
@@ -82,13 +83,6 @@ describe('holidays.router', () => {
       const caller = router.createCaller(context(null));
       await expect(caller.list({})).rejects.toMatchObject({
         code: 'UNAUTHORIZED',
-      });
-    });
-
-    it('denies regular employee role from listing staff holiday calendar', async () => {
-      const caller = router.createCaller(context(Role.EMPLOYEE));
-      await expect(caller.list({})).rejects.toMatchObject({
-        code: 'FORBIDDEN',
       });
     });
   });

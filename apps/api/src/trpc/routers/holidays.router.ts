@@ -47,11 +47,16 @@ async function withHolidayErrors<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export function createHolidaysRouter(ctx: RouterContext) {
-  const { trpc, staffProcedure, hrProcedure, holidaysService, auditService } =
-    ctx;
+  const {
+    trpc,
+    protectedProcedure,
+    hrProcedure,
+    holidaysService,
+    auditService,
+  } = ctx;
 
   return trpc.router({
-    list: staffProcedure
+    list: protectedProcedure
       .input(listHolidaysSchema)
       .query(({ input, ctx }) =>
         holidaysService.list(ctx.user.organizationId, input?.year),

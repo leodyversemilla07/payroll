@@ -438,7 +438,7 @@ export class PayslipPdfService {
         .fillColor('#ffffff')
         .font('Helvetica-Bold')
         .fontSize(16)
-        .text('SWELDOPH ENTERPRISE PAYROLL', startX + 16, y + 10, {
+        .text('ENTERPRISE PAYROLL', startX + 16, y + 10, {
           width: pageWidth - 32,
         });
 

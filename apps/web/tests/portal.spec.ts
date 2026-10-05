@@ -172,7 +172,17 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
     "Not validated for live payroll",
   );
   await page.getByLabel("Email").fill("staff@example.com");
-  await page.getByLabel("Password").fill("password");
+  const passwordInput = page.getByLabel("Password");
+  await passwordInput.fill("password");
+  await expect(passwordInput).toHaveAttribute("type", "password");
+  const showPasswordBtn = page.getByRole("button", { name: "Show", exact: true });
+  await expect(showPasswordBtn).toBeVisible();
+  await showPasswordBtn.click();
+  await expect(passwordInput).toHaveAttribute("type", "text");
+  const hidePasswordBtn = page.getByRole("button", { name: "Hide", exact: true });
+  await expect(hidePasswordBtn).toBeVisible();
+  await hidePasswordBtn.click();
+  await expect(passwordInput).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),

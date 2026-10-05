@@ -29,6 +29,15 @@ const hrUser = {
   employeeId: "e-hr-1",
 };
 
+const unlinkedAdminUser = {
+  id: "u-admin-1",
+  organizationId: "org-1",
+  name: "System Administrator",
+  email: "sysadmin@example.com",
+  role: "SUPER_ADMIN",
+  employeeId: undefined,
+};
+
 const employeeProfile = {
   id: "e-emp-1",
   employeeNumber: "EMP-2026-001",
@@ -245,7 +254,11 @@ const overviewData = {
 
 async function setupAndLogin(
   page: Page,
-  user: typeof employeeUser | typeof managerUser | typeof hrUser,
+  user:
+    | typeof employeeUser
+    | typeof managerUser
+    | typeof hrUser
+    | typeof unlinkedAdminUser,
   extraHandlers?: Record<string, unknown>,
 ) {
   let signedIn = false;
@@ -310,6 +323,16 @@ async function setupAndLogin(
         "payroll.getMyPayslipById": employeePayslips[0],
         "timekeeping.getMyDTR": dtrRecords,
         "dashboard.getOverview": overviewData,
+        "holidays.list": [
+          {
+            id: "hol-1",
+            organizationId: "org-1",
+            date: "2026-12-25T00:00:00.000Z",
+            name: "Christmas Day",
+            dayType: "REGULAR_HOLIDAY",
+            isRecurring: true,
+          },
+        ],
       };
 
       if (path in data) {
@@ -583,10 +606,21 @@ test("employee role shows self-service navigation, not admin sections", async ({
 
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
 
-  // Employee should see self-service links
-  await expect(nav.getByText("My Profile")).toBeVisible();
+  // Employee should see self-service links (Dashboard, My Attendance, Holiday Calendar)
+  await expect(nav.getByText("Dashboard")).toBeVisible();
   await expect(nav.getByText("My Attendance")).toBeVisible();
   await expect(nav.getByText("Holiday Calendar")).toBeVisible();
+
+  // My Profile should NOT be in the sidebar navigation (available in user profile dropdown)
+  await expect(nav.getByText("My Profile")).toHaveCount(0);
+
+  // User profile dropdown should have Profile & Account
+  const userButton = page.getByLabel(`Account: ${employeeUser.name}`);
+  await expect(userButton).toBeVisible();
+  await userButton.click();
+  await expect(
+    page.getByRole("menuitem", { name: "Profile & Account" }),
+  ).toBeVisible();
 
   // Employee should NOT see admin sections
   await expect(nav.getByText("Employees", { exact: true })).toHaveCount(0);
@@ -728,3 +762,52 @@ test("HR admin accessing process-payroll sees Maker-Checker separation of duties
     makerCheckerCard.getByRole("link", { name: "Review Payroll Runs" }),
   ).toBeVisible();
 });
+
+test("unlinked administrator visiting my-profile sees administrative card and MFA settings", async ({
+  page,
+}) => {
+  await setupAndLogin(page, unlinkedAdminUser);
+
+  await page.goto("/portal/my-profile");
+  await expect(
+    page.getByRole("heading", { name: "System Administrator" }),
+  ).toBeVisible();
+  await expect(page.getByText("Administrative System Account")).toBeVisible();
+  await expect(
+    page.getByText("Two-Factor Authentication (TOTP)"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Employee Directory" }),
+  ).toBeVisible();
+});
+
+test("unlinked administrator visiting my-attendance sees administrative attendance notice", async ({
+  page,
+}) => {
+  await setupAndLogin(page, unlinkedAdminUser);
+
+  await page.goto("/portal/my-attendance");
+  await expect(page.getByText("Administrative Account Notice")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Go to Attendance & DTR Workspace" }),
+  ).toBeVisible();
+});
+
+test("employee can view holiday calendar in read-only mode without management controls", async ({
+  page,
+}) => {
+  await setupAndLogin(page, employeeUser);
+
+  await page.goto("/portal/holidays");
+  const section = page.getByRole("region", { name: "Holiday calendar" });
+  await expect(section).toBeVisible();
+  await expect(section.getByText("Holiday Calendar")).toBeVisible();
+
+  // Employee can view the configured holidays
+  await expect(section.getByText("Christmas Day")).toBeVisible();
+
+  // Employee should NOT have management buttons
+  await expect(section.getByRole("button", { name: "Add holiday" })).toHaveCount(0);
+  await expect(section.getByRole("button", { name: "Populate" })).toHaveCount(0);
+});
+

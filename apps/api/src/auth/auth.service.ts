@@ -164,6 +164,59 @@ export class AuthService {
     return updatedUser;
   }
 
+  async linkEmployee(input: {
+    userId: string;
+    organizationId: string;
+    employeeId: string | null;
+  }) {
+    const user = await prisma.user.findFirst({
+      where: { id: input.userId, organizationId: input.organizationId },
+      select: { id: true, employeeId: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (input.employeeId) {
+      const employee = await prisma.employee.findFirst({
+        where: {
+          id: input.employeeId,
+          organizationId: input.organizationId,
+        },
+        select: { id: true },
+      });
+      if (!employee) {
+        throw new NotFoundException('Employee not found');
+      }
+      const existingLink = await prisma.user.findFirst({
+        where: {
+          employeeId: input.employeeId,
+          NOT: { id: user.id },
+        },
+        select: { id: true, email: true },
+      });
+      if (existingLink) {
+        throw new ConflictException(
+          `Employee is already linked to user ${existingLink.email}`,
+        );
+      }
+    }
+
+    return prisma.user.update({
+      where: { id: user.id },
+      data: { employeeId: input.employeeId },
+      select: {
+        id: true,
+        employeeId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
   async authenticate(request: Request): Promise<AuthenticatedUser | null> {
     const token = this.readSessionToken(request);
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
@@ -360,7 +413,7 @@ export class AuthService {
       data: { mfaSecret: secret },
     });
 
-    const qrUri = formatOtpauthUri(user.email, secret, 'SweldoPH');
+    const qrUri = formatOtpauthUri(user.email, secret, 'Payroll');
     return { secret, qrUri };
   }
 

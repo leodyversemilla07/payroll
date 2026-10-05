@@ -281,8 +281,10 @@ test("HR_ADMIN views leave policies, creates a new VACATION policy, and sees it 
 
   await form.getByLabel("Leave Policy Code").fill("VACATION");
   await form.getByLabel("Annual Credits (Days / Year)").fill("15");
-  await form.getByLabel("Accrual Frequency").selectOption("MONTHLY");
-  await form.getByLabel("Year-End Carryover Policy").selectOption("CAPPED");
+  await form.getByLabel("Accrual Frequency").click();
+  await page.getByRole("option", { name: /Monthly/ }).click();
+  await form.getByLabel("Year-End Carryover Policy").click();
+  await page.getByRole("option", { name: /Capped/ }).click();
   await form.getByLabel("Maximum Carryover Days").fill("5");
   await form.getByLabel("Eligible After Tenure (Months)").fill("6");
 

@@ -194,9 +194,8 @@ test("HR_ADMIN views holiday list, creates new holiday, and sees it in table", a
 
   await addForm.getByLabel("Holiday date").fill("2026-06-12");
   await addForm.getByLabel("Holiday name").fill("Independence Day");
-  await addForm
-    .getByLabel("Day type classification")
-    .selectOption("REGULAR_HOLIDAY");
+  await addForm.getByLabel("Day type classification").click();
+  await page.getByRole("option", { name: "Regular Holiday" }).click();
   await addForm
     .getByRole("checkbox", { name: "Repeats annually on this month and day" })
     .check();

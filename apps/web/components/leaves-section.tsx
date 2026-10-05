@@ -22,9 +22,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { leaveSchedule } from "@/lib/leave-schedule";
@@ -111,23 +116,23 @@ export function LeavesSection({
             <FieldLegend>Load employee leave records</FieldLegend>
             <Field>
               <FieldLabel htmlFor="leave-employee">Leave employee</FieldLabel>
-              <NativeSelect
-                id="leave-employee"
-                value={employeeId}
-                onChange={(event) => setEmployeeId(event.currentTarget.value)}
-                className="w-full"
+              <Select
+                value={employeeId || undefined}
+                onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
               >
-                <NativeSelectOption value="">
-                  Select an employee
-                </NativeSelectOption>
-                {employees.map((employee) => (
-                  <NativeSelectOption key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName} ·{" "}
-                    {employee.employeeNumber}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="leave-employee" className="w-full">
+                  <SelectValue placeholder="Select an employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((employee) => (
+                    <SelectItem key={employee.id} value={employee.id}>
+                      {employee.firstName} {employee.lastName} ·{" "}
+                      {employee.employeeNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="leave-year">Leave year</FieldLabel>
@@ -246,7 +251,21 @@ function EmployeeLeaves({
         </CardHeader>
         <CardContent>
           {balances.isPending ? (
-            <p role="status">Loading leave balances…</p>
+            <div role="status" className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading leave balances…</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="p-3 space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-3 w-32" />
+                  </Card>
+                ))}
+              </div>
+            </div>
           ) : balances.data === undefined ? (
             <p role="alert">
               Could not load leave balances.{" "}
@@ -361,23 +380,47 @@ function EmployeeLeaves({
         <CardContent className="space-y-4">
           <Field>
             <FieldLabel htmlFor="leave-status">Request status</FieldLabel>
-            <NativeSelect
-              id="leave-status"
+            <Select
               value={status}
               disabled={busy || !!decision || !!cancellation}
-              onChange={(event) => setStatus(event.currentTarget.value)}
-              className="w-full"
+              onValueChange={(val) => {
+                if (val) setStatus(val);
+              }}
             >
-              <NativeSelectOption value="ALL">All statuses</NativeSelectOption>
-              {["PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((entry) => (
-                <NativeSelectOption key={entry} value={entry}>
-                  {entry}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger id="leave-status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All statuses</SelectItem>
+                {["PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((entry) => (
+                  <SelectItem key={entry} value={entry}>
+                    {entry}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           {requests.isPending ? (
-            <p role="status">Loading leave requests…</p>
+            <div role="status" className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading leave requests…</span>
+              </div>
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : requests.data === undefined ? (
             <p role="alert">
               Could not load leave requests.{" "}
@@ -679,48 +722,41 @@ function LeaveRequestForm({
               <FieldLegend>Request details</FieldLegend>
               <Field>
                 <FieldLabel htmlFor="leave-pay">Pay treatment</FieldLabel>
-                <NativeSelect
-                  id="leave-pay"
-                  value={payTreatment}
-                  onChange={(event) =>
-                    setPayTreatment(event.currentTarget.value)
-                  }
-                  className="w-full"
+                <Select
+                  value={payTreatment || undefined}
+                  onValueChange={(val) => setPayTreatment(val ?? "")}
                   required
                 >
-                  <NativeSelectOption value="">
-                    Select paid or unpaid
-                  </NativeSelectOption>
-                  <NativeSelectOption value="PAID">
-                    Paid leave
-                  </NativeSelectOption>
-                  <NativeSelectOption value="UNPAID">
-                    Unpaid leave
-                  </NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="leave-pay" className="w-full">
+                    <SelectValue placeholder="Select paid or unpaid" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PAID">Paid leave</SelectItem>
+                    <SelectItem value="UNPAID">Unpaid leave</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               {payTreatment === "PAID" ? (
                 <Field>
                   <FieldLabel htmlFor="leave-type-paid">Leave type</FieldLabel>
-                  <NativeSelect
-                    id="leave-type-paid"
+                  <Select
                     name="leaveType"
-                    defaultValue=""
-                    className="w-full"
                     required
                   >
-                    <NativeSelectOption value="">
-                      Select recorded balance type
-                    </NativeSelectOption>
-                    {balances.map((balance) => (
-                      <NativeSelectOption
-                        key={balance.id}
-                        value={balance.leaveType}
-                      >
-                        {balance.leaveType} · {balance.balance} available day(s)
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="leave-type-paid" className="w-full">
+                      <SelectValue placeholder="Select recorded balance type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {balances.map((balance) => (
+                        <SelectItem
+                          key={balance.id}
+                          value={balance.leaveType}
+                        >
+                          {balance.leaveType} · {balance.balance} available day(s)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {balances.length === 0 && (
                     <FieldDescription>
                       No recorded balance types are available. Configure

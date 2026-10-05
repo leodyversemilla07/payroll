@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Archive, Download, FileText, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { downloadBase64File } from "@/lib/download-file";
@@ -79,7 +80,20 @@ export function PayrollRunsSection() {
         </CardHeader>
         <CardContent>
           {runs.isPending ? (
-            <p role="status">Loading payroll runs…</p>
+            <div role="status" className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading payroll runs…</span>
+              </div>
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-lg border p-3.5 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3.5 w-72 max-w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : runs.isError ? (
             <p role="alert">
               Could not load payroll runs.{" "}
@@ -129,7 +143,20 @@ export function PayrollRunsSection() {
           </CardHeader>
           <CardContent>
             {details.isPending ? (
-              <p role="status">Loading payslips…</p>
+              <div role="status" className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                  <span>Loading payslips…</span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="rounded-lg border p-3 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : details.isError ? (
               <p role="alert">
                 Could not load payslips.{" "}

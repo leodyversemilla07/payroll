@@ -22,9 +22,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import {
   fromManilaInput,
@@ -192,23 +197,23 @@ export function TimekeepingSection({
             <FieldLegend>Load employee DTR</FieldLegend>
             <Field>
               <FieldLabel htmlFor="dtr-employee">DTR employee</FieldLabel>
-              <NativeSelect
-                id="dtr-employee"
-                value={employeeId}
-                onChange={(event) => setEmployeeId(event.currentTarget.value)}
-                className="w-full"
+              <Select
+                value={employeeId || undefined}
+                onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
               >
-                <NativeSelectOption value="">
-                  Select an employee
-                </NativeSelectOption>
-                {employees.map((employee) => (
-                  <NativeSelectOption key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName} ·{" "}
-                    {employee.employeeNumber}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="dtr-employee" className="w-full">
+                  <SelectValue placeholder="Select an employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((employee) => (
+                    <SelectItem key={employee.id} value={employee.id}>
+                      {employee.firstName} {employee.lastName} ·{" "}
+                      {employee.employeeNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {employeeListFailed && (
                 <FieldDescription>
                   Employee choices could not be loaded. Use Retry in the
@@ -252,7 +257,31 @@ export function TimekeepingSection({
         {!range ? (
           <p>Select an employee and load a date range.</p>
         ) : dtr.isPending ? (
-          <p role="status">Loading DTR records…</p>
+          <div role="status" className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+              <span>Loading DTR records…</span>
+            </div>
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex justify-between border-b pb-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="flex justify-between py-2 border-b last:border-0"
+                >
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3.5 w-32" />
+                  <Skeleton className="h-3.5 w-16" />
+                  <Skeleton className="h-3.5 w-16" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : dtr.data === undefined ? (
           <p role="alert">
             {dtr.error.data?.code === "NOT_FOUND"
@@ -578,22 +607,22 @@ function AttendanceEditor({
               </Field>
               <Field>
                 <FieldLabel htmlFor="attendance-day-type">Day type</FieldLabel>
-                <NativeSelect
-                  id="attendance-day-type"
+                <Select
                   name="dayType"
-                  defaultValue={original?.dayType ?? ""}
-                  className="w-full"
+                  defaultValue={original?.dayType ?? undefined}
                   required
                 >
-                  <NativeSelectOption value="">
-                    Select day type
-                  </NativeSelectOption>
-                  {dayTypes.map((type) => (
-                    <NativeSelectOption key={type} value={type}>
-                      {type.replaceAll("_", " ")}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger id="attendance-day-type" className="w-full">
+                    <SelectValue placeholder="Select day type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dayTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type.replaceAll("_", " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FieldDescription>
                   Combined holiday/rest-day classifications and double holidays
                   require manual review outside this form.

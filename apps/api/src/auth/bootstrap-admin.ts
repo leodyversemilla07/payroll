@@ -37,6 +37,11 @@ async function bootstrapAdmin(): Promise<void> {
     throw new Error(`A user with email ${email} already exists`);
   }
 
+  const matchingEmployee = await prisma.employee.findFirst({
+    where: { organizationId, email },
+    select: { id: true },
+  });
+
   const user = await prisma.user.create({
     data: {
       organizationId,
@@ -44,6 +49,7 @@ async function bootstrapAdmin(): Promise<void> {
       name,
       passwordHash: await hashPassword(password),
       role: 'SUPER_ADMIN',
+      employeeId: matchingEmployee?.id ?? null,
     },
   });
 

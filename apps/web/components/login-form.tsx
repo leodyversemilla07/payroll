@@ -17,6 +17,8 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -39,6 +41,7 @@ export function LoginForm() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [emailDraft, setEmailDraft] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<"CREDENTIALS" | "MFA">("CREDENTIALS");
   const [mfaTicket, setMfaTicket] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -124,9 +127,58 @@ export function LoginForm() {
 
   if (!sessionChecked) {
     return (
-      <p className="p-6" role="status">
-        Checking your session…
-      </p>
+      <main className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+        <div className="w-full max-w-sm">
+          <Card className="animate-in fade-in duration-300">
+            <CardHeader className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Loader2 className="size-4.5 animate-spin" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">
+                    Payroll
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Sign in to your account
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-9 w-full rounded-md" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <Skeleton className="h-9 w-full rounded-md" />
+              </div>
+              <div className="space-y-2 pt-2">
+                <Skeleton className="h-9 w-full rounded-md" />
+                <Skeleton className="h-9 w-full rounded-md" />
+              </div>
+              <div
+                role="status"
+                className="flex items-center justify-center gap-2 pt-1 text-xs text-muted-foreground"
+              >
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                <span>Checking your session…</span>
+              </div>
+            </CardContent>
+          </Card>
+          <p
+            role="note"
+            className="mt-6 text-center text-sm text-muted-foreground"
+          >
+            Not validated for live payroll. Regulatory, annual-tax/BIR 2316 and
+            bank-file checks remain outstanding.
+          </p>
+        </div>
+      </main>
     );
   }
 
@@ -244,13 +296,33 @@ export function LoginForm() {
                           Forgot your password?
                         </span>
                       </div>
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        autoComplete="current-password"
-                        required
-                      />
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          required
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          className="absolute right-0 top-0 h-full w-9 text-muted-foreground hover:text-foreground"
+                          aria-label={showPassword ? "Hide" : "Show"}
+                          title={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeOff className="size-4" aria-hidden="true" />
+                          ) : (
+                            <Eye className="size-4" aria-hidden="true" />
+                          )}
+                        </Button>
+                      </div>
                     </Field>
                     {login.isError && (
                       <FieldError>

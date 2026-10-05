@@ -137,7 +137,7 @@ export function verifyTotpCode(
 export function formatOtpauthUri(
   accountName: string,
   secret: string,
-  issuer = 'SweldoPH',
+  issuer = 'Payroll',
 ): string {
   const encodedIssuer = encodeURIComponent(issuer);
   const encodedAccount = encodeURIComponent(accountName);

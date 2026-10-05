@@ -20,12 +20,17 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   CalendarDays,
   CheckCircle2,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
@@ -251,28 +256,32 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
               >
                 Calendar Year:
               </label>
-              <NativeSelect
-                id="holiday-year-select"
+              <Select
                 value={String(selectedYear)}
-                onChange={(e) => {
-                  setSelectedYear(Number(e.target.value));
+                onValueChange={(val) => {
+                  if (!val) return;
+                  setSelectedYear(Number(val));
                   setStatusMessage(null);
                   setShowCreateForm(false);
                   setEditingHoliday(null);
                 }}
-                className="w-28 font-medium"
               >
-                {[
-                  currentYear - 1,
-                  currentYear,
-                  currentYear + 1,
-                  currentYear + 2,
-                ].map((year) => (
-                  <NativeSelectOption key={year} value={String(year)}>
-                    {year}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="holiday-year-select" className="w-28 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    currentYear - 1,
+                    currentYear,
+                    currentYear + 1,
+                    currentYear + 2,
+                  ].map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="text-xs text-muted-foreground">
@@ -340,22 +349,25 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                       <FieldLabel htmlFor="create-holiday-type">
                         Day type classification
                       </FieldLabel>
-                      <NativeSelect
-                        id="create-holiday-type"
+                      <Select
                         name="dayType"
                         defaultValue="REGULAR_HOLIDAY"
                         required
-                        className="w-full"
                       >
-                        {holidayDayTypes.map((type) => (
-                          <NativeSelectOption
-                            key={type.value}
-                            value={type.value}
-                          >
-                            {type.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        <SelectTrigger id="create-holiday-type" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {holidayDayTypes.map((type) => (
+                            <SelectItem
+                              key={type.value}
+                              value={type.value}
+                            >
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FieldDescription>
                         Regular holidays earn 100% pay if unworked, or 200% if
                         worked. Special non-working days earn 130% when worked.
@@ -430,22 +442,25 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                       <FieldLabel htmlFor="edit-holiday-type">
                         Day type classification
                       </FieldLabel>
-                      <NativeSelect
-                        id="edit-holiday-type"
+                      <Select
                         name="dayType"
                         defaultValue={editingHoliday.dayType}
                         required
-                        className="w-full"
                       >
-                        {holidayDayTypes.map((type) => (
-                          <NativeSelectOption
-                            key={type.value}
-                            value={type.value}
-                          >
-                            {type.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        <SelectTrigger id="edit-holiday-type" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {holidayDayTypes.map((type) => (
+                            <SelectItem
+                              key={type.value}
+                              value={type.value}
+                            >
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </Field>
 
                     <Field orientation="horizontal">
@@ -486,7 +501,26 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
           )}
 
           {holidaysQuery.isPending ? (
-            <p role="status">Loading holidays…</p>
+            <div role="status" className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading holidays…</span>
+              </div>
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-28" />
+                    </div>
+                    <Skeleton className="h-6 w-24 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : holidaysQuery.isError ? (
             <div
               role="alert"

@@ -18,9 +18,12 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import {
   AlertCircle,
   CheckCircle2,
@@ -479,50 +482,60 @@ export function LeavePoliciesSection({
                 <FieldLabel htmlFor="policy-accrual-frequency">
                   Accrual Frequency
                 </FieldLabel>
-                <NativeSelect
-                  id="policy-accrual-frequency"
+                <Select
                   value={policyAccrualFrequency}
-                  onChange={(e) =>
-                    setPolicyAccrualFrequency(
-                      e.target.value as "MONTHLY" | "QUARTERLY" | "ANNUAL",
-                    )
-                  }
+                  onValueChange={(val) => {
+                    if (val)
+                      setPolicyAccrualFrequency(
+                        val as "MONTHLY" | "QUARTERLY" | "ANNUAL",
+                      );
+                  }}
                 >
-                  <NativeSelectOption value="MONTHLY">
-                    Monthly (Annual credits / 12 per month)
-                  </NativeSelectOption>
-                  <NativeSelectOption value="QUARTERLY">
-                    Quarterly (Annual credits / 4 per quarter)
-                  </NativeSelectOption>
-                  <NativeSelectOption value="ANNUAL">
-                    Annual (Full allocation once per year)
-                  </NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="policy-accrual-frequency" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MONTHLY">
+                      Monthly (Annual credits / 12 per month)
+                    </SelectItem>
+                    <SelectItem value="QUARTERLY">
+                      Quarterly (Annual credits / 4 per quarter)
+                    </SelectItem>
+                    <SelectItem value="ANNUAL">
+                      Annual (Full allocation once per year)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="policy-carryover-policy">
                   Year-End Carryover Policy
                 </FieldLabel>
-                <NativeSelect
-                  id="policy-carryover-policy"
+                <Select
                   value={policyCarryoverPolicy}
-                  onChange={(e) =>
-                    setPolicyCarryoverPolicy(
-                      e.target.value as "NO_CARRYOVER" | "CAPPED" | "UNLIMITED",
-                    )
-                  }
+                  onValueChange={(val) => {
+                    if (val)
+                      setPolicyCarryoverPolicy(
+                        val as "NO_CARRYOVER" | "CAPPED" | "UNLIMITED",
+                      );
+                  }}
                 >
-                  <NativeSelectOption value="NO_CARRYOVER">
-                    No Carryover (Unused credits expire Dec 31)
-                  </NativeSelectOption>
-                  <NativeSelectOption value="CAPPED">
-                    Capped (Roll over up to maximum days)
-                  </NativeSelectOption>
-                  <NativeSelectOption value="UNLIMITED">
-                    Unlimited (Roll over all remaining balance)
-                  </NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="policy-carryover-policy" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NO_CARRYOVER">
+                      No Carryover (Unused credits expire Dec 31)
+                    </SelectItem>
+                    <SelectItem value="CAPPED">
+                      Capped (Roll over up to maximum days)
+                    </SelectItem>
+                    <SelectItem value="UNLIMITED">
+                      Unlimited (Roll over all remaining balance)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
 
               {policyCarryoverPolicy === "CAPPED" && (
@@ -641,40 +654,48 @@ export function LeavePoliciesSection({
 
               <Field>
                 <FieldLabel htmlFor="accrual-frequency">Frequency</FieldLabel>
-                <NativeSelect
-                  id="accrual-frequency"
+                <Select
                   value={accrualFrequency}
-                  onChange={(e) => {
-                    setAccrualFrequency(
-                      e.target.value as "MONTHLY" | "QUARTERLY" | "ANNUAL",
-                    );
-                    setAccrualPeriod("1");
+                  onValueChange={(val) => {
+                    if (val) {
+                      setAccrualFrequency(
+                        val as "MONTHLY" | "QUARTERLY" | "ANNUAL",
+                      );
+                      setAccrualPeriod("1");
+                    }
                   }}
                 >
-                  <NativeSelectOption value="MONTHLY">
-                    Monthly
-                  </NativeSelectOption>
-                  <NativeSelectOption value="QUARTERLY">
-                    Quarterly
-                  </NativeSelectOption>
-                  <NativeSelectOption value="ANNUAL">Annual</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="accrual-frequency" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MONTHLY">Monthly</SelectItem>
+                    <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                    <SelectItem value="ANNUAL">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
 
               {accrualFrequency === "MONTHLY" && (
                 <Field>
                   <FieldLabel htmlFor="accrual-period">Target Month</FieldLabel>
-                  <NativeSelect
-                    id="accrual-period"
+                  <Select
                     value={accrualPeriod}
-                    onChange={(e) => setAccrualPeriod(e.target.value)}
+                    onValueChange={(val) => {
+                      if (val) setAccrualPeriod(val);
+                    }}
                   >
-                    {monthsList.map((m) => (
-                      <NativeSelectOption key={m.value} value={m.value}>
-                        {m.label}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="accrual-period" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthsList.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
 
@@ -683,17 +704,23 @@ export function LeavePoliciesSection({
                   <FieldLabel htmlFor="accrual-period">
                     Target Quarter
                   </FieldLabel>
-                  <NativeSelect
-                    id="accrual-period"
+                  <Select
                     value={accrualPeriod}
-                    onChange={(e) => setAccrualPeriod(e.target.value)}
+                    onValueChange={(val) => {
+                      if (val) setAccrualPeriod(val);
+                    }}
                   >
-                    {quartersList.map((q) => (
-                      <NativeSelectOption key={q.value} value={q.value}>
-                        {q.label}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="accrual-period" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {quartersList.map((q) => (
+                        <SelectItem key={q.value} value={q.value}>
+                          {q.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
 
@@ -701,22 +728,24 @@ export function LeavePoliciesSection({
                 <FieldLabel htmlFor="accrual-leave-type">
                   Filter Leave Type (Optional)
                 </FieldLabel>
-                <NativeSelect
-                  id="accrual-leave-type"
-                  value={accrualLeaveType}
-                  onChange={(e) => setAccrualLeaveType(e.target.value)}
+                <Select
+                  value={accrualLeaveType || "ALL"}
+                  onValueChange={(val) => setAccrualLeaveType(val === "ALL" ? "" : (val ?? ""))}
                 >
-                  <NativeSelectOption value="">
-                    All Active Policies
-                  </NativeSelectOption>
-                  {policies
-                    .filter((p) => p.isActive)
-                    .map((p) => (
-                      <NativeSelectOption key={p.id} value={p.leaveType}>
-                        {p.leaveType}
-                      </NativeSelectOption>
-                    ))}
-                </NativeSelect>
+                  <SelectTrigger id="accrual-leave-type" className="w-full">
+                    <SelectValue placeholder="All Active Policies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Active Policies</SelectItem>
+                    {policies
+                      .filter((p) => p.isActive)
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.leaveType}>
+                          {p.leaveType}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
 
@@ -880,22 +909,24 @@ export function LeavePoliciesSection({
                 <FieldLabel htmlFor="carryover-leave-type">
                   Filter Leave Type (Optional)
                 </FieldLabel>
-                <NativeSelect
-                  id="carryover-leave-type"
-                  value={carryoverLeaveType}
-                  onChange={(e) => setCarryoverLeaveType(e.target.value)}
+                <Select
+                  value={carryoverLeaveType || "ALL"}
+                  onValueChange={(val) => setCarryoverLeaveType(val === "ALL" ? "" : (val ?? ""))}
                 >
-                  <NativeSelectOption value="">
-                    All Carryover Policies
-                  </NativeSelectOption>
-                  {policies
-                    .filter((p) => p.carryoverPolicy !== "NO_CARRYOVER")
-                    .map((p) => (
-                      <NativeSelectOption key={p.id} value={p.leaveType}>
-                        {p.leaveType} ({p.carryoverPolicy})
-                      </NativeSelectOption>
-                    ))}
-                </NativeSelect>
+                  <SelectTrigger id="carryover-leave-type" className="w-full">
+                    <SelectValue placeholder="All Carryover Policies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Carryover Policies</SelectItem>
+                    {policies
+                      .filter((p) => p.carryoverPolicy !== "NO_CARRYOVER")
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.leaveType}>
+                          {p.leaveType} ({p.carryoverPolicy})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
 

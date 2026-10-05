@@ -22,9 +22,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -87,7 +92,29 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
             </p>
           )}
           {employees.isPending ? (
-            <p role="status">Loading employees…</p>
+            <div role="status" className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                <span>Loading employees…</span>
+              </div>
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="size-9 rounded-full" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : employees.isError ? (
             <p role="alert">
               Could not load employees.{" "}
@@ -392,46 +419,52 @@ function CreateEmployeeForm({
                 <FieldLegend>Employment and compensation</FieldLegend>
                 <Field>
                   <FieldLabel htmlFor="employee-branch">Branch</FieldLabel>
-                  <NativeSelect
-                    id="employee-branch"
+                  <Select
                     name="branchId"
-                    defaultValue=""
-                    className="w-full"
+                    items={options.data.branches.map((b) => ({
+                      value: b.id,
+                      label: `${b.name} · ${b.code}`,
+                    }))}
                     required
                   >
-                    <NativeSelectOption value="">
-                      Select a branch
-                    </NativeSelectOption>
-                    {options.data.branches.map((branch) => (
-                      <NativeSelectOption key={branch.id} value={branch.id}>
-                        {branch.name} · {branch.code}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="employee-branch" className="w-full">
+                      <SelectValue placeholder="Select a branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.data.branches.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name} · {branch.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="employee-department">
                     Department
                   </FieldLabel>
-                  <NativeSelect
-                    id="employee-department"
+                  <Select
                     name="departmentId"
-                    defaultValue=""
-                    className="w-full"
+                    items={options.data.departments.map((d) => ({
+                      value: d.id,
+                      label: `${d.name} · ${d.code}`,
+                    }))}
                     required
                   >
-                    <NativeSelectOption value="">
-                      Select a department
-                    </NativeSelectOption>
-                    {options.data.departments.map((department) => (
-                      <NativeSelectOption
-                        key={department.id}
-                        value={department.id}
-                      >
-                        {department.name} · {department.code}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="employee-department" className="w-full">
+                      <SelectValue placeholder="Select a department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.data.departments.map((department) => (
+                        <SelectItem
+                          key={department.id}
+                          value={department.id}
+                        >
+                          {department.name} · {department.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <TextFields
                   fields={[
@@ -442,53 +475,52 @@ function CreateEmployeeForm({
                   <FieldLabel htmlFor="employee-employment-type">
                     Employment type
                   </FieldLabel>
-                  <NativeSelect
-                    id="employee-employment-type"
+                  <Select
                     name="employmentType"
-                    defaultValue=""
-                    className="w-full"
                     required
                   >
-                    <NativeSelectOption value="">
-                      Select employment type
-                    </NativeSelectOption>
-                    {[
-                      "REGULAR",
-                      "PROBATIONARY",
-                      "CONTRACTUAL",
-                      "PROJECT_BASED",
-                      "PART_TIME",
-                    ].map((type) => (
-                      <NativeSelectOption key={type} value={type}>
-                        {type.replaceAll("_", " ")}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger id="employee-employment-type" className="w-full">
+                      <SelectValue placeholder="Select employment type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        "REGULAR",
+                        "PROBATIONARY",
+                        "CONTRACTUAL",
+                        "PROJECT_BASED",
+                        "PART_TIME",
+                      ].map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type.replaceAll("_", " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="employee-pay-basis">
                     Pay basis
                   </FieldLabel>
-                  <NativeSelect
-                    id="employee-pay-basis"
+                  <Select
                     name="payBasis"
                     value={payBasis}
-                    onChange={(e) =>
-                      setPayBasis(
-                        e.target.value as "MONTHLY" | "DAILY" | "HOURLY",
-                      )
-                    }
-                    className="w-full"
+                    onValueChange={(val) => {
+                      if (val)
+                        setPayBasis(
+                          val as "MONTHLY" | "DAILY" | "HOURLY",
+                        );
+                    }}
                     required
                   >
-                    <NativeSelectOption value="MONTHLY">
-                      Monthly
-                    </NativeSelectOption>
-                    <NativeSelectOption value="DAILY">Daily</NativeSelectOption>
-                    <NativeSelectOption value="HOURLY">
-                      Hourly
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    <SelectTrigger id="employee-pay-basis" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTHLY">Monthly</SelectItem>
+                      <SelectItem value="DAILY">Daily</SelectItem>
+                      <SelectItem value="HOURLY">Hourly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 {payBasis === "MONTHLY" && (
                   <Field>
@@ -982,35 +1014,49 @@ function EditEmployeeForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="edit-branch">Branch</FieldLabel>
-              <NativeSelect
-                id="edit-branch"
+              <Select
                 name="branchId"
-                defaultValue={employee.branchId}
-                className="w-full"
+                defaultValue={employee.branchId ?? employee.branch?.id}
+                items={options.data?.branches?.map((b) => ({
+                  value: b.id,
+                  label: `${b.name} · ${b.code}`,
+                }))}
                 required
               >
-                {options.data?.branches.map((b) => (
-                  <NativeSelectOption key={b.id} value={b.id}>
-                    {b.name} · {b.code}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="edit-branch" className="w-full">
+                  <SelectValue placeholder="Select a branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.data?.branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name} · {b.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-department">Department</FieldLabel>
-              <NativeSelect
-                id="edit-department"
+              <Select
                 name="departmentId"
-                defaultValue={employee.departmentId}
-                className="w-full"
+                defaultValue={employee.departmentId ?? employee.department?.id}
+                items={options.data?.departments?.map((d) => ({
+                  value: d.id,
+                  label: `${d.name} · ${d.code}`,
+                }))}
                 required
               >
-                {options.data?.departments.map((d) => (
-                  <NativeSelectOption key={d.id} value={d.id}>
-                    {d.name} · {d.code}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="edit-department" className="w-full">
+                  <SelectValue placeholder="Select a department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.data?.departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} · {d.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-hire-date">Hire date</FieldLabel>
@@ -1048,67 +1094,79 @@ function EditEmployeeForm({
               <FieldLabel htmlFor="edit-employment-type">
                 Employment type
               </FieldLabel>
-              <NativeSelect
-                id="edit-employment-type"
+              <Select
                 name="employmentType"
                 defaultValue={employee.employmentType}
-                className="w-full"
                 required
               >
-                {[
-                  "REGULAR",
-                  "PROBATIONARY",
-                  "CONTRACTUAL",
-                  "PROJECT_BASED",
-                  "PART_TIME",
-                ].map((type) => (
-                  <NativeSelectOption key={type} value={type}>
-                    {type.replaceAll("_", " ")}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="edit-employment-type" className="w-full">
+                  <SelectValue placeholder="Select employment type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "REGULAR",
+                    "PROBATIONARY",
+                    "CONTRACTUAL",
+                    "PROJECT_BASED",
+                    "PART_TIME",
+                  ].map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type.replaceAll("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-employment-status">
                 Employment status
               </FieldLabel>
-              <NativeSelect
-                id="edit-employment-status"
+              <Select
                 name="employmentStatus"
                 defaultValue={employee.employmentStatus}
-                className="w-full"
                 required
               >
-                {[
-                  "ACTIVE",
-                  "ON_LEAVE",
-                  "SUSPENDED",
-                  "RESIGNED",
-                  "TERMINATED",
-                  "RETIRED",
-                ].map((status) => (
-                  <NativeSelectOption key={status} value={status}>
-                    {status.replaceAll("_", " ")}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id="edit-employment-status" className="w-full">
+                  <SelectValue placeholder="Select employment status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "ACTIVE",
+                    "ON_LEAVE",
+                    "SUSPENDED",
+                    "RESIGNED",
+                    "TERMINATED",
+                    "RETIRED",
+                  ].map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status.replaceAll("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-pay-basis">Pay basis</FieldLabel>
-              <NativeSelect
-                id="edit-pay-basis"
+              <Select
                 name="payBasis"
                 value={payBasis}
-                onChange={(e) =>
-                  setPayBasis(e.target.value as "MONTHLY" | "DAILY" | "HOURLY")
-                }
-                className="w-full"
+                onValueChange={(val) => {
+                  if (val)
+                    setPayBasis(
+                      val as "MONTHLY" | "DAILY" | "HOURLY",
+                    );
+                }}
                 required
               >
-                <NativeSelectOption value="MONTHLY">Monthly</NativeSelectOption>
-                <NativeSelectOption value="DAILY">Daily</NativeSelectOption>
-                <NativeSelectOption value="HOURLY">Hourly</NativeSelectOption>
-              </NativeSelect>
+                <SelectTrigger id="edit-pay-basis" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MONTHLY">Monthly</SelectItem>
+                  <SelectItem value="DAILY">Daily</SelectItem>
+                  <SelectItem value="HOURLY">Hourly</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
             {payBasis === "MONTHLY" && (
               <Field>

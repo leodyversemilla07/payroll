@@ -260,7 +260,7 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
                 json: {
                   secret: "NKFR7NX6DXAHLCEO4VDEP3WPETCW4SEP",
                   qrUri:
-                    "otpauth://totp/SweldoPH:maria%40example.com?secret=NKFR7NX6DXAHLCEO4VDEP3WPETCW4SEP&issuer=SweldoPH",
+                    "otpauth://totp/Payroll:maria%40example.com?secret=NKFR7NX6DXAHLCEO4VDEP3WPETCW4SEP&issuer=Payroll",
                 },
               },
             },

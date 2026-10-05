@@ -155,7 +155,14 @@ export function getNavigationGroupsForRole(role?: string) {
       {
         label: "Self-service",
         items: [
-          sectionMap["my-profile"],
+          {
+            id: "overview" as const,
+            href: "/portal",
+            label: "Dashboard",
+            icon: LayoutDashboard,
+            description:
+              "View your employee self-service dashboard, leave balances, and attendance summary.",
+          },
           sectionMap["my-attendance"],
           sectionMap.holidays,
         ],

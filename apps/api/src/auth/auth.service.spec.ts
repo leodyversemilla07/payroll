@@ -25,7 +25,11 @@ jest.mock('@workspace/db', () => ({
   prisma: {
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
+    },
+    employee: {
+      findFirst: jest.fn(),
     },
     authSession: {
       create: jest.fn(),
@@ -78,7 +82,7 @@ describe('AuthService MFA', () => {
 
       expect(result.secret).toBeDefined();
       expect(result.qrUri).toContain(
-        'otpauth://totp/SweldoPH:user%40example.com?secret=',
+        'otpauth://totp/Payroll:user%40example.com?secret=',
       );
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
@@ -360,6 +364,90 @@ describe('AuthService MFA', () => {
           mfaBackupCodes: [],
         },
       });
+    });
+  });
+
+  describe('linkEmployee', () => {
+    it('successfully links an employee to a user', async () => {
+      (prisma.user.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ id: 'u-1', employeeId: null }) // find user
+        .mockResolvedValueOnce(null); // check existingLink
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 'emp-1',
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValueOnce({
+        id: 'u-1',
+        employeeId: 'emp-1',
+        name: 'Admin User',
+        email: 'admin@example.com',
+        role: 'SUPER_ADMIN',
+        isActive: true,
+      });
+
+      const res = await service.linkEmployee({
+        userId: 'u-1',
+        organizationId: 'org-1',
+        employeeId: 'emp-1',
+      });
+
+      expect(res.employeeId).toBe('emp-1');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u-1' },
+        data: { employeeId: 'emp-1' },
+        select: expect.any(Object),
+      });
+    });
+
+    it('successfully unlinks an employee from a user', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 'u-1',
+        employeeId: 'emp-1',
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValueOnce({
+        id: 'u-1',
+        employeeId: null,
+        name: 'Admin User',
+        email: 'admin@example.com',
+        role: 'SUPER_ADMIN',
+        isActive: true,
+      });
+
+      const res = await service.linkEmployee({
+        userId: 'u-1',
+        organizationId: 'org-1',
+        employeeId: null,
+      });
+
+      expect(res.employeeId).toBeNull();
+      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException if user is not found', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+      await expect(
+        service.linkEmployee({
+          userId: 'u-nonexistent',
+          organizationId: 'org-1',
+          employeeId: 'emp-1',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException if employee is not found', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 'u-1',
+        employeeId: null,
+      });
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+      await expect(
+        service.linkEmployee({
+          userId: 'u-1',
+          organizationId: 'org-1',
+          employeeId: 'emp-nonexistent',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

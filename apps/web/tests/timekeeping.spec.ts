@@ -207,7 +207,8 @@ async function loadDtr(page: Page) {
     name: "Attendance and DTR",
     exact: true,
   });
-  await section.getByLabel("DTR employee").selectOption(employee.id);
+  await section.getByLabel("DTR employee").click();
+  await page.getByRole("option", { name: /Ana Santos/ }).click();
   await section.getByLabel("DTR start date").fill("2026-09-01");
   await section.getByLabel("DTR end date").fill("2026-09-15");
   await section.getByRole("button", { name: "Load DTR", exact: true }).click();
@@ -313,7 +314,8 @@ test("rejects inverted ranges and inconsistent corrections without sending write
     name: "Attendance and DTR",
     exact: true,
   });
-  await section.getByLabel("DTR employee").selectOption(employee.id);
+  await section.getByLabel("DTR employee").click();
+  await page.getByRole("option", { name: /Ana Santos/ }).click();
   await section.getByLabel("DTR start date").fill("2026-09-10");
   await section.getByLabel("DTR end date").fill("2026-09-09");
   await section.getByRole("button", { name: "Load DTR", exact: true }).click();
@@ -366,9 +368,8 @@ test("new empty-range records never presume a full shift or approval", async ({
     editor.getByRole("checkbox", { name: "Approve for payroll", exact: true }),
   ).not.toBeChecked();
   await editor.getByLabel("Attendance date").fill("2026-09-11");
-  await editor
-    .getByLabel("Day type", { exact: true })
-    .selectOption("REGULAR_WORKDAY");
+  await editor.getByLabel("Day type", { exact: true }).click();
+  await page.getByRole("option", { name: /REGULAR WORKDAY/i }).click();
   await editor
     .getByLabel("Total worked minutes (including overtime)")
     .fill("0");
