@@ -14,6 +14,7 @@ import {
   Role,
 } from '@workspace/db';
 import { z } from 'zod';
+import { findDepartmentManagerDepartmentId } from '../../infrastructure/authorization/department-scope';
 import { serializePolicy } from '../../modules/leaves/leave-policies';
 import type { RouterContext } from '../../trpc/router-context';
 import {
@@ -282,27 +283,8 @@ export function createLeavesRouter(ctx: RouterContext) {
       .query(async ({ ctx }) => {
         let departmentId: string | undefined;
         if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
-          const managed = await prisma.department.findFirst({
-            where: {
-              organizationId: ctx.user.organizationId,
-              OR: [
-                { managerId: ctx.user.id },
-                ...(ctx.user.employeeId
-                  ? [{ managerId: ctx.user.employeeId }]
-                  : []),
-              ],
-            },
-            select: { id: true },
-          });
-          if (managed) {
-            departmentId = managed.id;
-          } else if (ctx.user.employeeId) {
-            const emp = await prisma.employee.findUnique({
-              where: { id: ctx.user.employeeId },
-              select: { departmentId: true },
-            });
-            departmentId = emp?.departmentId;
-          }
+          departmentId =
+            (await findDepartmentManagerDepartmentId(ctx.user)) ?? undefined;
           if (!departmentId) {
             return [];
           }
