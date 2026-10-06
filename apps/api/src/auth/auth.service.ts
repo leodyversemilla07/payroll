@@ -47,10 +47,6 @@ export type SignInResult =
 
 @Injectable()
 export class AuthService {
-  private readonly mfaTickets = new Map<
-    string,
-    { userId: string; expiresAt: number }
-  >();
   async listUsers(organizationId: string) {
     return prisma.user.findMany({
       where: { organizationId },
@@ -291,11 +287,13 @@ export class AuthService {
     }
 
     if (user.mfaEnabled && user.mfaSecret) {
-      this.cleanExpiredTickets();
       const mfaTicket = randomBytes(32).toString('base64url');
-      this.mfaTickets.set(mfaTicket, {
-        userId: user.id,
-        expiresAt: Date.now() + 5 * 60 * 1000,
+      await prisma.mfaTicket.create({
+        data: {
+          userId: user.id,
+          tokenHash: this.hashToken(mfaTicket),
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        },
       });
       return {
         requiresMfa: true,
@@ -338,14 +336,28 @@ export class AuthService {
     request: Request,
     response: Response,
   ): Promise<AuthResult> {
-    this.cleanExpiredTickets();
-    const ticket = this.mfaTickets.get(mfaTicket);
-    if (!ticket || ticket.expiresAt <= Date.now()) {
+    const ticket = await prisma.mfaTicket.findUnique({
+      where: { tokenHash: this.hashToken(mfaTicket) },
+      select: { userId: true, expiresAt: true },
+    });
+    const now = new Date();
+    if (!ticket || ticket.expiresAt <= now) {
       throw new UnauthorizedException(
         'MFA verification session expired. Please sign in again.',
       );
     }
-    this.mfaTickets.delete(mfaTicket);
+
+    const consumed = await prisma.mfaTicket.deleteMany({
+      where: {
+        tokenHash: this.hashToken(mfaTicket),
+        expiresAt: { gt: now },
+      },
+    });
+    if (consumed.count !== 1) {
+      throw new UnauthorizedException(
+        'MFA verification session expired. Please sign in again.',
+      );
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: ticket.userId },
@@ -487,15 +499,6 @@ export class AuthService {
     });
 
     return { success: true };
-  }
-
-  private cleanExpiredTickets(): void {
-    const now = Date.now();
-    for (const [ticket, entry] of this.mfaTickets.entries()) {
-      if (entry.expiresAt <= now) {
-        this.mfaTickets.delete(ticket);
-      }
-    }
   }
 
   async signOut(request: Request, response: Response): Promise<void> {

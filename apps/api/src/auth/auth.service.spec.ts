@@ -37,6 +37,11 @@ jest.mock('@workspace/db', () => ({
       deleteMany: jest.fn(),
       update: jest.fn(),
     },
+    mfaTicket: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   },
 }));
 
@@ -208,6 +213,13 @@ describe('AuthService MFA', () => {
         expect(typeof result.mfaTicket).toBe('string');
       }
       expect(mockResponse.cookie).not.toHaveBeenCalled();
+      expect(prisma.mfaTicket.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-1',
+          tokenHash: expect.any(String),
+          expiresAt: expect.any(Date),
+        },
+      });
     });
   });
 
@@ -221,6 +233,24 @@ describe('AuthService MFA', () => {
           mockResponse as unknown as Response,
         ),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an expired persisted ticket before loading the user', async () => {
+      (prisma.mfaTicket.findUnique as jest.Mock).mockResolvedValue({
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+
+      await expect(
+        service.verifyMfa(
+          'expired-ticket',
+          '123456',
+          mockRequest as Request,
+          mockResponse as unknown as Response,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.mfaTicket.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });
 
     it('validates TOTP code and creates session', async () => {
@@ -238,6 +268,18 @@ describe('AuthService MFA', () => {
         mfaSecret: secret,
         mfaBackupCodes: [],
         organizationId: 'org-1',
+      });
+      (prisma.mfaTicket.findUnique as jest.Mock).mockImplementation(
+        ({ where }: { where: { tokenHash: string } }) =>
+          where.tokenHash
+            ? {
+                userId: 'user-1',
+                expiresAt: new Date(Date.now() + 60_000),
+              }
+            : null,
+      );
+      (prisma.mfaTicket.deleteMany as jest.Mock).mockResolvedValue({
+        count: 1,
       });
 
       const loginResult = await service.signIn(
@@ -284,6 +326,13 @@ describe('AuthService MFA', () => {
         mfaBackupCodes: hashedCodes,
         organizationId: 'org-1',
       });
+      (prisma.mfaTicket.findUnique as jest.Mock).mockResolvedValue({
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      (prisma.mfaTicket.deleteMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
 
       const loginResult = await service.signIn(
         'user@example.com',
@@ -307,6 +356,26 @@ describe('AuthService MFA', () => {
         data: { mfaBackupCodes: [hashedCodes[1]] },
       });
       expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+
+    it('rejects a ticket that was already consumed', async () => {
+      (prisma.mfaTicket.findUnique as jest.Mock).mockResolvedValue({
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      (prisma.mfaTicket.deleteMany as jest.Mock).mockResolvedValue({
+        count: 0,
+      });
+
+      await expect(
+        service.verifyMfa(
+          'consumed-ticket',
+          '123456',
+          mockRequest as Request,
+          mockResponse as unknown as Response,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });
   });
 
