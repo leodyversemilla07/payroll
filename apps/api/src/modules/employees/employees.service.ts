@@ -96,11 +96,22 @@ export class EmployeesService {
         organizationId,
         ...(departmentId ? { departmentId } : {}),
       },
-      include: {
-        department: true,
-        branch: true,
-        compensation: true,
-        allowances: true,
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        suffix: true,
+        email: true,
+        employmentType: true,
+        employmentStatus: true,
+        department: {
+          select: { id: true, name: true, code: true },
+        },
+        branch: {
+          select: { id: true, name: true, code: true },
+        },
       },
       orderBy: { lastName: 'asc' },
     });
