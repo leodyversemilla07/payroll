@@ -24,6 +24,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -32,6 +33,29 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
+
+const EMPLOYMENT_TYPES = [
+  "REGULAR",
+  "PROBATIONARY",
+  "CONTRACTUAL",
+  "PROJECT_BASED",
+  "PART_TIME",
+].map((type) => ({ value: type, label: type.replaceAll("_", " ") }));
+
+const EMPLOYMENT_STATUSES = [
+  "ACTIVE",
+  "ON_LEAVE",
+  "SUSPENDED",
+  "RESIGNED",
+  "TERMINATED",
+  "RETIRED",
+].map((status) => ({ value: status, label: status.replaceAll("_", " ") }));
+
+const PAY_BASIS_ITEMS = [
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "DAILY", label: "Daily" },
+  { value: "HOURLY", label: "Hourly" },
+];
 
 type EmployeeData = NonNullable<
   inferRouterOutputs<AppRouter>["employees"]["getById"]
@@ -431,11 +455,13 @@ function CreateEmployeeForm({
                       <SelectValue placeholder="Select a branch" />
                     </SelectTrigger>
                     <SelectContent>
-                      {options.data.branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id}>
-                          {branch.name} · {branch.code}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {options.data.branches.map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id}>
+                            {branch.name} · {branch.code}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -455,14 +481,16 @@ function CreateEmployeeForm({
                       <SelectValue placeholder="Select a department" />
                     </SelectTrigger>
                     <SelectContent>
-                      {options.data.departments.map((department) => (
-                        <SelectItem
-                          key={department.id}
-                          value={department.id}
-                        >
-                          {department.name} · {department.code}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {options.data.departments.map((department) => (
+                          <SelectItem
+                            key={department.id}
+                            value={department.id}
+                          >
+                            {department.name} · {department.code}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -477,23 +505,20 @@ function CreateEmployeeForm({
                   </FieldLabel>
                   <Select
                     name="employmentType"
+                    items={EMPLOYMENT_TYPES}
                     required
                   >
                     <SelectTrigger id="employee-employment-type" className="w-full">
                       <SelectValue placeholder="Select employment type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[
-                        "REGULAR",
-                        "PROBATIONARY",
-                        "CONTRACTUAL",
-                        "PROJECT_BASED",
-                        "PART_TIME",
-                      ].map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type.replaceAll("_", " ")}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {EMPLOYMENT_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -503,6 +528,7 @@ function CreateEmployeeForm({
                   </FieldLabel>
                   <Select
                     name="payBasis"
+                    items={PAY_BASIS_ITEMS}
                     value={payBasis}
                     onValueChange={(val) => {
                       if (val)
@@ -513,12 +539,16 @@ function CreateEmployeeForm({
                     required
                   >
                     <SelectTrigger id="employee-pay-basis" className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder="Select pay basis" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MONTHLY">Monthly</SelectItem>
-                      <SelectItem value="DAILY">Daily</SelectItem>
-                      <SelectItem value="HOURLY">Hourly</SelectItem>
+                      <SelectGroup>
+                        {PAY_BASIS_ITEMS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -1027,11 +1057,13 @@ function EditEmployeeForm({
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {options.data?.branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name} · {b.code}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {options.data?.branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name} · {b.code}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
@@ -1050,11 +1082,13 @@ function EditEmployeeForm({
                   <SelectValue placeholder="Select a department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {options.data?.departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name} · {d.code}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {options.data?.departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name} · {d.code}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
@@ -1097,23 +1131,20 @@ function EditEmployeeForm({
               <Select
                 name="employmentType"
                 defaultValue={employee.employmentType}
+                items={EMPLOYMENT_TYPES}
                 required
               >
                 <SelectTrigger id="edit-employment-type" className="w-full">
                   <SelectValue placeholder="Select employment type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    "REGULAR",
-                    "PROBATIONARY",
-                    "CONTRACTUAL",
-                    "PROJECT_BASED",
-                    "PART_TIME",
-                  ].map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type.replaceAll("_", " ")}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {EMPLOYMENT_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
@@ -1124,24 +1155,20 @@ function EditEmployeeForm({
               <Select
                 name="employmentStatus"
                 defaultValue={employee.employmentStatus}
+                items={EMPLOYMENT_STATUSES}
                 required
               >
                 <SelectTrigger id="edit-employment-status" className="w-full">
                   <SelectValue placeholder="Select employment status" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    "ACTIVE",
-                    "ON_LEAVE",
-                    "SUSPENDED",
-                    "RESIGNED",
-                    "TERMINATED",
-                    "RETIRED",
-                  ].map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status.replaceAll("_", " ")}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {EMPLOYMENT_STATUSES.map((status) => (
+                      <SelectItem key={status.value} value={status.value}>
+                        {status.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
@@ -1149,6 +1176,7 @@ function EditEmployeeForm({
               <FieldLabel htmlFor="edit-pay-basis">Pay basis</FieldLabel>
               <Select
                 name="payBasis"
+                items={PAY_BASIS_ITEMS}
                 value={payBasis}
                 onValueChange={(val) => {
                   if (val)
@@ -1159,12 +1187,16 @@ function EditEmployeeForm({
                 required
               >
                 <SelectTrigger id="edit-pay-basis" className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select pay basis" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MONTHLY">Monthly</SelectItem>
-                  <SelectItem value="DAILY">Daily</SelectItem>
-                  <SelectItem value="HOURLY">Hourly</SelectItem>
+                  <SelectGroup>
+                    {PAY_BASIS_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>

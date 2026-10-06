@@ -18,6 +18,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -131,21 +132,27 @@ export function TriggerRunForms() {
               <Field>
                 <FieldLabel htmlFor="run-cutoff">Cutoff</FieldLabel>
                 <Select
+                  items={[
+                    { value: "FIRST_CUTOFF", label: "First cutoff" },
+                    { value: "SECOND_CUTOFF", label: "Second cutoff" },
+                  ]}
                   value={sequence}
                   onValueChange={(val) => {
                     if (val) setSequence(val);
                   }}
                 >
                   <SelectTrigger id="run-cutoff" className="w-full">
-                    <SelectValue />
+                    <SelectValue placeholder="Select cutoff" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="FIRST_CUTOFF">
-                      First cutoff
-                    </SelectItem>
-                    <SelectItem value="SECOND_CUTOFF">
-                      Second cutoff
-                    </SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="FIRST_CUTOFF">
+                        First cutoff
+                      </SelectItem>
+                      <SelectItem value="SECOND_CUTOFF">
+                        Second cutoff
+                      </SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>

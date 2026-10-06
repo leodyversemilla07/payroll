@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Clock,
   FileCheck,
+  Landmark,
   LayoutDashboard,
   UserCircle,
   Users,
@@ -50,6 +51,13 @@ export const portalSections = [
     description: "Configure Philippine statutory and company holidays.",
   },
   {
+    id: "loans",
+    href: "/portal/loans",
+    label: "Loans & advances",
+    icon: Landmark,
+    description: "Track employee loans, amortization, and ledger settlements.",
+  },
+  {
     id: "process-payroll",
     href: "/portal/process-payroll",
     label: "Process payroll",
@@ -88,15 +96,35 @@ export const portalSections = [
 
 export type PortalSection = (typeof portalSections)[number]["id"];
 
-export const portalNavigationGroups = [
-  { label: "Workspace", items: portalSections.slice(0, 5) },
-  { label: "Payroll operations", items: portalSections.slice(5, 8) },
-  { label: "Self-service", items: portalSections.slice(8) },
-];
-
 const sectionMap = Object.fromEntries(
   portalSections.map((s) => [s.id, s]),
 ) as Record<PortalSection, (typeof portalSections)[number]>;
+
+export const portalNavigationGroups = [
+  {
+    label: "Workspace",
+    items: [
+      sectionMap.overview,
+      sectionMap.employees,
+      sectionMap.attendance,
+      sectionMap.leaves,
+      sectionMap.holidays,
+    ],
+  },
+  {
+    label: "Payroll operations",
+    items: [
+      sectionMap.loans,
+      sectionMap["process-payroll"],
+      sectionMap["payroll-runs"],
+      sectionMap["year-end-tax"],
+    ],
+  },
+  {
+    label: "Self-service",
+    items: [sectionMap["my-profile"], sectionMap["my-attendance"]],
+  },
+];
 
 export const SECTION_PERMISSIONS: Record<PortalSection, readonly string[]> = {
   overview: [
@@ -121,6 +149,7 @@ export const SECTION_PERMISSIONS: Record<PortalSection, readonly string[]> = {
     "DEPARTMENT_MANAGER",
     "EMPLOYEE",
   ],
+  loans: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
   "process-payroll": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
   "payroll-runs": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
   "year-end-tax": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
@@ -190,11 +219,7 @@ export function getNavigationGroupsForRole(role?: string) {
   }
 
   // Staff roles: SUPER_ADMIN, HR_ADMIN, PAYROLL_SPECIALIST
-  return [
-    { label: "Workspace", items: portalSections.slice(0, 5) },
-    { label: "Payroll operations", items: portalSections.slice(5, 8) },
-    { label: "Self-service", items: portalSections.slice(8) },
-  ];
+  return portalNavigationGroups;
 }
 
 export function usePortalSection() {

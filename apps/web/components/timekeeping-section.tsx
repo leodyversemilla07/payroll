@@ -24,6 +24,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -198,6 +199,10 @@ export function TimekeepingSection({
             <Field>
               <FieldLabel htmlFor="dtr-employee">DTR employee</FieldLabel>
               <Select
+                items={employees.map((employee) => ({
+                  value: employee.id,
+                  label: `${employee.firstName} ${employee.lastName} · ${employee.employeeNumber}`,
+                }))}
                 value={employeeId || undefined}
                 onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
@@ -206,12 +211,14 @@ export function TimekeepingSection({
                   <SelectValue placeholder="Select an employee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName} ·{" "}
-                      {employee.employeeNumber}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.firstName} {employee.lastName} ·{" "}
+                        {employee.employeeNumber}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               {employeeListFailed && (
@@ -608,6 +615,10 @@ function AttendanceEditor({
               <Field>
                 <FieldLabel htmlFor="attendance-day-type">Day type</FieldLabel>
                 <Select
+                  items={dayTypes.map((type) => ({
+                    value: type,
+                    label: type.replaceAll("_", " "),
+                  }))}
                   name="dayType"
                   defaultValue={original?.dayType ?? undefined}
                   required
@@ -616,11 +627,13 @@ function AttendanceEditor({
                     <SelectValue placeholder="Select day type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {dayTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type.replaceAll("_", " ")}
-                      </SelectItem>
-                    ))}
+                    <SelectGroup>
+                      {dayTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type.replaceAll("_", " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
                 <FieldDescription>

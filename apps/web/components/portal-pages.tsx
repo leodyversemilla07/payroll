@@ -33,6 +33,7 @@ import { EmployeesSection } from "./employees-section";
 import { HolidaysSection } from "./holidays-section";
 import { LeavePoliciesSection } from "./leave-policies-section";
 import { LeavesSection } from "./leaves-section";
+import { LoansSection } from "./loans-section";
 import { usePortalUser } from "./payroll-portal";
 import { PendingLeaveApprovalsSection } from "./pending-leave-approvals";
 import { TimekeepingSection } from "./timekeeping-section";
@@ -676,9 +677,12 @@ export function PortalOverview() {
                     ? "active loan"
                     : "active loans"}
                 </p>
-                <span className="mt-3 block text-xs text-muted-foreground">
-                  Auto-deducted during payroll
-                </span>
+                <Link
+                  href="/portal/loans"
+                  className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
+                >
+                  Manage loans & advances &rarr;
+                </Link>
               </CardContent>
             </Card>
           </section>
@@ -890,4 +894,34 @@ export function PortalYearEndTax() {
 export function PortalHolidays() {
   const { canManageHolidays } = usePortalUser();
   return <HolidaysSection canManage={canManageHolidays} />;
+}
+
+export function PortalLoans() {
+  const { isStaff } = usePortalUser();
+
+  if (!isStaff) {
+    return (
+      <Card role="region" aria-label="Loans management restricted">
+        <CardHeader>
+          <CardTitle className="text-destructive">Access Restricted</CardTitle>
+          <CardDescription>
+            Managing employee loans requires payroll or HR staff privileges.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            You can view your personal loan deductions and advances in your profile.
+          </p>
+          <Link
+            href="/portal/my-profile"
+            className={buttonVariants({ variant: "default" })}
+          >
+            Go to My Profile
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <LoansSection />;
 }

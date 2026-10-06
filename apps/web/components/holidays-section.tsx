@@ -22,6 +22,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -257,6 +258,12 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                 Calendar Year:
               </label>
               <Select
+                items={[
+                  currentYear - 1,
+                  currentYear,
+                  currentYear + 1,
+                  currentYear + 2,
+                ].map((year) => ({ value: String(year), label: String(year) }))}
                 value={String(selectedYear)}
                 onValueChange={(val) => {
                   if (!val) return;
@@ -270,16 +277,18 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    currentYear - 1,
-                    currentYear,
-                    currentYear + 1,
-                    currentYear + 2,
-                  ].map((year) => (
-                    <SelectItem key={year} value={String(year)}>
-                      {year}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {[
+                      currentYear - 1,
+                      currentYear,
+                      currentYear + 1,
+                      currentYear + 2,
+                    ].map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -350,22 +359,25 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                         Day type classification
                       </FieldLabel>
                       <Select
+                        items={holidayDayTypes}
                         name="dayType"
                         defaultValue="REGULAR_HOLIDAY"
                         required
                       >
                         <SelectTrigger id="create-holiday-type" className="w-full">
-                          <SelectValue />
+                          <SelectValue placeholder="Select day type classification" />
                         </SelectTrigger>
                         <SelectContent>
-                          {holidayDayTypes.map((type) => (
-                            <SelectItem
-                              key={type.value}
-                              value={type.value}
-                            >
-                              {type.label}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            {holidayDayTypes.map((type) => (
+                              <SelectItem
+                                key={type.value}
+                                value={type.value}
+                              >
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                       <FieldDescription>
@@ -443,22 +455,25 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                         Day type classification
                       </FieldLabel>
                       <Select
+                        items={holidayDayTypes}
                         name="dayType"
                         defaultValue={editingHoliday.dayType}
                         required
                       >
                         <SelectTrigger id="edit-holiday-type" className="w-full">
-                          <SelectValue />
+                          <SelectValue placeholder="Select day type classification" />
                         </SelectTrigger>
                         <SelectContent>
-                          {holidayDayTypes.map((type) => (
-                            <SelectItem
-                              key={type.value}
-                              value={type.value}
-                            >
-                              {type.label}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            {holidayDayTypes.map((type) => (
+                              <SelectItem
+                                key={type.value}
+                                value={type.value}
+                              >
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Field>

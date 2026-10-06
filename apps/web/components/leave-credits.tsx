@@ -22,6 +22,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -86,6 +87,10 @@ export function LeaveCreditTools({
                     Recorded balance to adjust
                   </FieldLabel>
                   <Select
+                    items={balances.map((balance) => ({
+                      value: balance.id,
+                      label: balance.leaveType,
+                    }))}
                     value={selectedId}
                     disabled={disabled}
                     onValueChange={(val) => {
@@ -96,11 +101,13 @@ export function LeaveCreditTools({
                       <SelectValue placeholder="Select recorded type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {balances.map((balance) => (
-                        <SelectItem key={balance.id} value={balance.id}>
-                          {balance.leaveType}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {balances.map((balance) => (
+                          <SelectItem key={balance.id} value={balance.id}>
+                            {balance.leaveType}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                   <Button

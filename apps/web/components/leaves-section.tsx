@@ -24,6 +24,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -117,6 +118,10 @@ export function LeavesSection({
             <Field>
               <FieldLabel htmlFor="leave-employee">Leave employee</FieldLabel>
               <Select
+                items={employees.map((employee) => ({
+                  value: employee.id,
+                  label: `${employee.firstName} ${employee.lastName} · ${employee.employeeNumber}`,
+                }))}
                 value={employeeId || undefined}
                 onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
@@ -125,12 +130,14 @@ export function LeavesSection({
                   <SelectValue placeholder="Select an employee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName} ·{" "}
-                      {employee.employeeNumber}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.firstName} {employee.lastName} ·{" "}
+                        {employee.employeeNumber}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
@@ -381,6 +388,13 @@ function EmployeeLeaves({
           <Field>
             <FieldLabel htmlFor="leave-status">Request status</FieldLabel>
             <Select
+              items={[
+                { value: "ALL", label: "All statuses" },
+                { value: "PENDING", label: "PENDING" },
+                { value: "APPROVED", label: "APPROVED" },
+                { value: "REJECTED", label: "REJECTED" },
+                { value: "CANCELLED", label: "CANCELLED" },
+              ]}
               value={status}
               disabled={busy || !!decision || !!cancellation}
               onValueChange={(val) => {
@@ -391,12 +405,14 @@ function EmployeeLeaves({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All statuses</SelectItem>
-                {["PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((entry) => (
-                  <SelectItem key={entry} value={entry}>
-                    {entry}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectItem value="ALL">All statuses</SelectItem>
+                  {["PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((entry) => (
+                    <SelectItem key={entry} value={entry}>
+                      {entry}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
@@ -723,6 +739,10 @@ function LeaveRequestForm({
               <Field>
                 <FieldLabel htmlFor="leave-pay">Pay treatment</FieldLabel>
                 <Select
+                  items={[
+                    { value: "PAID", label: "Paid leave" },
+                    { value: "UNPAID", label: "Unpaid leave" },
+                  ]}
                   value={payTreatment || undefined}
                   onValueChange={(val) => setPayTreatment(val ?? "")}
                   required
@@ -731,8 +751,10 @@ function LeaveRequestForm({
                     <SelectValue placeholder="Select paid or unpaid" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PAID">Paid leave</SelectItem>
-                    <SelectItem value="UNPAID">Unpaid leave</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="PAID">Paid leave</SelectItem>
+                      <SelectItem value="UNPAID">Unpaid leave</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -740,6 +762,10 @@ function LeaveRequestForm({
                 <Field>
                   <FieldLabel htmlFor="leave-type-paid">Leave type</FieldLabel>
                   <Select
+                    items={balances.map((balance) => ({
+                      value: balance.leaveType,
+                      label: `${balance.leaveType} · ${balance.balance} available day(s)`,
+                    }))}
                     name="leaveType"
                     required
                   >
@@ -747,14 +773,16 @@ function LeaveRequestForm({
                       <SelectValue placeholder="Select recorded balance type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {balances.map((balance) => (
-                        <SelectItem
-                          key={balance.id}
-                          value={balance.leaveType}
-                        >
-                          {balance.leaveType} · {balance.balance} available day(s)
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {balances.map((balance) => (
+                          <SelectItem
+                            key={balance.id}
+                            value={balance.leaveType}
+                          >
+                            {balance.leaveType} · {balance.balance} available day(s)
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                   {balances.length === 0 && (

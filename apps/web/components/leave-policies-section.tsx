@@ -20,10 +20,29 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+
+const ACCRUAL_FREQUENCY_ITEMS = [
+  { value: "MONTHLY", label: "Monthly (Annual credits / 12 per month)" },
+  { value: "QUARTERLY", label: "Quarterly (Annual credits / 4 per quarter)" },
+  { value: "ANNUAL", label: "Annual (Full allocation once per year)" },
+];
+
+const SIMPLE_ACCRUAL_FREQUENCY_ITEMS = [
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "QUARTERLY", label: "Quarterly" },
+  { value: "ANNUAL", label: "Annual" },
+];
+
+const CARRYOVER_POLICY_ITEMS = [
+  { value: "NO_CARRYOVER", label: "No Carryover (Unused credits expire Dec 31)" },
+  { value: "CAPPED", label: "Capped (Roll over up to maximum days)" },
+  { value: "UNLIMITED", label: "Unlimited (Roll over all remaining balance)" },
+];
 import {
   AlertCircle,
   CheckCircle2,
@@ -483,6 +502,7 @@ export function LeavePoliciesSection({
                   Accrual Frequency
                 </FieldLabel>
                 <Select
+                  items={ACCRUAL_FREQUENCY_ITEMS}
                   value={policyAccrualFrequency}
                   onValueChange={(val) => {
                     if (val)
@@ -492,18 +512,16 @@ export function LeavePoliciesSection({
                   }}
                 >
                   <SelectTrigger id="policy-accrual-frequency" className="w-full">
-                    <SelectValue />
+                    <SelectValue placeholder="Select accrual frequency" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MONTHLY">
-                      Monthly (Annual credits / 12 per month)
-                    </SelectItem>
-                    <SelectItem value="QUARTERLY">
-                      Quarterly (Annual credits / 4 per quarter)
-                    </SelectItem>
-                    <SelectItem value="ANNUAL">
-                      Annual (Full allocation once per year)
-                    </SelectItem>
+                    <SelectGroup>
+                      {ACCRUAL_FREQUENCY_ITEMS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -513,6 +531,7 @@ export function LeavePoliciesSection({
                   Year-End Carryover Policy
                 </FieldLabel>
                 <Select
+                  items={CARRYOVER_POLICY_ITEMS}
                   value={policyCarryoverPolicy}
                   onValueChange={(val) => {
                     if (val)
@@ -522,18 +541,16 @@ export function LeavePoliciesSection({
                   }}
                 >
                   <SelectTrigger id="policy-carryover-policy" className="w-full">
-                    <SelectValue />
+                    <SelectValue placeholder="Select carryover policy" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NO_CARRYOVER">
-                      No Carryover (Unused credits expire Dec 31)
-                    </SelectItem>
-                    <SelectItem value="CAPPED">
-                      Capped (Roll over up to maximum days)
-                    </SelectItem>
-                    <SelectItem value="UNLIMITED">
-                      Unlimited (Roll over all remaining balance)
-                    </SelectItem>
+                    <SelectGroup>
+                      {CARRYOVER_POLICY_ITEMS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -655,6 +672,7 @@ export function LeavePoliciesSection({
               <Field>
                 <FieldLabel htmlFor="accrual-frequency">Frequency</FieldLabel>
                 <Select
+                  items={SIMPLE_ACCRUAL_FREQUENCY_ITEMS}
                   value={accrualFrequency}
                   onValueChange={(val) => {
                     if (val) {
@@ -666,12 +684,16 @@ export function LeavePoliciesSection({
                   }}
                 >
                   <SelectTrigger id="accrual-frequency" className="w-full">
-                    <SelectValue />
+                    <SelectValue placeholder="Select frequency" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MONTHLY">Monthly</SelectItem>
-                    <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-                    <SelectItem value="ANNUAL">Annual</SelectItem>
+                    <SelectGroup>
+                      {SIMPLE_ACCRUAL_FREQUENCY_ITEMS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -680,20 +702,23 @@ export function LeavePoliciesSection({
                 <Field>
                   <FieldLabel htmlFor="accrual-period">Target Month</FieldLabel>
                   <Select
+                    items={monthsList}
                     value={accrualPeriod}
                     onValueChange={(val) => {
                       if (val) setAccrualPeriod(val);
                     }}
                   >
                     <SelectTrigger id="accrual-period" className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder="Select month" />
                     </SelectTrigger>
                     <SelectContent>
-                      {monthsList.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {monthsList.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -705,20 +730,23 @@ export function LeavePoliciesSection({
                     Target Quarter
                   </FieldLabel>
                   <Select
+                    items={quartersList}
                     value={accrualPeriod}
                     onValueChange={(val) => {
                       if (val) setAccrualPeriod(val);
                     }}
                   >
                     <SelectTrigger id="accrual-period" className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder="Select quarter" />
                     </SelectTrigger>
                     <SelectContent>
-                      {quartersList.map((q) => (
-                        <SelectItem key={q.value} value={q.value}>
-                          {q.label}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {quartersList.map((q) => (
+                          <SelectItem key={q.value} value={q.value}>
+                            {q.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -729,6 +757,12 @@ export function LeavePoliciesSection({
                   Filter Leave Type (Optional)
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: "ALL", label: "All Active Policies" },
+                    ...policies
+                      .filter((p) => p.isActive)
+                      .map((p) => ({ value: p.leaveType, label: p.leaveType })),
+                  ]}
                   value={accrualLeaveType || "ALL"}
                   onValueChange={(val) => setAccrualLeaveType(val === "ALL" ? "" : (val ?? ""))}
                 >
@@ -736,14 +770,16 @@ export function LeavePoliciesSection({
                     <SelectValue placeholder="All Active Policies" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">All Active Policies</SelectItem>
-                    {policies
-                      .filter((p) => p.isActive)
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.leaveType}>
-                          {p.leaveType}
-                        </SelectItem>
-                      ))}
+                    <SelectGroup>
+                      <SelectItem value="ALL">All Active Policies</SelectItem>
+                      {policies
+                        .filter((p) => p.isActive)
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.leaveType}>
+                            {p.leaveType}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -910,6 +946,15 @@ export function LeavePoliciesSection({
                   Filter Leave Type (Optional)
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: "ALL", label: "All Carryover Policies" },
+                    ...policies
+                      .filter((p) => p.carryoverPolicy !== "NO_CARRYOVER")
+                      .map((p) => ({
+                        value: p.leaveType,
+                        label: `${p.leaveType} (${p.carryoverPolicy})`,
+                      })),
+                  ]}
                   value={carryoverLeaveType || "ALL"}
                   onValueChange={(val) => setCarryoverLeaveType(val === "ALL" ? "" : (val ?? ""))}
                 >
@@ -917,14 +962,16 @@ export function LeavePoliciesSection({
                     <SelectValue placeholder="All Carryover Policies" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">All Carryover Policies</SelectItem>
-                    {policies
-                      .filter((p) => p.carryoverPolicy !== "NO_CARRYOVER")
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.leaveType}>
-                          {p.leaveType} ({p.carryoverPolicy})
-                        </SelectItem>
-                      ))}
+                    <SelectGroup>
+                      <SelectItem value="ALL">All Carryover Policies</SelectItem>
+                      {policies
+                        .filter((p) => p.carryoverPolicy !== "NO_CARRYOVER")
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.leaveType}>
+                            {p.leaveType} ({p.carryoverPolicy})
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>

@@ -14,6 +14,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -22,10 +23,12 @@ import { Separator } from "@workspace/ui/components/separator";
 import {
   Banknote,
   Calendar,
+  CreditCard,
   Download,
   Eye,
   EyeOff,
   FileText,
+  Landmark,
   LayoutDashboard,
   Link as LinkIcon,
   Loader2,
@@ -40,6 +43,7 @@ import { useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { downloadBase64File } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
+import { LOAN_TYPE_LABELS } from "./loans-section";
 import { MfaSettingsCard } from "./mfa-settings-card";
 import { usePortalUser } from "./payroll-portal";
 
@@ -151,6 +155,12 @@ export function MyProfileSection() {
     enabled: !!user.employeeId,
     retry: false,
   });
+
+  const myLoans = trpc.loans.getMyLoans.useQuery(undefined, {
+    enabled: !!user.employeeId,
+    retry: false,
+  });
+  const [expandedLoanId, setExpandedLoanId] = useState<string | null>(null);
 
   const fileLeave = trpc.leaves.request.useMutation({
     onSuccess: () => {
@@ -367,6 +377,10 @@ export function MyProfileSection() {
                           Choose Employee Record
                         </FieldLabel>
                         <Select
+                          items={availableEmployees.data.map((e) => ({
+                            value: e.id,
+                            label: `${e.employeeNumber} — ${e.firstName} ${e.lastName}`,
+                          }))}
                           value={selectedEmployeeToLink || undefined}
                           onValueChange={(val) =>
                             setSelectedEmployeeToLink(val ?? "")
@@ -376,11 +390,13 @@ export function MyProfileSection() {
                             <SelectValue placeholder="Select employee…" />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableEmployees.data.map((e) => (
-                              <SelectItem key={e.id} value={e.id}>
-                                {e.employeeNumber} — {e.firstName} {e.lastName}
-                              </SelectItem>
-                            ))}
+                            <SelectGroup>
+                              {availableEmployees.data.map((e) => (
+                                <SelectItem key={e.id} value={e.id}>
+                                  {e.employeeNumber} — {e.firstName} {e.lastName}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
                           </SelectContent>
                         </Select>
                       </Field>
@@ -795,36 +811,47 @@ export function MyProfileSection() {
                     <Field>
                       <FieldLabel>Leave Type</FieldLabel>
                       <Select
+                        items={[
+                          { value: "VACATION", label: "Vacation Leave" },
+                          { value: "SICK", label: "Sick Leave" },
+                          { value: "SIL", label: "Service Incentive Leave (SIL)" },
+                          { value: "MATERNITY", label: "Maternity Leave" },
+                          { value: "PATERNITY", label: "Paternity Leave" },
+                          { value: "SOLO_PARENT", label: "Solo Parent Leave" },
+                          { value: "EMERGENCY", label: "Emergency Leave" },
+                        ]}
                         value={leaveType}
                         onValueChange={(val) => {
                           if (val) setLeaveType(val);
                         }}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue />
+                          <SelectValue placeholder="Select leave type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="VACATION">
-                            Vacation Leave
-                          </SelectItem>
-                          <SelectItem value="SICK">
-                            Sick Leave
-                          </SelectItem>
-                          <SelectItem value="SIL">
-                            Service Incentive Leave (SIL)
-                          </SelectItem>
-                          <SelectItem value="MATERNITY">
-                            Maternity Leave
-                          </SelectItem>
-                          <SelectItem value="PATERNITY">
-                            Paternity Leave
-                          </SelectItem>
-                          <SelectItem value="SOLO_PARENT">
-                            Solo Parent Leave
-                          </SelectItem>
-                          <SelectItem value="EMERGENCY">
-                            Emergency Leave
-                          </SelectItem>
+                          <SelectGroup>
+                            <SelectItem value="VACATION">
+                              Vacation Leave
+                            </SelectItem>
+                            <SelectItem value="SICK">
+                              Sick Leave
+                            </SelectItem>
+                            <SelectItem value="SIL">
+                              Service Incentive Leave (SIL)
+                            </SelectItem>
+                            <SelectItem value="MATERNITY">
+                              Maternity Leave
+                            </SelectItem>
+                            <SelectItem value="PATERNITY">
+                              Paternity Leave
+                            </SelectItem>
+                            <SelectItem value="SOLO_PARENT">
+                              Solo Parent Leave
+                            </SelectItem>
+                            <SelectItem value="EMERGENCY">
+                              Emergency Leave
+                            </SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Field>
@@ -1359,6 +1386,186 @@ export function MyProfileSection() {
                     </CardContent>
                   </Card>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 6. My Loans & Cash Advances */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Landmark className="size-5 text-primary" />
+                My Loans & Cash Advances
+              </CardTitle>
+              <CardDescription>
+                Track government loans (SSS, Pag-IBIG) and company cash advances with payroll amortization schedules.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {myLoans.isPending ? (
+                <p className="text-sm text-muted-foreground">Loading your loans…</p>
+              ) : myLoans.data && myLoans.data.length > 0 ? (
+                <div className="space-y-3">
+                  {myLoans.data.map((loan) => {
+                    const total = Number(loan.totalAmountCents);
+                    const balance = Number(loan.balanceCents);
+                    const paid = total - balance;
+                    const percent =
+                      total > 0
+                        ? Math.min(100, Math.max(0, Math.round((paid / total) * 100)))
+                        : 100;
+                    const isExpanded = expandedLoanId === loan.id;
+
+                    return (
+                      <div
+                        key={loan.id}
+                        className="rounded-lg border p-4 text-sm space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-foreground flex items-center gap-2">
+                              {LOAN_TYPE_LABELS[loan.loanType] || loan.loanType}
+                              {loan.isActive ? (
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  Active
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                                  Fully Settled
+                                </span>
+                              )}
+                            </div>
+                            {loan.referenceNumber && (
+                              <div className="text-xs text-muted-foreground">
+                                Ref: {loan.referenceNumber}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-xs text-muted-foreground">
+                              Remaining Balance
+                            </div>
+                            <div className="font-bold text-base text-foreground">
+                              {pesos(loan.balanceCents)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Paid: {pesos(paid)}</span>
+                            <span>
+                              Total: {pesos(loan.totalAmountCents)} ({percent}%)
+                            </span>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full bg-emerald-500 transition-all"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Deduction terms & dates */}
+                        <div className="grid gap-2 sm:grid-cols-3 text-xs bg-muted/20 p-2.5 rounded-md">
+                          <div>
+                            <span className="text-muted-foreground block">
+                              Amortization / Cutoff
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {pesos(loan.amortizationCents)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">
+                              Start Date
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {formatDate(loan.startDate)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">
+                              End / Maturity Date
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {loan.endDate
+                                ? formatDate(loan.endDate)
+                                : "Until fully paid"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Toggle Payment Ledger */}
+                        {loan.payments.length > 0 && (
+                          <div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs px-2 text-primary"
+                              onClick={() =>
+                                setExpandedLoanId(isExpanded ? null : loan.id)
+                              }
+                            >
+                              {isExpanded
+                                ? "Hide Payment History"
+                                : `View Payment History (${loan.payments.length})`}
+                            </Button>
+
+                            {isExpanded && (
+                              <div className="mt-2 overflow-x-auto rounded-md border text-xs">
+                                <table className="w-full text-left">
+                                  <thead className="border-b bg-muted/40 uppercase text-[10px] text-muted-foreground">
+                                    <tr>
+                                      <th className="px-3 py-1.5">Date</th>
+                                      <th className="px-3 py-1.5">Source</th>
+                                      <th className="px-3 py-1.5 text-right">
+                                        Amount Paid
+                                      </th>
+                                      <th className="px-3 py-1.5 text-right">
+                                        Balance After
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y">
+                                    {loan.payments.map((p) => {
+                                      const payrollRun = p.payslip?.payrollRun;
+                                      return (
+                                        <tr key={p.id}>
+                                          <td className="px-3 py-1.5">
+                                            {formatDate(p.paymentDate)}
+                                          </td>
+                                          <td className="px-3 py-1.5 text-muted-foreground">
+                                            {payrollRun
+                                              ? `Payroll Cutoff (${formatDate(payrollRun.cutoffStartDate)} – ${formatDate(payrollRun.cutoffEndDate)})`
+                                              : "Direct / Manual Payment"}
+                                          </td>
+                                          <td className="px-3 py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                            {pesos(p.amountPaidCents)}
+                                          </td>
+                                          <td className="px-3 py-1.5 text-right">
+                                            {pesos(p.balanceAfterCents)}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No loans or cash advances are recorded for your account.
+                </p>
               )}
             </CardContent>
           </Card>

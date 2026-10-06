@@ -19,6 +19,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -177,6 +178,13 @@ export function YearEndTaxSection({
           <Field>
             <FieldLabel htmlFor="tax-employee">Employee</FieldLabel>
             <Select
+              items={[
+                { value: "NONE", label: "Select an employee" },
+                ...employees.map((entry) => ({
+                  value: entry.id,
+                  label: `${entry.firstName} ${entry.lastName} · ${entry.employeeNumber}`,
+                })),
+              ]}
               value={employeeId || "NONE"}
               onValueChange={(val) => setEmployeeId(val === "NONE" ? "" : (val ?? ""))}
             >
@@ -184,12 +192,14 @@ export function YearEndTaxSection({
                 <SelectValue placeholder="Select an employee" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="NONE">Select an employee</SelectItem>
-                {employees.map((entry) => (
-                  <SelectItem key={entry.id} value={entry.id}>
-                    {entry.firstName} {entry.lastName} · {entry.employeeNumber}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectItem value="NONE">Select an employee</SelectItem>
+                  {employees.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.firstName} {entry.lastName} · {entry.employeeNumber}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
