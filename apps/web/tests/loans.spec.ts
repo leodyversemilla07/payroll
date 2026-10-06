@@ -77,13 +77,15 @@ async function mockLoansPortal(
   } = {},
 ) {
   let signedIn = false;
-  let loans = [...(options.initialLoans ?? sampleLoans)];
+  const loans = [...(options.initialLoans ?? sampleLoans)];
 
   const user = {
     id: options.employeeId ? "user-emp-1" : "user-staff-1",
     organizationId: "org-1",
     name: options.employeeId ? "Maria Santos" : "HR Specialist",
-    email: options.employeeId ? "maria.santos@example.com" : "staff@example.com",
+    email: options.employeeId
+      ? "maria.santos@example.com"
+      : "staff@example.com",
     role: options.role ?? "PAYROLL_SPECIALIST",
     employeeId: options.employeeId,
   };
@@ -115,7 +117,11 @@ async function mockLoansPortal(
             data: {
               json: {
                 employees: { total: 1, active: 1, onLeave: 0 },
-                attendance: { presentToday: 1, missingTimeOut: 0, pendingReview: 0 },
+                attendance: {
+                  presentToday: 1,
+                  missingTimeOut: 0,
+                  pendingReview: 0,
+                },
                 leaves: { pendingCount: 0 },
                 loans: {
                   activeCount: loans.filter((l) => l.isActive).length,
@@ -140,8 +146,14 @@ async function mockLoansPortal(
               json: {
                 activeCount: active.length,
                 totalCount: loans.length,
-                totalBalanceCents: active.reduce((acc, l) => acc + l.balanceCents, 0),
-                totalPrincipalCents: active.reduce((acc, l) => acc + l.principalCents, 0),
+                totalBalanceCents: active.reduce(
+                  (acc, l) => acc + l.balanceCents,
+                  0,
+                ),
+                totalPrincipalCents: active.reduce(
+                  (acc, l) => acc + l.principalCents,
+                  0,
+                ),
                 totalAmortizationPerCutoffCents: active.reduce(
                   (acc, l) => acc + l.amortizationCents,
                   0,
@@ -257,9 +269,7 @@ async function mockLoansPortal(
       }
 
       const json =
-        path === "employees.list" || path === "payroll.listRuns"
-          ? []
-          : null;
+        path === "employees.list" || path === "payroll.listRuns" ? [] : null;
       return { result: { data: { json } } };
     });
 
@@ -337,12 +347,8 @@ test.describe("Loans & Amortization Management", () => {
     await page.locator("#create-amortization").fill("1500");
 
     // Schedule preview should appear
-    await expect(
-      page.getByText("Amortization Schedule Preview"),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/20 cutoffs/),
-    ).toBeVisible();
+    await expect(page.getByText("Amortization Schedule Preview")).toBeVisible();
+    await expect(page.getByText(/20 cutoffs/)).toBeVisible();
 
     // Close modal
     await page.getByRole("button", { name: "Cancel" }).click();
@@ -434,9 +440,13 @@ test.describe("Loans & Amortization Management", () => {
     await page.goto("/portal/loans");
 
     // Should display access restricted card
-    await expect(page.getByRole("region", { name: "Access restricted" })).toBeVisible();
     await expect(
-      page.getByText(/Your role \(EMPLOYEE\) does not have permission to access/i),
+      page.getByRole("region", { name: "Access restricted" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        /Your role \(EMPLOYEE\) does not have permission to access/i,
+      ),
     ).toBeVisible();
   });
 });

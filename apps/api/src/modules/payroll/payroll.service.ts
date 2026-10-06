@@ -23,7 +23,7 @@ import {
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
 import type { AuthenticatedUser } from '../../auth/auth.service';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../infrastructure/storage/storage.service';
 import { TimekeepingService } from '../timekeeping/timekeeping.service';
 import {
   isStandardRegularCutoff,

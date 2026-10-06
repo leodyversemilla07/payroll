@@ -1,4 +1,4 @@
-import { MyAttendanceSection } from "@/components/my-attendance-section";
+import { MyAttendanceSection } from "@/features/attendance/my-attendance-section";
 
 export default function MyAttendancePage() {
   return <MyAttendanceSection />;

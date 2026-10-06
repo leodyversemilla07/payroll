@@ -2,9 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { TRPCError } from '@trpc/server';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { AppModule } from './app.module';
-import { AuditService } from './audit/audit.service';
 import { AuthService } from './auth/auth.service';
-import { validateEnvironment } from './config/environment';
+import { AuditService } from './infrastructure/audit/audit.service';
+import { validateEnvironment } from './infrastructure/config/environment';
 import { ComplianceService } from './modules/compliance/compliance.service';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { EmployeesService } from './modules/employees/employees.service';
@@ -13,7 +13,7 @@ import { LeavesService } from './modules/leaves/leaves.service';
 import { LoansService } from './modules/loans/loans.service';
 import { PayrollService } from './modules/payroll/payroll.service';
 import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
-import { createApiRouter } from './trpc/routers/app.router';
+import { createApiRouter } from './trpc/app.router';
 import { TrpcService } from './trpc/trpc.service';
 
 async function bootstrap() {

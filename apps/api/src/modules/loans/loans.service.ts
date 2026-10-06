@@ -118,8 +118,7 @@ export class LoansService {
       totalCount: allLoans,
       totalBalanceCents: activeLoans._sum.balanceCents ?? 0n,
       totalPrincipalCents: activeLoans._sum.principalCents ?? 0n,
-      totalAmortizationPerCutoffCents:
-        activeLoans._sum.amortizationCents ?? 0n,
+      totalAmortizationPerCutoffCents: activeLoans._sum.amortizationCents ?? 0n,
     };
   }
 

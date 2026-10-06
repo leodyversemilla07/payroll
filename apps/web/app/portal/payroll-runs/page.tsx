@@ -1,4 +1,4 @@
-import { PayrollRunsSection } from "@/components/payroll-runs-section";
+import { PayrollRunsSection } from "@/features/payroll/payroll-runs-section";
 
 export default function PayrollRunsPage() {
   return <PayrollRunsSection />;

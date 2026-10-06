@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { prisma, Role } from '@workspace/db';
-import type { StorageService } from '../../storage/storage.service';
+import type { StorageService } from '../../infrastructure/storage/storage.service';
 import { formatDobPassword, PayslipPdfService } from './payslip-pdf.service';
 
 jest.mock('@workspace/db', () => ({
@@ -22,6 +22,12 @@ jest.mock('@workspace/db', () => ({
       update: jest.fn(),
     },
     payrollRun: {
+      findFirst: jest.fn(),
+    },
+    department: {
+      findFirst: jest.fn(),
+    },
+    employee: {
       findFirst: jest.fn(),
     },
   },
@@ -49,7 +55,7 @@ describe('PayslipPdfService', () => {
     dateOfBirth: new Date('1995-06-15T00:00:00.000Z'),
     employmentStatus: 'ACTIVE',
     employmentType: 'REGULAR',
-    department: { name: 'Engineering' },
+    department: { id: 'dept-eng', name: 'Engineering' },
     branch: { name: 'Head Office' },
   };
 
@@ -266,6 +272,43 @@ describe('PayslipPdfService', () => {
 
       expect(result.fileName).toBe('Payslip_EMP-2026-001_20260930.pdf');
       expect(result.dataBase64).toBeDefined();
+    });
+
+    it('restricts department managers to their department payslips', async () => {
+      (prisma.payslip.findFirst as jest.Mock).mockResolvedValue(mockPayslip);
+      (prisma.department.findFirst as jest.Mock).mockResolvedValue({
+        id: 'dept-finance',
+      });
+
+      await expect(
+        service.downloadPayslip('slip-1', 'org-1', {
+          id: 'user-manager',
+          organizationId: 'org-1',
+          employeeId: 'emp-manager',
+          email: 'manager@example.com',
+          name: 'Finance Manager',
+          role: Role.DEPARTMENT_MANAGER,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows department managers to download payslips in their department', async () => {
+      (prisma.payslip.findFirst as jest.Mock).mockResolvedValue(mockPayslip);
+      (prisma.department.findFirst as jest.Mock).mockResolvedValue({
+        id: 'dept-eng',
+      });
+      (prisma.payslip.update as jest.Mock).mockResolvedValue(mockPayslip);
+
+      const result = await service.downloadPayslip('slip-1', 'org-1', {
+        id: 'user-manager',
+        organizationId: 'org-1',
+        employeeId: 'emp-manager',
+        email: 'manager@example.com',
+        name: 'Engineering Manager',
+        role: Role.DEPARTMENT_MANAGER,
+      });
+
+      expect(result.fileName).toBe('Payslip_EMP-2026-001_20260930.pdf');
     });
   });
 

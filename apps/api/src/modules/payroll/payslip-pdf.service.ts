@@ -9,7 +9,7 @@ import { prisma, Role } from '@workspace/db';
 import JSZip from 'jszip';
 import PDFDocument from 'pdfkit';
 import type { AuthenticatedUser } from '../../auth/auth.service';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../infrastructure/storage/storage.service';
 
 export interface PayslipPdfResult {
   payslipId: string;
@@ -189,6 +189,19 @@ export class PayslipPdfService {
       ] as readonly Role[]
     ).includes(requestingUser.role);
 
+    if (requestingUser.role === Role.DEPARTMENT_MANAGER) {
+      const managedDepartmentId =
+        await this.findManagerDepartmentId(requestingUser);
+      if (
+        !managedDepartmentId ||
+        payslip.employee.department?.id !== managedDepartmentId
+      ) {
+        throw new ForbiddenException(
+          'You do not have permission to access payslips outside your department',
+        );
+      }
+    }
+
     if (!isStaff && requestingUser.employeeId !== payslip.employeeId) {
       throw new ForbiddenException(
         'You do not have permission to access this payslip',
@@ -262,6 +275,39 @@ export class PayslipPdfService {
         ? 'Protected with your Date of Birth (MMDDYYYY)'
         : undefined,
     };
+  }
+
+  private async findManagerDepartmentId(
+    requestingUser: AuthenticatedUser,
+  ): Promise<string | null> {
+    const managedDepartment = await prisma.department.findFirst({
+      where: {
+        organizationId: requestingUser.organizationId,
+        OR: [
+          { managerId: requestingUser.id },
+          ...(requestingUser.employeeId
+            ? [{ managerId: requestingUser.employeeId }]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (managedDepartment) {
+      return managedDepartment.id;
+    }
+
+    if (!requestingUser.employeeId) {
+      return null;
+    }
+
+    const managerEmployee = await prisma.employee.findFirst({
+      where: {
+        id: requestingUser.employeeId,
+        organizationId: requestingUser.organizationId,
+      },
+      select: { departmentId: true },
+    });
+    return managerEmployee?.departmentId ?? null;
   }
 
   async downloadRunZip(

@@ -14,7 +14,6 @@ import {
   Banknote,
   CalendarCheck,
   CalendarDays,
-  CheckCircle2,
   Clock,
   CreditCard,
   FileText,
@@ -23,21 +22,21 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { TimekeepingSection } from "@/features/attendance/timekeeping-section";
+import { YearEndTaxSection } from "@/features/compliance/year-end-tax";
+import { EmployeesSection } from "@/features/employees/employees-section";
+import { HolidaysSection } from "@/features/holidays/holidays-section";
+import { LeavePoliciesSection } from "@/features/leaves/leave-policies-section";
+import { LeavesSection } from "@/features/leaves/leaves-section";
+import { PendingLeaveApprovalsSection } from "@/features/leaves/pending-leave-approvals";
+import { LoansSection } from "@/features/loans/loans-section";
+import { manilaToday } from "@/lib/attendance-time";
 import {
   isSectionAllowedForRole,
   portalSections,
 } from "@/lib/portal-navigation";
-import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
-import { EmployeesSection } from "./employees-section";
-import { HolidaysSection } from "./holidays-section";
-import { LeavePoliciesSection } from "./leave-policies-section";
-import { LeavesSection } from "./leaves-section";
-import { LoansSection } from "./loans-section";
 import { usePortalUser } from "./payroll-portal";
-import { PendingLeaveApprovalsSection } from "./pending-leave-approvals";
-import { TimekeepingSection } from "./timekeeping-section";
-import { YearEndTaxSection } from "./year-end-tax";
 
 function pesos(value: bigint | number | string) {
   return new Intl.NumberFormat("en-PH", {
@@ -146,8 +145,8 @@ function EmployeeOverview({
                 </span>
               </div>
               <CardDescription>
-                Access your personal compensation details, leave balances, recorded
-                daily attendance, and payslips.
+                Access your personal compensation details, leave balances,
+                recorded daily attendance, and payslips.
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -291,7 +290,9 @@ function EmployeeOverview({
           </div>
           <p className="text-xs text-muted-foreground flex items-center justify-between truncate">
             <span className="truncate">
-              {nextHoliday ? formatDate(nextHoliday.date) : "Philippine calendar"}
+              {nextHoliday
+                ? formatDate(nextHoliday.date)
+                : "Philippine calendar"}
             </span>
             <Link
               href="/portal/holidays"
@@ -448,7 +449,10 @@ function EmployeeOverview({
                       <div className="text-xs text-muted-foreground">
                         Paid on {formatDate(payslip.payrollRun.paymentDate)} ·{" "}
                         <span className="font-medium text-foreground">
-                          {payslip.payrollRun.cutoffSequence.replaceAll("_", " ")}
+                          {payslip.payrollRun.cutoffSequence.replaceAll(
+                            "_",
+                            " ",
+                          )}
                         </span>
                       </div>
                     </div>
@@ -910,7 +914,8 @@ export function PortalLoans() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            You can view your personal loan deductions and advances in your profile.
+            You can view your personal loan deductions and advances in your
+            profile.
           </p>
           <Link
             href="/portal/my-profile"

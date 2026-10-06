@@ -807,7 +807,10 @@ test("employee can view holiday calendar in read-only mode without management co
   await expect(section.getByText("Christmas Day")).toBeVisible();
 
   // Employee should NOT have management buttons
-  await expect(section.getByRole("button", { name: "Add holiday" })).toHaveCount(0);
-  await expect(section.getByRole("button", { name: "Populate" })).toHaveCount(0);
+  await expect(
+    section.getByRole("button", { name: "Add holiday" }),
+  ).toHaveCount(0);
+  await expect(section.getByRole("button", { name: "Populate" })).toHaveCount(
+    0,
+  );
 });
-
