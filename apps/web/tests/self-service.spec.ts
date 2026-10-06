@@ -333,6 +333,20 @@ async function setupAndLogin(
             isRecurring: true,
           },
         ],
+        "compliance.getBir2316Issuance": {
+          id: "iss-1",
+          status: "ISSUED",
+          version: 1,
+          issuedAt: "2027-01-15T00:00:00.000Z",
+          statutoryDeadline: "2027-01-31",
+          hadPriorEmployer: false,
+        },
+        "compliance.downloadBir2316Pdf": {
+          fileName: "BIR2316_2026_Santos_Maria_OFFICIAL.pdf",
+          dataBase64: "JVBERi0xLjQK...",
+          isIssued: true,
+          version: 1,
+        },
       };
 
       if (path in data) {
@@ -491,6 +505,35 @@ test("employee views payslip history and clicks detail to see earnings/deduction
   // Payslip detail modal/section should show earnings breakdown
   await expect(page.getByText("₱25,000.00").first()).toBeVisible(); // basic pay
   await expect(page.getByText("₱24,125.00").first()).toBeVisible(); // net pay
+});
+
+// ── Test: Employee Views BIR 2316 and Downloads Certificate ──────────────────
+
+test("employee views official BIR 2316 card and downloads annual tax certificate", async ({
+  page,
+}) => {
+  await setupAndLogin(page, employeeUser);
+
+  await page.goto("/portal/my-profile");
+  const section = page.getByRole("region", { name: "My Profile" });
+  await expect(section).toBeVisible();
+
+  // BIR Form 2316 section
+  await expect(
+    section.getByText("BIR Form 2316 (Annual Tax Certificate)"),
+  ).toBeVisible();
+  await expect(section.getByText("Official BIR Form 2316")).toBeVisible();
+  await expect(section.getByText(/Issued · v1/)).toBeVisible();
+  await expect(
+    section.getByText(/Qualified for Substituted Filing/),
+  ).toBeVisible();
+
+  // Download BIR Form 2316 PDF button
+  const downloadBtn = section.getByRole("button", {
+    name: "Download BIR Form 2316",
+  });
+  await expect(downloadBtn).toBeVisible();
+  await downloadBtn.click();
 });
 
 // ── Test: Employee Attendance Dashboard ───────────────────────────────────────

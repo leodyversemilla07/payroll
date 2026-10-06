@@ -7,7 +7,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -19,13 +18,14 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { X } from "lucide-react";
 import Link from "next/link";
+import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import {
   getNavigationGroupsForRole,
   type PortalSection,
 } from "@/lib/portal-navigation";
 
-export function PortalSidebar({
+export function AppSidebar({
   user,
   activeSection,
 }: {
@@ -38,30 +38,27 @@ export function PortalSidebar({
   };
   activeSection: PortalSection;
 }) {
-  const { isMobile, setOpenMobile } = useSidebar();
   const groups = getNavigationGroupsForRole(user.role);
+  const { isMobile, setOpenMobile } = useSidebar();
 
   return (
-    <Sidebar variant="inset" collapsible="icon">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2">
+          <SidebarMenuItem className="flex items-center justify-between">
             <SidebarMenuButton
-              size="lg"
               render={<Link href="/portal" />}
+              size="lg"
               tooltip="Payroll workspace"
               aria-label="Payroll workspace"
-              onClick={() => {
-                if (isMobile) setOpenMobile(false);
-              }}
             >
               <div
                 aria-hidden="true"
-                className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground"
+                className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground"
               >
                 PH
               </div>
-              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+              <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Payroll workspace</span>
                 <span className="truncate text-xs text-sidebar-foreground/70">
                   API-backed records
@@ -70,56 +67,20 @@ export function PortalSidebar({
             </SidebarMenuButton>
             {isMobile && (
               <Button
-                type="button"
-                aria-label="Close navigation"
                 variant="ghost"
                 size="icon"
+                aria-label="Close navigation"
+                className="size-8 shrink-0 text-sidebar-foreground"
                 onClick={() => setOpenMobile(false)}
               >
-                <X aria-hidden="true" />
+                <X className="size-4" />
               </Button>
             )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent>
-        <nav aria-label="Payroll navigation">
-          {groups.map((group) => (
-            <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {group.items.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        render={<Link href={item.href} />}
-                        tooltip={item.label}
-                        isActive={activeSection === item.id}
-                        aria-current={
-                          activeSection === item.id ? "page" : undefined
-                        }
-                        onClick={(event) => {
-                          if (
-                            event.metaKey ||
-                            event.ctrlKey ||
-                            event.shiftKey ||
-                            event.altKey
-                          )
-                            return;
-                          if (isMobile) setOpenMobile(false);
-                        }}
-                      >
-                        <item.icon aria-hidden="true" />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))}
-        </nav>
+        <NavMain groups={groups} activeSection={activeSection} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />
@@ -129,13 +90,13 @@ export function PortalSidebar({
   );
 }
 
-export function PortalSidebarSkeleton() {
+export function AppSidebarSkeleton() {
   return (
-    <Sidebar variant="inset" collapsible="icon">
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2 p-2">
-            <Skeleton className="size-8 rounded-lg shrink-0" />
+            <Skeleton className="size-8 shrink-0 rounded-lg" />
             <div className="grid flex-1 gap-1.5 leading-tight group-data-[collapsible=icon]:hidden">
               <Skeleton className="h-4 w-28" />
               <Skeleton className="h-3 w-20" />

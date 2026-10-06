@@ -255,6 +255,45 @@ export function MyProfileSection() {
   const emp = profile.data;
   const activePayslip = payslips.data?.find((p) => p.id === selectedPayslipId);
 
+  const [taxCertificateYear, setTaxCertificateYear] = useState(
+    new Date().getFullYear(),
+  );
+  const [downloadingBirPdf, setDownloadingBirPdf] = useState(false);
+  const [downloadBirError, setDownloadBirError] = useState<string | null>(null);
+
+  const bir2316Issuance = trpc.compliance.getBir2316Issuance.useQuery(
+    {
+      employeeId: emp?.id ?? "",
+      taxYear: taxCertificateYear,
+    },
+    {
+      enabled: Boolean(emp?.id),
+      retry: false,
+    },
+  );
+
+  const handleDownloadMyBir2316 = async () => {
+    if (!emp?.id) return;
+    setDownloadingBirPdf(true);
+    setDownloadBirError(null);
+    try {
+      const data = await utils.compliance.downloadBir2316Pdf.fetch({
+        employeeId: emp.id,
+        taxYear: taxCertificateYear,
+        isPreview: false,
+      });
+      downloadBase64File(data.dataBase64, data.fileName, "application/pdf");
+    } catch (err) {
+      setDownloadBirError(
+        err instanceof Error
+          ? err.message
+          : "Failed to download BIR Form 2316 PDF.",
+      );
+    } finally {
+      setDownloadingBirPdf(false);
+    }
+  };
+
   return (
     <section className="space-y-6" aria-label="My Profile">
       {/* 1. User Account Overview (Always displayed) */}
@@ -1573,6 +1612,125 @@ export function MyProfileSection() {
                 <p className="text-sm text-muted-foreground">
                   No loans or cash advances are recorded for your account.
                 </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 7. BIR Form 2316 (Certificate of Compensation Payment / Tax Withheld) */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FileText className="size-5 text-primary" />
+                    BIR Form 2316 (Annual Tax Certificate)
+                  </CardTitle>
+                  <CardDescription>
+                    Official Certificate of Compensation Payment / Tax Withheld issued by your employer for the BIR.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Tax Year:</span>
+                  <Select
+                    items={[
+                      { value: String(new Date().getFullYear()), label: String(new Date().getFullYear()) },
+                      { value: String(new Date().getFullYear() - 1), label: String(new Date().getFullYear() - 1) },
+                      { value: String(new Date().getFullYear() - 2), label: String(new Date().getFullYear() - 2) },
+                    ]}
+                    value={String(taxCertificateYear)}
+                    onValueChange={(val) => {
+                      if (val) {
+                        setTaxCertificateYear(Number(val));
+                        setDownloadBirError(null);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[110px] h-9">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={String(new Date().getFullYear())}>
+                          {new Date().getFullYear()}
+                        </SelectItem>
+                        <SelectItem value={String(new Date().getFullYear() - 1)}>
+                          {new Date().getFullYear() - 1}
+                        </SelectItem>
+                        <SelectItem value={String(new Date().getFullYear() - 2)}>
+                          {new Date().getFullYear() - 2}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {bir2316Issuance.isPending ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                  <span>Checking annual tax certificate status…</span>
+                </div>
+              ) : bir2316Issuance.data?.status === "ISSUED" ? (
+                <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground">
+                          Official BIR Form 2316 (Tax Year {taxCertificateYear})
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          Issued · v{bir2316Issuance.data.version ?? 1}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Issued on {formatDate(bir2316Issuance.data.issuedAt)} · Statutory deadline:{" "}
+                        {bir2316Issuance.data.statutoryDeadline ?? `Jan 31, ${taxCertificateYear + 1}`}
+                      </p>
+                      {bir2316Issuance.data.hadPriorEmployer ? (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Note: Multiple employers recorded for this tax year. Substituted filing does not apply.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Qualified for Substituted Filing under BIR RR 11-2018 (Single Employer).
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={downloadingBirPdf}
+                      onClick={handleDownloadMyBir2316}
+                    >
+                      {downloadingBirPdf ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Generating PDF…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 size-4" />
+                          Download BIR Form 2316
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {downloadBirError && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {downloadBirError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">
+                    No certificate issued for Tax Year {taxCertificateYear}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Your official BIR Form 2316 certificate has not yet been issued by HR for this tax year.
+                    Issued certificates will be available for download here once annualization is completed.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>

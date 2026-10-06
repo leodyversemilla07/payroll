@@ -57,10 +57,14 @@ describe('tRPC authorization', () => {
   const loansService = {} as LoansService;
   const recordPriorEmployerDeclaration = jest.fn();
   const recordMonthlyTaxRemittance = jest.fn();
+  const getBir2316Issuance = jest.fn();
+  const generateBir2316Pdf = jest.fn();
   const complianceService = {
     withDatabase: () => complianceService,
     recordPriorEmployerDeclaration,
     recordMonthlyTaxRemittance,
+    getBir2316Issuance,
+    generateBir2316Pdf,
   } as unknown as ComplianceService;
   const leavesService = {} as LeavesService;
   const authService = {} as AuthService;
@@ -191,5 +195,133 @@ describe('tRPC authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(executePayrollRun).not.toHaveBeenCalled();
+  });
+
+  describe('BIR Form 2316 PDF authorization', () => {
+    const ownEmployeeId = '11111111-1111-4111-8111-111111111111';
+    const otherEmployeeId = '22222222-2222-4222-8222-222222222222';
+
+    it('prevents employees from viewing another employee BIR 2316 issuance', async () => {
+      const caller = router.createCaller(
+        createContext(Role.EMPLOYEE, { employeeId: ownEmployeeId }),
+      );
+
+      await expect(
+        caller.compliance.getBir2316Issuance({
+          employeeId: otherEmployeeId,
+          taxYear: 2026,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('allows employees to view their own BIR 2316 issuance', async () => {
+      getBir2316Issuance.mockResolvedValue({
+        status: 'ISSUED',
+        version: 1,
+        issuedAt: new Date(),
+      });
+
+      const caller = router.createCaller(
+        createContext(Role.EMPLOYEE, { employeeId: ownEmployeeId }),
+      );
+
+      const result = await caller.compliance.getBir2316Issuance({
+        employeeId: ownEmployeeId,
+        taxYear: 2026,
+      });
+
+      expect(result).toMatchObject({ status: 'ISSUED', version: 1 });
+      expect(getBir2316Issuance).toHaveBeenCalledWith(
+        ownEmployeeId,
+        'organization-a',
+        2026,
+      );
+    });
+
+    it('prevents employees from downloading BIR 2316 PDF of another employee', async () => {
+      const caller = router.createCaller(
+        createContext(Role.EMPLOYEE, { employeeId: ownEmployeeId }),
+      );
+
+      await expect(
+        caller.compliance.downloadBir2316Pdf({
+          employeeId: otherEmployeeId,
+          taxYear: 2026,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('prevents employees from downloading BIR 2316 PDF if not yet officially issued', async () => {
+      getBir2316Issuance.mockResolvedValue({
+        status: 'NOT_ISSUED',
+      });
+
+      const caller = router.createCaller(
+        createContext(Role.EMPLOYEE, { employeeId: ownEmployeeId }),
+      );
+
+      await expect(
+        caller.compliance.downloadBir2316Pdf({
+          employeeId: ownEmployeeId,
+          taxYear: 2026,
+        }),
+      ).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        message: expect.stringContaining('not yet been issued'),
+      });
+    });
+
+    it('allows employees to download their own officially issued BIR 2316 PDF', async () => {
+      getBir2316Issuance.mockResolvedValue({
+        status: 'ISSUED',
+        version: 1,
+      });
+      generateBir2316Pdf.mockResolvedValue({
+        fileName: 'BIR2316_2026_Doe_John_OFFICIAL.pdf',
+        dataBase64: 'JVBERi0xLjQK...',
+        isIssued: true,
+      });
+
+      const caller = router.createCaller(
+        createContext(Role.EMPLOYEE, { employeeId: ownEmployeeId }),
+      );
+
+      const result = await caller.compliance.downloadBir2316Pdf({
+        employeeId: ownEmployeeId,
+        taxYear: 2026,
+      });
+
+      expect(result.fileName).toContain('OFFICIAL');
+      expect(generateBir2316Pdf).toHaveBeenCalledWith(
+        ownEmployeeId,
+        'organization-a',
+        2026,
+        false, // non-staff cannot request draft preview
+      );
+    });
+
+    it('allows HR administrators to download draft preview PDF for any employee', async () => {
+      generateBir2316Pdf.mockResolvedValue({
+        fileName: 'BIR2316_2026_Doe_John_PREVIEW.pdf',
+        dataBase64: 'JVBERi0xLjQK...',
+        isIssued: false,
+      });
+
+      const caller = router.createCaller(createContext(Role.HR_ADMIN));
+
+      const result = await caller.compliance.downloadBir2316Pdf({
+        employeeId: otherEmployeeId,
+        taxYear: 2026,
+        isPreview: true,
+      });
+
+      expect(result.fileName).toContain('PREVIEW');
+      expect(generateBir2316Pdf).toHaveBeenCalledWith(
+        otherEmployeeId,
+        'organization-a',
+        2026,
+        true,
+      );
+    });
   });
 });

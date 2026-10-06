@@ -2169,4 +2169,22 @@ describe('ComplianceService 2316 issuance', () => {
     });
     expect(typeof record?.isLate).toBe('boolean');
   });
+
+  it('generates an official BIR 2316 PDF document with base64 data', async () => {
+    mockEmployeePayslips([basePayslip]);
+    const result = await new ComplianceService().generateBir2316Pdf(
+      'employee-1',
+      'org-1',
+      2026,
+    );
+    expect(result).toMatchObject({
+      fileName: expect.stringMatching(/^BIR2316_2026_.*\.pdf$/),
+      isIssued: false,
+    });
+    expect(typeof result.dataBase64).toBe('string');
+    expect(result.dataBase64.length).toBeGreaterThan(100);
+    expect(
+      Buffer.from(result.dataBase64, 'base64').subarray(0, 5).toString('ascii'),
+    ).toBe('%PDF-');
+  });
 });

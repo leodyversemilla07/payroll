@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
-import { Prisma, prisma } from '@workspace/db';
+import { Prisma, Role, prisma } from '@workspace/db';
 import { z } from 'zod';
 import { TaxCorrectionService } from '../../modules/compliance/tax-correction.service';
 import {
@@ -56,6 +56,7 @@ export function createComplianceRouter(ctx: RouterContext) {
     trpc,
     payrollProcedure,
     hrProcedure,
+    protectedProcedure,
     complianceService,
     auditService,
   } = ctx;
@@ -573,15 +574,30 @@ export function createComplianceRouter(ctx: RouterContext) {
         ),
       ),
 
-    getBir2316Issuance: payrollProcedure
+    getBir2316Issuance: protectedProcedure
       .input(
         z.object({
           employeeId: z.string().uuid(),
           taxYear: z.number().int().min(2023).max(2100),
         }),
       )
-      .query(({ input, ctx }) =>
-        withEvidenceErrors(() =>
+      .query(({ input, ctx }) => {
+        const isStaff =
+          ctx.user.role === Role.SUPER_ADMIN ||
+          ctx.user.role === Role.HR_ADMIN ||
+          ctx.user.role === Role.PAYROLL_SPECIALIST;
+        const isOwn = Boolean(
+          ctx.user.employeeId && ctx.user.employeeId === input.employeeId,
+        );
+
+        if (!isStaff && !isOwn) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to access this employee record',
+          });
+        }
+
+        return withEvidenceErrors(() =>
           prisma.$transaction(
             (transaction) =>
               complianceService
@@ -593,8 +609,8 @@ export function createComplianceRouter(ctx: RouterContext) {
                 ),
             { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
           ),
-        ),
-      ),
+        );
+      }),
 
     exportDole13thMonth: payrollProcedure
       .input(
@@ -624,6 +640,66 @@ export function createComplianceRouter(ctx: RouterContext) {
           entityType: 'Dole13thMonthReport',
           entityId: `${ctx.user.organizationId}:${result.taxYear}`,
         });
+        return result;
+      }),
+
+    downloadBir2316Pdf: protectedProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid(),
+          taxYear: z.number().int().min(2023).max(2100).optional(),
+          isPreview: z.boolean().optional(),
+        }),
+      )
+      .query(async ({ input, ctx }) => {
+        const isStaff =
+          ctx.user.role === Role.SUPER_ADMIN ||
+          ctx.user.role === Role.HR_ADMIN ||
+          ctx.user.role === Role.PAYROLL_SPECIALIST;
+
+        const isOwn = Boolean(
+          ctx.user.employeeId && ctx.user.employeeId === input.employeeId,
+        );
+
+        if (!isStaff && !isOwn) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to access this employee record',
+          });
+        }
+
+        const taxYear = input.taxYear ?? new Date().getFullYear();
+
+        if (!isStaff) {
+          const issuance = await complianceService.getBir2316Issuance(
+            input.employeeId,
+            ctx.user.organizationId,
+            taxYear,
+          );
+          if (!issuance || issuance.status !== 'ISSUED') {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Official BIR Form 2316 has not yet been issued for this tax year',
+            });
+          }
+        }
+
+        const result = await complianceService.generateBir2316Pdf(
+          input.employeeId,
+          ctx.user.organizationId,
+          taxYear,
+          isStaff ? Boolean(input.isPreview) : false,
+        );
+
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'EXPORT',
+          entityType: 'BIR2316Pdf',
+          entityId: input.employeeId,
+          newValue: { taxYear, isPreview: input.isPreview },
+        });
+
         return result;
       }),
   });

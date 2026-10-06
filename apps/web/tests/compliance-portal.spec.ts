@@ -326,6 +326,19 @@ test("issue and void a 2316 certificate", async ({ page }) => {
         issuance = { ...issuance, status: "VOIDED" };
         return { result: { data: { json: issuance } } };
       }
+      if (path === "compliance.downloadBir2316Pdf") {
+        return {
+          result: {
+            data: {
+              json: {
+                fileName: "BIR2316_2026_Santos_Ana_OFFICIAL.pdf",
+                dataBase64: "JVBERi0xLjQK...",
+                isIssued: issuance?.status === "ISSUED",
+              },
+            },
+          },
+        };
+      }
       const json =
         path === "auth.me"
           ? user
@@ -368,9 +381,23 @@ test("issue and void a 2316 certificate", async ({ page }) => {
     yearEnd.getByText("before a certificate can be issued"),
   ).toHaveCount(0);
 
+  // Test downloading Draft PDF
+  const draftDownloadBtn = yearEnd.getByRole("button", {
+    name: "Download BIR 2316 PDF (Draft)",
+  });
+  await expect(draftDownloadBtn).toBeVisible();
+  await draftDownloadBtn.click();
+
   await yearEnd.getByRole("button", { name: "Issue certificate" }).click();
   await expect(yearEnd.getByText("Certificate issued.")).toBeVisible();
   expect(mutations).toContain("compliance.issueBir2316");
+
+  // Test downloading Official PDF
+  const officialDownloadBtn = yearEnd.getByRole("button", {
+    name: "Download Official BIR 2316 PDF",
+  });
+  await expect(officialDownloadBtn).toBeVisible();
+  await officialDownloadBtn.click();
 
   await yearEnd
     .getByLabel(/Void reason/)

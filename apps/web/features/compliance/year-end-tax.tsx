@@ -25,9 +25,10 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { Separator } from "@workspace/ui/components/separator";
-import { Loader2 } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { usePortalUser } from "@/components/payroll-portal";
+import { downloadBase64File } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
 
 export interface YearEndEmployeeOption {
@@ -1326,6 +1327,28 @@ function PreviewCard({
     voidIssuance.mutate({ employeeId, taxYear, voidReason });
   }
 
+  const [downloadingPdf, setDownloadingPdf] = useState<"draft" | "official" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleDownloadPdf(isPreview: boolean) {
+    try {
+      setDownloadingPdf(isPreview ? "draft" : "official");
+      setDownloadError(null);
+      const data = await utils.compliance.downloadBir2316Pdf.fetch({
+        employeeId,
+        taxYear,
+        isPreview,
+      });
+      downloadBase64File(data.dataBase64, data.fileName, "application/pdf");
+    } catch (err) {
+      setDownloadError(
+        err instanceof Error ? err.message : "Failed to generate BIR Form 2316 PDF.",
+      );
+    } finally {
+      setDownloadingPdf(null);
+    }
+  }
+
   return (
     <Card size="sm">
       <CardHeader>
@@ -1335,17 +1358,42 @@ function PreviewCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={preview.isPending}
-          onClick={() => {
-            setDone(false);
-            preview.mutate({ employeeId, taxYear });
-          }}
-        >
-          {preview.isPending ? "Previewing…" : "Preview worksheet"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={preview.isPending}
+            onClick={() => {
+              setDone(false);
+              preview.mutate({ employeeId, taxYear });
+            }}
+          >
+            {preview.isPending ? "Previewing…" : "Preview worksheet"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={downloadingPdf === "draft"}
+            onClick={() => void handleDownloadPdf(true)}
+          >
+            {downloadingPdf === "draft" ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                Generating draft PDF…
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 size-4" />
+                Download BIR 2316 PDF (Draft)
+              </>
+            )}
+          </Button>
+        </div>
+        {downloadError && (
+          <p role="alert" className="text-sm font-medium text-destructive">
+            {downloadError}
+          </p>
+        )}
         <MutationError error={preview.error} />
         {done && result && (
           <div className="space-y-2 text-sm">
@@ -1427,6 +1475,25 @@ function PreviewCard({
                   ? " · prior employer on file (no substituted-filing verdict)"
                   : ""}
               </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                <Button
+                  type="button"
+                  disabled={downloadingPdf === "official"}
+                  onClick={() => void handleDownloadPdf(false)}
+                >
+                  {downloadingPdf === "official" ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Generating official PDF…
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="mr-2 size-4" />
+                      Download Official BIR 2316 PDF
+                    </>
+                  )}
+                </Button>
+              </div>
               <form onSubmit={submitVoid}>
                 <FieldGroup>
                   <Field>

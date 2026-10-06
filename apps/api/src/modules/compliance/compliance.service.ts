@@ -11,6 +11,7 @@ import type {
 } from '@workspace/payroll-engine';
 import { resolvePriorEmployerTotals } from './prior-employment.inputs';
 import { sourceFingerprint, TAX_SOURCE_FORMAT } from './tax-source-fingerprint';
+import { Bir2316PdfService } from './bir-2316-pdf.service';
 
 export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
 
@@ -55,6 +56,7 @@ export interface Bir1601CSummary {
 @Injectable()
 export class ComplianceService {
   private database: Prisma.TransactionClient = prisma;
+  private readonly bir2316PdfService = new Bir2316PdfService();
 
   /** A fresh transaction-scoped instance; never mutate the singleton service. */
   withDatabase(database: Prisma.TransactionClient): ComplianceService {
@@ -1970,6 +1972,112 @@ export class ComplianceService {
       priorEmployerTotals,
       presentEmployerTotals,
       employerBreakdownScope: 'PRESENT_EMPLOYER_ONLY' as const,
+    };
+  }
+
+  /**
+   * Generates a 2-page publication-quality official BIR Form 2316 PDF document.
+   */
+  async generateBir2316Pdf(
+    employeeId: string,
+    organizationId: string,
+    taxYear = new Date().getFullYear(),
+    isPreview = false,
+  ) {
+    this.assertSupportedTaxYear(taxYear);
+    const preview = await this.generateBir2316(
+      employeeId,
+      organizationId,
+      taxYear,
+    );
+
+    const employee = await this.database.employee.findFirst({
+      where: { id: employeeId, organizationId },
+      include: {
+        organization: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException(`Employee ${employeeId} not found`);
+    }
+
+    const issuance = await this.database.bir2316Issuance.findFirst({
+      where: {
+        employeeId,
+        organizationId,
+        taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+
+    const isOfficiallyIssued = issuance?.status === 'ISSUED' && !isPreview;
+
+    // Previous employer record if any
+    const previousEmployer = await this.database.previousEmployerIncome.findFirst({
+      where: {
+        employeeId,
+        organizationId,
+        taxYear,
+      },
+      orderBy: { version: 'desc' },
+    });
+
+    const pdfBuffer = await this.bir2316PdfService.renderPdf({
+      taxYear,
+      employee: {
+        employeeNumber: employee.employeeNumber,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        middleName: employee.middleName,
+        suffix: employee.suffix,
+        tin: employee.tin,
+        residentialAddress: employee.residentialAddress,
+        zipCode: null,
+        dateOfBirth: employee.dateOfBirth,
+        contactNumber: null,
+        isMinimumWageEarner: preview.certificate.isMwe,
+      },
+      employer: {
+        name: employee.organization.name,
+        tin: employee.organization.tin,
+        rdoCode: employee.organization.rdoCode,
+        registeredAddress: employee.organization.registeredAddress,
+      },
+      previousEmployer: previousEmployer
+        ? {
+            employerName: previousEmployer.employerName,
+            employerTin: previousEmployer.employerTin,
+            periodStart: previousEmployer.periodStart,
+            periodEnd: previousEmployer.periodEnd,
+            grossCompensationCents: previousEmployer.grossCompensationCents,
+            taxableCompensationCents: previousEmployer.taxableCompensationCents,
+            taxWithheldCents: previousEmployer.taxWithheldCents,
+          }
+        : null,
+      partIVA: preview.certificate.partIVA,
+      partIVB: preview.certificate.partIVB,
+      partIVC: preview.certificate.partIVC,
+      priorEmployerTotals: preview.priorEmployerTotals,
+      isMwe: preview.certificate.isMwe,
+      isIssued: isOfficiallyIssued,
+      issuanceId: issuance?.id,
+      version: issuance?.version,
+      issuedAt: issuance?.issuedAt,
+      isSettled: preview.isSettled,
+    });
+
+    const cleanLastName = employee.lastName.replace(/[^a-zA-Z0-9]/g, '');
+    const cleanFirstName = employee.firstName.replace(/[^a-zA-Z0-9]/g, '');
+    const statePrefix = isOfficiallyIssued ? 'OFFICIAL' : 'PREVIEW';
+    const fileName = `BIR2316_${taxYear}_${cleanLastName}_${cleanFirstName}_${statePrefix}.pdf`;
+
+    return {
+      fileName,
+      dataBase64: pdfBuffer.toString('base64'),
+      isIssued: isOfficiallyIssued,
+      version: issuance?.version,
+      issuedAt: issuance?.issuedAt ? issuance.issuedAt.toISOString() : undefined,
     };
   }
 

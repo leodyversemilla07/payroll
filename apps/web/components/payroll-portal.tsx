@@ -38,7 +38,7 @@ import {
   principalKey,
 } from "@/lib/principal-query-provider";
 import { trpc } from "@/lib/trpc";
-import { PortalSidebar, PortalSidebarSkeleton } from "./portal-sidebar";
+import { AppSidebar, AppSidebarSkeleton } from "./app-sidebar";
 import { WorkspaceLoadingSkeleton } from "./workspace-loading-skeleton";
 
 const supportedRoles = [
@@ -109,13 +109,13 @@ export function PayrollPortal({
         className="text-foreground"
       >
         {hasNavigation && me.data ? (
-          <PortalSidebar
+          <AppSidebar
             key={scope}
             user={me.data}
             activeSection={activeSection.id}
           />
         ) : me.isPending ? (
-          <PortalSidebarSkeleton />
+          <AppSidebarSkeleton />
         ) : null}
         <SidebarInset className="min-w-0">
           <a
@@ -124,7 +124,7 @@ export function PayrollPortal({
           >
             Skip to workspace content
           </a>
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[height] ease-linear md:rounded-t-2xl md:group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[height] ease-linear md:group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:rounded-t-2xl">
             <div className="flex min-w-0 items-center gap-2">
               {(hasNavigation || me.isPending) && (
                 <>
@@ -184,7 +184,7 @@ export function PayrollPortal({
           <div
             id="workspace-content"
             tabIndex={-1}
-            className="mx-auto w-full max-w-6xl scroll-mt-24 space-y-6 p-4 outline-none md:p-6"
+            className="w-full scroll-mt-24 space-y-6 p-3 outline-none sm:p-4 lg:p-5"
           >
             <div className="space-y-4">
               <p
