@@ -83,7 +83,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       ).toMatchObject({ httpOnly: true, sameSite: "Lax" });
     }
     async function logout() {
-      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await page.getByRole("button", { name: /^Account:/ }).click();
+      await page.getByRole("menuitem", { name: "Log out" }).click();
       await expect(
         page.getByRole("heading", { name: "Login to your account" }),
       ).toBeVisible();
@@ -116,11 +117,12 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     };
     for (const [label, value] of Object.entries(values))
       await form.getByLabel(label, { exact: true }).fill(value);
-    await form.getByLabel("Branch", { exact: true }).selectOption(branch.id);
-    await form
-      .getByLabel("Department", { exact: true })
-      .selectOption(department.id);
-    await form.getByLabel("Employment type").selectOption("REGULAR");
+    await form.getByLabel("Branch", { exact: true }).click();
+    await page.getByRole("option", { name: /Test office/ }).click();
+    await form.getByLabel("Department", { exact: true }).click();
+    await page.getByRole("option", { name: /Test operations/ }).click();
+    await form.getByLabel("Employment type", { exact: true }).click();
+    await page.getByRole("option", { name: "REGULAR" }).click();
     await form
       .getByRole("button", { name: "Create employee", exact: true })
       .click();
@@ -132,6 +134,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       include: { compensation: true },
     });
     expect(employee.organizationId).toBe(organization.id);
+    expect(employee.branchId).toBe(branch.id);
+    expect(employee.departmentId).toBe(department.id);
     expect(employee.compensation?.basicRateMonthlyCents).toBe(3000000n);
 
     await navigate(page, "Attendance & DTR");
@@ -139,7 +143,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "Attendance and DTR",
       exact: true,
     });
-    await attendance.getByLabel("DTR employee").selectOption(employee.id);
+    await attendance.getByLabel("DTR employee").click();
+    await page.getByRole("option", { name: /Synthetic Employee/ }).click();
     await attendance.getByLabel("DTR start date").fill("2026-09-01");
     await attendance.getByLabel("DTR end date").fill("2026-09-15");
     await attendance.getByRole("button", { name: "Load DTR" }).click();
@@ -156,7 +161,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
         exact: true,
       });
       await editor.getByLabel("Attendance date").fill(date);
-      await editor.getByLabel("Day type").selectOption("REGULAR_WORKDAY");
+      await editor.getByLabel("Day type", { exact: true }).click();
+      await page.getByRole("option", { name: /REGULAR WORKDAY/i }).click();
       await editor.getByLabel("Time in (Asia/Manila)").fill(`${date}T09:00`);
       await editor
         .getByLabel("Time out (Asia/Manila)")
@@ -208,9 +214,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "Leave management",
       exact: true,
     });
-    await leave
-      .getByLabel("Leave employee", { exact: true })
-      .selectOption(employee.id);
+    await leave.getByLabel("Leave employee", { exact: true }).click();
+    await page.getByRole("option", { name: /Synthetic Employee/ }).click();
     await leave.getByLabel("Leave year").fill("2026");
     await leave
       .getByRole("button", { name: "Load leave records", exact: true })
@@ -243,10 +248,10 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "File leave request",
       exact: true,
     });
-    await request.getByLabel("Pay treatment").selectOption("PAID");
-    await request
-      .getByLabel("Leave type", { exact: true })
-      .selectOption("VACATION");
+    await request.getByLabel("Pay treatment", { exact: true }).click();
+    await page.getByRole("option", { name: "Paid leave" }).click();
+    await request.getByLabel("Leave type", { exact: true }).click();
+    await page.getByRole("option", { name: /VACATION/ }).click();
     await request.getByLabel("Leave start date").fill("2026-09-10");
     await request.getByLabel("Leave end date").fill("2026-09-10");
     await request
@@ -283,9 +288,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "Process payroll run",
       exact: true,
     });
-    await process
-      .getByLabel("Cutoff", { exact: true })
-      .selectOption("FIRST_CUTOFF");
+    await process.getByLabel("Cutoff", { exact: true }).click();
+    await page.getByRole("option", { name: "First cutoff" }).click();
     await process.getByLabel("Regular run cutoff start").fill("2026-09-01");
     await process.getByLabel("Regular run cutoff end").fill("2026-09-15");
     await process.getByLabel("Regular run payment date").fill("2026-09-16");
@@ -312,7 +316,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     await logout();
     await login(adminEmail);
     await navigate(page, "Attendance & DTR");
-    await attendance.getByLabel("DTR employee").selectOption(employee.id);
+    await attendance.getByLabel("DTR employee").click();
+    await page.getByRole("option", { name: /Synthetic Employee/ }).click();
     await attendance.getByLabel("DTR start date").fill("2026-09-01");
     await attendance.getByLabel("DTR end date").fill("2026-09-15");
     await attendance.getByRole("button", { name: "Load DTR" }).click();
@@ -325,9 +330,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
     await logout();
     await login(makerEmail);
     await navigate(page, "Process payroll");
-    await process
-      .getByLabel("Cutoff", { exact: true })
-      .selectOption("FIRST_CUTOFF");
+    await process.getByLabel("Cutoff", { exact: true }).click();
+    await page.getByRole("option", { name: "First cutoff" }).click();
     await process.getByLabel("Regular run cutoff start").fill("2026-09-01");
     await process.getByLabel("Regular run cutoff end").fill("2026-09-15");
     await process.getByLabel("Regular run payment date").fill("2026-09-16");
@@ -410,9 +414,8 @@ test("real portal persists onboarding, attendance, leave and maker-checker payro
       name: "Year-end tax",
       exact: true,
     });
-    await yearEnd
-      .getByLabel("Employee", { exact: true })
-      .selectOption(employee.id);
+    await yearEnd.getByLabel("Employee", { exact: true }).click();
+    await page.getByRole("option", { name: /Synthetic Employee/ }).click();
     await yearEnd
       .getByLabel("Source reference", { exact: true })
       .fill("Synthetic signed declaration v1");

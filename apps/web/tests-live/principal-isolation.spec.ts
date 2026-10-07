@@ -85,7 +85,8 @@ test("a shared-cookie account switch cannot expose the former tenant's cached em
     ).toBeVisible();
     const other = await context.newPage();
     await other.goto("/portal");
-    await other.getByRole("button", { name: "Sign out", exact: true }).click();
+    await other.getByRole("button", { name: /^Account:/ }).click();
+    await other.getByRole("menuitem", { name: "Log out" }).click();
     await other.getByLabel("Email", { exact: true }).fill(beta.email);
     await other.getByLabel("Password", { exact: true }).fill(password);
     await other.getByRole("button", { name: "Login", exact: true }).click();
