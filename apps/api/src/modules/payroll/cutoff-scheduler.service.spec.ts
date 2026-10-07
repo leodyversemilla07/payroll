@@ -29,7 +29,7 @@ describe('CutoffSchedulerService', () => {
         count: jest.fn(),
       },
     };
-    service = new CutoffSchedulerService(mockPrisma as never);
+    service = new CutoffSchedulerService().withDatabase(mockPrisma as never);
   });
 
   describe('calculateCutoffPeriod', () => {

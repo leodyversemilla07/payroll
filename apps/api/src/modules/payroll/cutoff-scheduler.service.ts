@@ -32,11 +32,12 @@ export interface CutoffAlertResult {
 @Injectable()
 export class CutoffSchedulerService {
   private readonly logger = new Logger(CutoffSchedulerService.name);
-
-  constructor(private readonly database: Prisma.TransactionClient = prisma) {}
+  private database: Prisma.TransactionClient = prisma;
 
   withDatabase(database: Prisma.TransactionClient): CutoffSchedulerService {
-    return new CutoffSchedulerService(database);
+    const service = new CutoffSchedulerService();
+    service.database = database;
+    return service;
   }
 
   /**
