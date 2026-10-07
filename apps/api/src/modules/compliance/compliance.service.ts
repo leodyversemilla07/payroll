@@ -9,9 +9,9 @@ import type {
   ThirteenthMonthBatchResult,
   ThirteenthMonthEmployeeResult,
 } from '@workspace/payroll-engine';
+import { Bir2316PdfService } from './bir-2316-pdf.service';
 import { resolvePriorEmployerTotals } from './prior-employment.inputs';
 import { sourceFingerprint, TAX_SOURCE_FORMAT } from './tax-source-fingerprint';
-import { Bir2316PdfService } from './bir-2316-pdf.service';
 
 export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
 
@@ -2014,14 +2014,15 @@ export class ComplianceService {
     const isOfficiallyIssued = issuance?.status === 'ISSUED' && !isPreview;
 
     // Previous employer record if any
-    const previousEmployer = await this.database.previousEmployerIncome.findFirst({
-      where: {
-        employeeId,
-        organizationId,
-        taxYear,
-      },
-      orderBy: { version: 'desc' },
-    });
+    const previousEmployer =
+      await this.database.previousEmployerIncome.findFirst({
+        where: {
+          employeeId,
+          organizationId,
+          taxYear,
+        },
+        orderBy: { version: 'desc' },
+      });
 
     const pdfBuffer = await this.bir2316PdfService.renderPdf({
       taxYear,
@@ -2077,7 +2078,9 @@ export class ComplianceService {
       dataBase64: pdfBuffer.toString('base64'),
       isIssued: isOfficiallyIssued,
       version: issuance?.version,
-      issuedAt: issuance?.issuedAt ? issuance.issuedAt.toISOString() : undefined,
+      issuedAt: issuance?.issuedAt
+        ? issuance.issuedAt.toISOString()
+        : undefined,
     };
   }
 

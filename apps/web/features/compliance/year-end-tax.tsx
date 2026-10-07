@@ -1327,7 +1327,9 @@ function PreviewCard({
     voidIssuance.mutate({ employeeId, taxYear, voidReason });
   }
 
-  const [downloadingPdf, setDownloadingPdf] = useState<"draft" | "official" | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<
+    "draft" | "official" | null
+  >(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function handleDownloadPdf(isPreview: boolean) {
@@ -1342,7 +1344,9 @@ function PreviewCard({
       downloadBase64File(data.dataBase64, data.fileName, "application/pdf");
     } catch (err) {
       setDownloadError(
-        err instanceof Error ? err.message : "Failed to generate BIR Form 2316 PDF.",
+        err instanceof Error
+          ? err.message
+          : "Failed to generate BIR Form 2316 PDF.",
       );
     } finally {
       setDownloadingPdf(null);

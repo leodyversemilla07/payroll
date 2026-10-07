@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
-import { Prisma, Role, prisma } from '@workspace/db';
+import { Prisma, prisma, Role } from '@workspace/db';
 import { z } from 'zod';
 import { TaxCorrectionService } from '../../modules/compliance/tax-correction.service';
 import {
@@ -593,7 +593,8 @@ export function createComplianceRouter(ctx: RouterContext) {
         if (!isStaff && !isOwn) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'You do not have permission to access this employee record',
+            message:
+              'You do not have permission to access this employee record',
           });
         }
 
@@ -664,7 +665,8 @@ export function createComplianceRouter(ctx: RouterContext) {
         if (!isStaff && !isOwn) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'You do not have permission to access this employee record',
+            message:
+              'You do not have permission to access this employee record',
           });
         }
 
@@ -676,10 +678,11 @@ export function createComplianceRouter(ctx: RouterContext) {
             ctx.user.organizationId,
             taxYear,
           );
-          if (!issuance || issuance.status !== 'ISSUED') {
+          if (issuance?.status !== 'ISSUED') {
             throw new TRPCError({
               code: 'FORBIDDEN',
-              message: 'Official BIR Form 2316 has not yet been issued for this tax year',
+              message:
+                'Official BIR Form 2316 has not yet been issued for this tax year',
             });
           }
         }

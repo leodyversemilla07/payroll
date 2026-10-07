@@ -1,10 +1,9 @@
 import {
+  type Bir2316PdfData,
   Bir2316PdfService,
-  formatCurrency,
   formatDate,
   formatPesos,
   formatTin,
-  type Bir2316PdfData,
 } from './bir-2316-pdf.service';
 
 describe('Bir2316PdfService', () => {

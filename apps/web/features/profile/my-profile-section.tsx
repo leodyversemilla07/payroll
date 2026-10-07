@@ -1626,16 +1626,28 @@ export function MyProfileSection() {
                     BIR Form 2316 (Annual Tax Certificate)
                   </CardTitle>
                   <CardDescription>
-                    Official Certificate of Compensation Payment / Tax Withheld issued by your employer for the BIR.
+                    Official Certificate of Compensation Payment / Tax Withheld
+                    issued by your employer for the BIR.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Tax Year:</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Tax Year:
+                  </span>
                   <Select
                     items={[
-                      { value: String(new Date().getFullYear()), label: String(new Date().getFullYear()) },
-                      { value: String(new Date().getFullYear() - 1), label: String(new Date().getFullYear() - 1) },
-                      { value: String(new Date().getFullYear() - 2), label: String(new Date().getFullYear() - 2) },
+                      {
+                        value: String(new Date().getFullYear()),
+                        label: String(new Date().getFullYear()),
+                      },
+                      {
+                        value: String(new Date().getFullYear() - 1),
+                        label: String(new Date().getFullYear() - 1),
+                      },
+                      {
+                        value: String(new Date().getFullYear() - 2),
+                        label: String(new Date().getFullYear() - 2),
+                      },
                     ]}
                     value={String(taxCertificateYear)}
                     onValueChange={(val) => {
@@ -1653,10 +1665,14 @@ export function MyProfileSection() {
                         <SelectItem value={String(new Date().getFullYear())}>
                           {new Date().getFullYear()}
                         </SelectItem>
-                        <SelectItem value={String(new Date().getFullYear() - 1)}>
+                        <SelectItem
+                          value={String(new Date().getFullYear() - 1)}
+                        >
                           {new Date().getFullYear() - 1}
                         </SelectItem>
-                        <SelectItem value={String(new Date().getFullYear() - 2)}>
+                        <SelectItem
+                          value={String(new Date().getFullYear() - 2)}
+                        >
                           {new Date().getFullYear() - 2}
                         </SelectItem>
                       </SelectGroup>
@@ -1684,16 +1700,20 @@ export function MyProfileSection() {
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Issued on {formatDate(bir2316Issuance.data.issuedAt)} · Statutory deadline:{" "}
-                        {bir2316Issuance.data.statutoryDeadline ?? `Jan 31, ${taxCertificateYear + 1}`}
+                        Issued on {formatDate(bir2316Issuance.data.issuedAt)} ·
+                        Statutory deadline:{" "}
+                        {bir2316Issuance.data.statutoryDeadline ??
+                          `Jan 31, ${taxCertificateYear + 1}`}
                       </p>
                       {bir2316Issuance.data.hadPriorEmployer ? (
                         <p className="text-xs text-amber-600 dark:text-amber-400">
-                          Note: Multiple employers recorded for this tax year. Substituted filing does not apply.
+                          Note: Multiple employers recorded for this tax year.
+                          Substituted filing does not apply.
                         </p>
                       ) : (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                          Qualified for Substituted Filing under BIR RR 11-2018 (Single Employer).
+                          Qualified for Substituted Filing under BIR RR 11-2018
+                          (Single Employer).
                         </p>
                       )}
                     </div>
@@ -1727,8 +1747,9 @@ export function MyProfileSection() {
                     No certificate issued for Tax Year {taxCertificateYear}
                   </p>
                   <p className="mt-1 text-xs">
-                    Your official BIR Form 2316 certificate has not yet been issued by HR for this tax year.
-                    Issued certificates will be available for download here once annualization is completed.
+                    Your official BIR Form 2316 certificate has not yet been
+                    issued by HR for this tax year. Issued certificates will be
+                    available for download here once annualization is completed.
                   </p>
                 </div>
               )}

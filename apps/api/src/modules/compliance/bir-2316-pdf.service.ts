@@ -173,14 +173,20 @@ export class Bir2316PdfService {
 
     // 1. TOP HEADER & TITLE
     const headerHeight = 52;
-    doc.rect(startX, y, pageWidth, headerHeight).fillAndStroke('#0f2942', '#0f2942');
+    doc
+      .rect(startX, y, pageWidth, headerHeight)
+      .fillAndStroke('#0f2942', '#0f2942');
 
     // Title left
     doc
       .fillColor('#94a3b8')
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text('REPUBLIC OF THE PHILIPPINES · DEPARTMENT OF FINANCE', startX + 12, y + 6);
+      .text(
+        'REPUBLIC OF THE PHILIPPINES · DEPARTMENT OF FINANCE',
+        startX + 12,
+        y + 6,
+      );
     doc
       .fillColor('#e2e8f0')
       .font('Helvetica-Bold')
@@ -190,12 +196,20 @@ export class Bir2316PdfService {
       .fillColor('#ffffff')
       .font('Helvetica-Bold')
       .fontSize(11)
-      .text('Certificate of Compensation Payment / Tax Withheld', startX + 12, y + 25);
+      .text(
+        'Certificate of Compensation Payment / Tax Withheld',
+        startX + 12,
+        y + 25,
+      );
     doc
       .fillColor('#cbd5e1')
       .font('Helvetica-Oblique')
       .fontSize(6.5)
-      .text('For Compensation Payment With or Without Tax Withheld', startX + 12, y + 38);
+      .text(
+        'For Compensation Payment With or Without Tax Withheld',
+        startX + 12,
+        y + 38,
+      );
 
     // Form number right box
     const formBoxWidth = 145;
@@ -208,94 +222,278 @@ export class Bir2316PdfService {
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
       .fontSize(9.5)
-      .text('BIR Form No. 2316', formBoxX, y + 7, { width: formBoxWidth, align: 'center' });
+      .text('BIR Form No. 2316', formBoxX, y + 7, {
+        width: formBoxWidth,
+        align: 'center',
+      });
     doc
       .fillColor('#64748b')
       .font('Helvetica')
       .fontSize(6)
-      .text('Revised January 2018 (ENCS)', formBoxX, y + 18, { width: formBoxWidth, align: 'center' });
+      .text('Revised January 2018 (ENCS)', formBoxX, y + 18, {
+        width: formBoxWidth,
+        align: 'center',
+      });
     doc
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
       .fontSize(8.5)
-      .text(`For Taxable Year: ${data.taxYear}`, formBoxX, y + 27, { width: formBoxWidth, align: 'center' });
+      .text(`For Taxable Year: ${data.taxYear}`, formBoxX, y + 27, {
+        width: formBoxWidth,
+        align: 'center',
+      });
     doc
       .fillColor('#334155')
       .font('Helvetica')
       .fontSize(6)
-      .text(`Period: 01/01/${data.taxYear} to 12/31/${data.taxYear}`, formBoxX, y + 37, { width: formBoxWidth, align: 'center' });
+      .text(
+        `Period: 01/01/${data.taxYear} to 12/31/${data.taxYear}`,
+        formBoxX,
+        y + 37,
+        { width: formBoxWidth, align: 'center' },
+      );
 
     y += headerHeight + 6;
 
     // 2. PART I: EMPLOYEE INFORMATION
-    y = this.drawSectionHeader(doc, 'PART I — EMPLOYEE INFORMATION', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART I — EMPLOYEE INFORMATION',
+      startX,
+      y,
+      pageWidth,
+    );
     const p1Height = 84;
-    doc.rect(startX, y, pageWidth, p1Height).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, p1Height)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
     const colW = pageWidth / 2;
     const rowH = 21;
 
     // Row 1: TIN & RDO
-    this.drawCell(doc, '1. Taxpayer Identification No. (TIN)', formatTin(data.employee.tin), startX, y, colW, rowH);
-    this.drawCell(doc, '3. RDO Code', data.employee.rdoCode || data.employer.rdoCode || '038', startX + colW, y, colW, rowH);
+    this.drawCell(
+      doc,
+      '1. Taxpayer Identification No. (TIN)',
+      formatTin(data.employee.tin),
+      startX,
+      y,
+      colW,
+      rowH,
+    );
+    this.drawCell(
+      doc,
+      '3. RDO Code',
+      data.employee.rdoCode || data.employer.rdoCode || '038',
+      startX + colW,
+      y,
+      colW,
+      rowH,
+    );
 
     // Row 2: Full Name
-    const middle = data.employee.middleName ? ` ${data.employee.middleName}` : '';
+    const middle = data.employee.middleName
+      ? ` ${data.employee.middleName}`
+      : '';
     const suffix = data.employee.suffix ? ` ${data.employee.suffix}` : '';
     const fullName = `${data.employee.lastName}, ${data.employee.firstName}${middle}${suffix}`;
-    this.drawCell(doc, "2. Employee's Name (Last, First, Middle)", fullName.toUpperCase(), startX, y + rowH, pageWidth, rowH);
+    this.drawCell(
+      doc,
+      "2. Employee's Name (Last, First, Middle)",
+      fullName.toUpperCase(),
+      startX,
+      y + rowH,
+      pageWidth,
+      rowH,
+    );
 
     // Row 3: Registered Address & Zip
-    this.drawCell(doc, '4. Registered Address', data.employee.residentialAddress, startX, y + rowH * 2, colW + 80, rowH);
-    this.drawCell(doc, '5. ZIP Code', data.employee.zipCode || '—', startX + colW + 80, y + rowH * 2, colW - 80, rowH);
+    this.drawCell(
+      doc,
+      '4. Registered Address',
+      data.employee.residentialAddress,
+      startX,
+      y + rowH * 2,
+      colW + 80,
+      rowH,
+    );
+    this.drawCell(
+      doc,
+      '5. ZIP Code',
+      data.employee.zipCode || '—',
+      startX + colW + 80,
+      y + rowH * 2,
+      colW - 80,
+      rowH,
+    );
 
     // Row 4: Date of Birth & Minimum Wage Earner checkbox
     const dobStr = formatDate(data.employee.dateOfBirth);
-    this.drawCell(doc, '6. Date of Birth (MM/DD/YYYY)', dobStr, startX, y + rowH * 3, colW * 0.6, rowH);
-    this.drawCell(doc, '7. Employee No.', data.employee.employeeNumber, startX + colW * 0.6, y + rowH * 3, colW * 0.4, rowH);
+    this.drawCell(
+      doc,
+      '6. Date of Birth (MM/DD/YYYY)',
+      dobStr,
+      startX,
+      y + rowH * 3,
+      colW * 0.6,
+      rowH,
+    );
+    this.drawCell(
+      doc,
+      '7. Employee No.',
+      data.employee.employeeNumber,
+      startX + colW * 0.6,
+      y + rowH * 3,
+      colW * 0.4,
+      rowH,
+    );
 
     const mweX = startX + colW;
     const mweW = colW;
-    doc.rect(mweX, y + rowH * 3, mweW, rowH).fillAndStroke('#f8fafc', '#cbd5e1');
-    doc.fillColor('#475569').font('Helvetica').fontSize(6).text('8. Minimum Wage Earner (MWE)?', mweX + 4, y + rowH * 3 + 2);
+    doc
+      .rect(mweX, y + rowH * 3, mweW, rowH)
+      .fillAndStroke('#f8fafc', '#cbd5e1');
+    doc
+      .fillColor('#475569')
+      .font('Helvetica')
+      .fontSize(6)
+      .text('8. Minimum Wage Earner (MWE)?', mweX + 4, y + rowH * 3 + 2);
     const yesCheck = data.isMwe ? '[X] YES' : '[  ] YES';
     const noCheck = !data.isMwe ? '[X] NO' : '[  ] NO';
-    doc.fillColor('#0f2942').font('Helvetica-Bold').fontSize(7.5).text(`${yesCheck}     ${noCheck}`, mweX + 6, y + rowH * 3 + 10);
+    doc
+      .fillColor('#0f2942')
+      .font('Helvetica-Bold')
+      .fontSize(7.5)
+      .text(`${yesCheck}     ${noCheck}`, mweX + 6, y + rowH * 3 + 10);
 
     y += p1Height + 6;
 
     // 3. PART II: EMPLOYER INFORMATION (PRESENT)
-    y = this.drawSectionHeader(doc, 'PART II — EMPLOYER INFORMATION (PRESENT)', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART II — EMPLOYER INFORMATION (PRESENT)',
+      startX,
+      y,
+      pageWidth,
+    );
     const p2Height = 58;
-    doc.rect(startX, y, pageWidth, p2Height).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, p2Height)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
-    this.drawCell(doc, '9. Employer TIN', formatTin(data.employer.tin), startX, y, colW, 19);
-    this.drawCell(doc, '11. RDO Code', data.employer.rdoCode, startX + colW, y, colW, 19);
-    this.drawCell(doc, "10. Employer's Registered Name", data.employer.name.toUpperCase(), startX, y + 19, pageWidth, 19);
-    this.drawCell(doc, '12. Registered Address', data.employer.registeredAddress, startX, y + 38, pageWidth, 20);
+    this.drawCell(
+      doc,
+      '9. Employer TIN',
+      formatTin(data.employer.tin),
+      startX,
+      y,
+      colW,
+      19,
+    );
+    this.drawCell(
+      doc,
+      '11. RDO Code',
+      data.employer.rdoCode,
+      startX + colW,
+      y,
+      colW,
+      19,
+    );
+    this.drawCell(
+      doc,
+      "10. Employer's Registered Name",
+      data.employer.name.toUpperCase(),
+      startX,
+      y + 19,
+      pageWidth,
+      19,
+    );
+    this.drawCell(
+      doc,
+      '12. Registered Address',
+      data.employer.registeredAddress,
+      startX,
+      y + 38,
+      pageWidth,
+      20,
+    );
 
     y += p2Height + 6;
 
     // 4. PART III: EMPLOYER INFORMATION (PREVIOUS)
-    y = this.drawSectionHeader(doc, 'PART III — EMPLOYER INFORMATION (PREVIOUS)', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART III — EMPLOYER INFORMATION (PREVIOUS)',
+      startX,
+      y,
+      pageWidth,
+    );
     const p3Height = 36;
-    doc.rect(startX, y, pageWidth, p3Height).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, p3Height)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
     if (data.previousEmployer) {
       const prev = data.previousEmployer;
-      this.drawCell(doc, '13. Previous Employer TIN', formatTin(prev.employerTin), startX, y, colW * 0.7, 18);
-      this.drawCell(doc, '14. Previous Employer Name', prev.employerName.toUpperCase(), startX + colW * 0.7, y, pageWidth - colW * 0.7, 18);
+      this.drawCell(
+        doc,
+        '13. Previous Employer TIN',
+        formatTin(prev.employerTin),
+        startX,
+        y,
+        colW * 0.7,
+        18,
+      );
+      this.drawCell(
+        doc,
+        '14. Previous Employer Name',
+        prev.employerName.toUpperCase(),
+        startX + colW * 0.7,
+        y,
+        pageWidth - colW * 0.7,
+        18,
+      );
       const period = `From: ${formatDate(prev.periodStart)}  To: ${formatDate(prev.periodEnd)}`;
-      this.drawCell(doc, '15. Employment Period with Previous Employer', period, startX, y + 18, pageWidth, 18);
+      this.drawCell(
+        doc,
+        '15. Employment Period with Previous Employer',
+        period,
+        startX,
+        y + 18,
+        pageWidth,
+        18,
+      );
     } else {
-      doc.rect(startX, y, pageWidth, p3Height).fillAndStroke('#f8fafc', '#cbd5e1');
-      doc.fillColor('#64748b').font('Helvetica-Oblique').fontSize(7.5).text('N/A — Purely single employer during taxable year', startX + 8, y + 12);
+      doc
+        .rect(startX, y, pageWidth, p3Height)
+        .fillAndStroke('#f8fafc', '#cbd5e1');
+      doc
+        .fillColor('#64748b')
+        .font('Helvetica-Oblique')
+        .fontSize(7.5)
+        .text(
+          'N/A — Purely single employer during taxable year',
+          startX + 8,
+          y + 12,
+        );
     }
 
     y += p3Height + 6;
 
     // 5. PART IV-A: SUMMARY OF COMPENSATION AND TAX
-    y = this.drawSectionHeader(doc, 'PART IV-A — SUMMARY OF COMPENSATION AND TAX', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART IV-A — SUMMARY OF COMPENSATION AND TAX',
+      startX,
+      y,
+      pageWidth,
+    );
     const summaryRows = [
       {
         num: '16',
@@ -376,7 +574,11 @@ export class Bir2316PdfService {
 
     const sRowH = 15.5;
     const tableHeight = summaryRows.length * sRowH;
-    doc.rect(startX, y, pageWidth, tableHeight).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, tableHeight)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
     summaryRows.forEach((r, idx) => {
       const rowY = y + idx * sRowH;
@@ -387,40 +589,71 @@ export class Bir2316PdfService {
       }
 
       // Border bottom
-      doc.moveTo(startX, rowY + sRowH).lineTo(startX + pageWidth, rowY + sRowH).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+      doc
+        .moveTo(startX, rowY + sRowH)
+        .lineTo(startX + pageWidth, rowY + sRowH)
+        .strokeColor('#e2e8f0')
+        .lineWidth(0.5)
+        .stroke();
 
       // Number & description
       doc
         .fillColor('#0f2942')
         .font(r.isBold ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(6.8)
-        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 4, { width: pageWidth - 120 });
+        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 4, {
+          width: pageWidth - 120,
+        });
 
       // Amount
       doc
-        .fillColor(r.highlight && data.partIVA.refundDueEmployeeCents > 0n ? '#047857' : '#0f2942')
+        .fillColor(
+          r.highlight && data.partIVA.refundDueEmployeeCents > 0n
+            ? '#047857'
+            : '#0f2942',
+        )
         .font(r.isBold ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(7.2)
-        .text(`PHP ${formatPesos(r.amount)}`, startX + pageWidth - 110, rowY + 4, {
-          width: 104,
-          align: 'right',
-        });
+        .text(
+          `PHP ${formatPesos(r.amount)}`,
+          startX + pageWidth - 110,
+          rowY + 4,
+          {
+            width: 104,
+            align: 'right',
+          },
+        );
     });
 
     y += tableHeight + 6;
 
     // 6. PART V: DECLARATIONS & SIGNATURES
-    y = this.drawSectionHeader(doc, 'PART V — DECLARATIONS AND CERTIFICATION', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART V — DECLARATIONS AND CERTIFICATION',
+      startX,
+      y,
+      pageWidth,
+    );
     const boxW = (pageWidth - 6) / 2;
     const decH = 76;
 
     // Employer Declaration (Left)
-    doc.rect(startX, y, boxW, decH).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, boxW, decH)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
     doc
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text('Present Employer / Authorized Representative Declaration', startX + 6, y + 4, { width: boxW - 12 });
+      .text(
+        'Present Employer / Authorized Representative Declaration',
+        startX + 6,
+        y + 4,
+        { width: boxW - 12 },
+      );
     doc
       .fillColor('#475569')
       .font('Helvetica')
@@ -431,21 +664,39 @@ export class Bir2316PdfService {
         y + 14,
         { width: boxW - 12 },
       );
-    doc.moveTo(startX + 12, y + 58).lineTo(startX + boxW - 12, y + 58).strokeColor('#94a3b8').stroke();
+    doc
+      .moveTo(startX + 12, y + 58)
+      .lineTo(startX + boxW - 12, y + 58)
+      .strokeColor('#94a3b8')
+      .stroke();
     doc
       .fillColor('#334155')
       .font('Helvetica')
       .fontSize(5.5)
-      .text('Signature of Authorized Representative / Date', startX + 6, y + 62, { width: boxW - 12, align: 'center' });
+      .text(
+        'Signature of Authorized Representative / Date',
+        startX + 6,
+        y + 62,
+        { width: boxW - 12, align: 'center' },
+      );
 
     // Employee Declaration (Right)
     const rightX = startX + boxW + 6;
-    doc.rect(rightX, y, boxW, decH).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(rightX, y, boxW, decH)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
     doc
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text('Employee Declaration & Substituted Filing Certification', rightX + 6, y + 4, { width: boxW - 12 });
+      .text(
+        'Employee Declaration & Substituted Filing Certification',
+        rightX + 6,
+        y + 4,
+        { width: boxW - 12 },
+      );
     doc
       .fillColor('#475569')
       .font('Helvetica')
@@ -456,12 +707,19 @@ export class Bir2316PdfService {
         y + 14,
         { width: boxW - 12 },
       );
-    doc.moveTo(rightX + 12, y + 58).lineTo(rightX + boxW - 12, y + 58).strokeColor('#94a3b8').stroke();
+    doc
+      .moveTo(rightX + 12, y + 58)
+      .lineTo(rightX + boxW - 12, y + 58)
+      .strokeColor('#94a3b8')
+      .stroke();
     doc
       .fillColor('#334155')
       .font('Helvetica')
       .fontSize(5.5)
-      .text('Signature of Employee / Date', rightX + 6, y + 62, { width: boxW - 12, align: 'center' });
+      .text('Signature of Employee / Date', rightX + 6, y + 62, {
+        width: boxW - 12,
+        align: 'center',
+      });
 
     y += decH + 4;
 
@@ -469,13 +727,19 @@ export class Bir2316PdfService {
     const isQualified =
       !data.previousEmployer &&
       (data.priorEmployerTotals?.employerCount ?? 0) === 0 &&
-      (data.partIVA.refundDueEmployeeCents === 0n && data.partIVA.taxPayableByEmployeeCents === 0n);
+      data.partIVA.refundDueEmployeeCents === 0n &&
+      data.partIVA.taxPayableByEmployeeCents === 0n;
 
     const badgeText = isQualified
       ? '✓ QUALIFIED FOR SUBSTITUTED FILING (RR 11-2018 §2.79) — NO INDIVIDUAL BIR FORM 1700 REQUIRED'
       : 'ℹ NOT QUALIFIED FOR SUBSTITUTED FILING — INDIVIDUAL ITR FILING REQUIRED (BIR FORM 1700)';
 
-    doc.rect(startX, y, pageWidth, 18).fillAndStroke(isQualified ? '#ecfdf5' : '#fef2f2', isQualified ? '#059669' : '#dc2626');
+    doc
+      .rect(startX, y, pageWidth, 18)
+      .fillAndStroke(
+        isQualified ? '#ecfdf5' : '#fef2f2',
+        isQualified ? '#059669' : '#dc2626',
+      );
     doc
       .fillColor(isQualified ? '#065f46' : '#991b1b')
       .font('Helvetica-Bold')
@@ -487,10 +751,15 @@ export class Bir2316PdfService {
       .fillColor('#94a3b8')
       .font('Helvetica')
       .fontSize(5.5)
-      .text(`Page 1 of 2  ·  BIR Form 2316 (ENCS)  ·  Generated: ${new Date().toISOString()}`, startX, doc.page.height - 18, {
-        width: pageWidth,
-        align: 'center',
-      });
+      .text(
+        `Page 1 of 2  ·  BIR Form 2316 (ENCS)  ·  Generated: ${new Date().toISOString()}`,
+        startX,
+        doc.page.height - 18,
+        {
+          width: pageWidth,
+          align: 'center',
+        },
+      );
   }
 
   private drawPage2(
@@ -511,7 +780,11 @@ export class Bir2316PdfService {
       .fillColor('#ffffff')
       .font('Helvetica-Bold')
       .fontSize(8.5)
-      .text('BIR Form No. 2316 (Page 2) — ITEMIZED COMPENSATION BREAKDOWN', startX + 8, y + 4);
+      .text(
+        'BIR Form No. 2316 (Page 2) — ITEMIZED COMPENSATION BREAKDOWN',
+        startX + 8,
+        y + 4,
+      );
     doc
       .fillColor('#94a3b8')
       .font('Helvetica')
@@ -525,7 +798,13 @@ export class Bir2316PdfService {
     y += 28;
 
     // PART IV-B: NON-TAXABLE / EXEMPT COMPENSATION
-    y = this.drawSectionHeader(doc, 'PART IV-B — DETAILS OF NON-TAXABLE / EXEMPT COMPENSATION INCOME', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART IV-B — DETAILS OF NON-TAXABLE / EXEMPT COMPENSATION INCOME',
+      startX,
+      y,
+      pageWidth,
+    );
     const nonTaxableRows = [
       {
         num: '25',
@@ -582,7 +861,11 @@ export class Bir2316PdfService {
 
     const rowH = 15;
     const bTableH = nonTaxableRows.length * rowH;
-    doc.rect(startX, y, pageWidth, bTableH).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, bTableH)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
     nonTaxableRows.forEach((r, idx) => {
       const rowY = y + idx * rowH;
@@ -592,28 +875,46 @@ export class Bir2316PdfService {
         doc.rect(startX, rowY, pageWidth, rowH).fill('#fafafa');
       }
 
-      doc.moveTo(startX, rowY + rowH).lineTo(startX + pageWidth, rowY + rowH).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+      doc
+        .moveTo(startX, rowY + rowH)
+        .lineTo(startX + pageWidth, rowY + rowH)
+        .strokeColor('#e2e8f0')
+        .lineWidth(0.5)
+        .stroke();
 
       doc
         .fillColor('#0f2942')
         .font(r.isTotal ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(6.8)
-        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 3.5, { width: pageWidth - 120 });
+        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 3.5, {
+          width: pageWidth - 120,
+        });
 
       doc
         .fillColor(r.isTotal ? '#0f2942' : '#334155')
         .font(r.isTotal ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(7.2)
-        .text(`PHP ${formatPesos(r.amount)}`, startX + pageWidth - 110, rowY + 3.5, {
-          width: 104,
-          align: 'right',
-        });
+        .text(
+          `PHP ${formatPesos(r.amount)}`,
+          startX + pageWidth - 110,
+          rowY + 3.5,
+          {
+            width: 104,
+            align: 'right',
+          },
+        );
     });
 
     y += bTableH + 8;
 
     // PART IV-C: TAXABLE COMPENSATION INCOME
-    y = this.drawSectionHeader(doc, 'PART IV-C — DETAILS OF TAXABLE COMPENSATION INCOME', startX, y, pageWidth);
+    y = this.drawSectionHeader(
+      doc,
+      'PART IV-C — DETAILS OF TAXABLE COMPENSATION INCOME',
+      startX,
+      y,
+      pageWidth,
+    );
     const taxableRows = [
       {
         num: '35',
@@ -691,7 +992,11 @@ export class Bir2316PdfService {
     ];
 
     const cTableH = taxableRows.length * rowH;
-    doc.rect(startX, y, pageWidth, cTableH).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+    doc
+      .rect(startX, y, pageWidth, cTableH)
+      .strokeColor('#cbd5e1')
+      .lineWidth(0.5)
+      .stroke();
 
     taxableRows.forEach((r, idx) => {
       const rowY = y + idx * rowH;
@@ -701,35 +1006,53 @@ export class Bir2316PdfService {
         doc.rect(startX, rowY, pageWidth, rowH).fill('#fafafa');
       }
 
-      doc.moveTo(startX, rowY + rowH).lineTo(startX + pageWidth, rowY + rowH).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+      doc
+        .moveTo(startX, rowY + rowH)
+        .lineTo(startX + pageWidth, rowY + rowH)
+        .strokeColor('#e2e8f0')
+        .lineWidth(0.5)
+        .stroke();
 
       doc
         .fillColor('#0f2942')
         .font(r.isTotal ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(6.8)
-        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 3.5, { width: pageWidth - 120 });
+        .text(`${r.num}.  ${r.desc}`, startX + 6, rowY + 3.5, {
+          width: pageWidth - 120,
+        });
 
       doc
         .fillColor(r.isTotal ? '#0f2942' : '#334155')
         .font(r.isTotal ? 'Helvetica-Bold' : 'Helvetica')
         .fontSize(7.2)
-        .text(`PHP ${formatPesos(r.amount)}`, startX + pageWidth - 110, rowY + 3.5, {
-          width: 104,
-          align: 'right',
-        });
+        .text(
+          `PHP ${formatPesos(r.amount)}`,
+          startX + pageWidth - 110,
+          rowY + 3.5,
+          {
+            width: 104,
+            align: 'right',
+          },
+        );
     });
 
     y += cTableH + 8;
 
     // LEGAL & REGULATORY AUDIT BOX
     const infoH = 88;
-    doc.roundedRect(startX, y, pageWidth, infoH, 3).fillAndStroke('#f8fafc', '#cbd5e1');
+    doc
+      .roundedRect(startX, y, pageWidth, infoH, 3)
+      .fillAndStroke('#f8fafc', '#cbd5e1');
 
     doc
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
       .fontSize(6.8)
-      .text('STATUTORY GUIDANCE & RECONCILIATION AUDIT TRAIL', startX + 8, y + 6);
+      .text(
+        'STATUTORY GUIDANCE & RECONCILIATION AUDIT TRAIL',
+        startX + 8,
+        y + 6,
+      );
 
     doc
       .fillColor('#475569')
@@ -737,9 +1060,9 @@ export class Bir2316PdfService {
       .fontSize(5.6)
       .text(
         '1. Statutory Deadline: Must be released to the employee on or before January 31 of the succeeding calendar year, or on the day of final settlement in case of employment termination (DOLE LA 06-20 / NIRC Sec. 83).\n' +
-        '2. Trailing Previous Employer Compensation: Transcribed 2316 figures from previous employers are incorporated per Revenue Regulations No. 11-2018 §2.79 for consolidated annualization.\n' +
-        '3. Exemption Threshold: 13th-month pay and other benefits up to ₱90,000 are exempt from withholding tax pursuant to RA 10963 (TRAIN Law) Section 32(B)(7)(e).\n' +
-        `4. Issuance State: ${data.isIssued ? `OFFICIALLY ISSUED (Version ${data.version ?? 1}) on ${formatDate(data.issuedAt)} · Ref: ${data.issuanceId ?? 'N/A'}` : 'UNISSUED DRAFT PREVIEW · PENDING HR SETTLEMENT & CONCURRENCE'}`,
+          '2. Trailing Previous Employer Compensation: Transcribed 2316 figures from previous employers are incorporated per Revenue Regulations No. 11-2018 §2.79 for consolidated annualization.\n' +
+          '3. Exemption Threshold: 13th-month pay and other benefits up to ₱90,000 are exempt from withholding tax pursuant to RA 10963 (TRAIN Law) Section 32(B)(7)(e).\n' +
+          `4. Issuance State: ${data.isIssued ? `OFFICIALLY ISSUED (Version ${data.version ?? 1}) on ${formatDate(data.issuedAt)} · Ref: ${data.issuanceId ?? 'N/A'}` : 'UNISSUED DRAFT PREVIEW · PENDING HR SETTLEMENT & CONCURRENCE'}`,
         startX + 8,
         y + 18,
         { width: pageWidth - 16, lineGap: 1.5 },
@@ -750,10 +1073,15 @@ export class Bir2316PdfService {
       .fillColor('#94a3b8')
       .font('Helvetica')
       .fontSize(5.5)
-      .text(`Page 2 of 2  ·  BIR Form 2316 (ENCS)  ·  Generated: ${new Date().toISOString()}`, startX, doc.page.height - 18, {
-        width: pageWidth,
-        align: 'center',
-      });
+      .text(
+        `Page 2 of 2  ·  BIR Form 2316 (ENCS)  ·  Generated: ${new Date().toISOString()}`,
+        startX,
+        doc.page.height - 18,
+        {
+          width: pageWidth,
+          align: 'center',
+        },
+      );
   }
 
   private drawSectionHeader(
@@ -765,7 +1093,11 @@ export class Bir2316PdfService {
   ): number {
     const h = 13;
     doc.rect(x, y, width, h).fill('#0f2942');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(6.8).text(title, x + 6, y + 3);
+    doc
+      .fillColor('#ffffff')
+      .font('Helvetica-Bold')
+      .fontSize(6.8)
+      .text(title, x + 6, y + 3);
     return y + h;
   }
 
@@ -779,7 +1111,11 @@ export class Bir2316PdfService {
     h: number,
   ) {
     doc.rect(x, y, w, h).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
-    doc.fillColor('#64748b').font('Helvetica').fontSize(5.2).text(label, x + 4, y + 2, { width: w - 8 });
+    doc
+      .fillColor('#64748b')
+      .font('Helvetica')
+      .fontSize(5.2)
+      .text(label, x + 4, y + 2, { width: w - 8 });
     doc
       .fillColor('#0f2942')
       .font('Helvetica-Bold')
