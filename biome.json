@@ -82,6 +82,16 @@
           "quoteStyle": "single"
         }
       }
+    },
+    {
+      "includes": ["packages/ui/src/components/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noDocumentCookie": "off"
+          }
+        }
+      }
     }
   ]
 }
