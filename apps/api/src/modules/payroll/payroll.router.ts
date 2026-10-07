@@ -49,6 +49,7 @@ export function createPayrollRouter(ctx: RouterContext) {
     payrollProcedure,
     payrollService,
     auditService,
+    cutoffSchedulerService,
   } = ctx;
   const payrollTriggerProcedure = trpc.procedureForRoles(PAYROLL_TRIGGER_ROLES);
   const auditRun =
@@ -72,6 +73,24 @@ export function createPayrollRouter(ctx: RouterContext) {
     };
 
   return trpc.router({
+    getCutoffAlerts: payrollProcedure
+      .input(
+        z
+          .object({
+            referenceDate: z.string().date().optional(),
+          })
+          .optional(),
+      )
+      .query(({ input, ctx }) => {
+        const refDate = input?.referenceDate
+          ? new Date(input.referenceDate)
+          : new Date();
+        return cutoffSchedulerService.checkCutoffAlerts(
+          ctx.user.organizationId,
+          refDate,
+        );
+      }),
+
     listRuns: payrollProcedure.query(({ ctx }) =>
       payrollService.listPayrollRuns(ctx.user.organizationId),
     ),

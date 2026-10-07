@@ -26,3 +26,26 @@ export function downloadBase64File(
     console.error("Failed to download file:", error);
   }
 }
+
+/**
+ * Triggers a browser download of a plain text / CSV / DAT string.
+ */
+export function downloadTextFile(
+  content: string,
+  fileName: string,
+  mimeType = "text/plain;charset=utf-8",
+): void {
+  try {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    console.error("Failed to download text file:", error);
+  }
+}

@@ -15,6 +15,7 @@ import { CutoffType, PayBasis } from "./types";
 import { calculateWithholdingTax } from "./withholding-tax";
 
 export * from "./biometrics";
+export * from "./bir-1604c";
 export * from "./bir-2316";
 export * from "./de-minimis";
 export * from "./dole-rates";

@@ -905,6 +905,17 @@ describe('ComplianceService exports', () => {
     ).rejects.toThrow(UnprocessableEntityException);
   });
 
+  it('refuses 1604-C Alphalist when no disbursed payroll records exist', async () => {
+    jest
+      .mocked(prisma.organization.findUnique)
+      .mockResolvedValue(organization as never);
+    jest.mocked(prisma.employee.findMany).mockResolvedValue([] as never);
+
+    await expect(
+      new ComplianceService().generateBir1604CAlphalist('org-1', 2026),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+
   it('uses disbursement date for 1601-C and counts employees rather than payslips', async () => {
     jest.mocked(prisma.payslip.findMany).mockResolvedValue([
       {

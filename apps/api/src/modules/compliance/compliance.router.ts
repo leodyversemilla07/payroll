@@ -644,6 +644,27 @@ export function createComplianceRouter(ctx: RouterContext) {
         return result;
       }),
 
+    exportBir1604CAlphalist: payrollProcedure
+      .input(
+        z.object({
+          taxYear: z.number().int().min(2023).max(2100).optional(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const result = await complianceService.generateBir1604CAlphalist(
+          ctx.user.organizationId,
+          input.taxYear,
+        );
+        await auditService.record({
+          user: ctx.user,
+          request: ctx.req,
+          action: 'EXPORT',
+          entityType: 'Bir1604CAlphalist',
+          entityId: `${ctx.user.organizationId}:${result.taxYear}`,
+        });
+        return result;
+      }),
+
     downloadBir2316Pdf: protectedProcedure
       .input(
         z.object({

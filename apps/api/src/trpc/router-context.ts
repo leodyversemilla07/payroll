@@ -8,6 +8,7 @@ import { EmployeesService } from '../modules/employees/employees.service';
 import { HolidaysService } from '../modules/holidays/holidays.service';
 import { LeavesService } from '../modules/leaves/leaves.service';
 import { LoansService } from '../modules/loans/loans.service';
+import { CutoffSchedulerService } from '../modules/payroll/cutoff-scheduler.service';
 import { PayrollService } from '../modules/payroll/payroll.service';
 import { TimekeepingService } from '../modules/timekeeping/timekeeping.service';
 import { TrpcService } from './trpc.service';
@@ -85,11 +86,13 @@ export interface RouterServices {
   leavesService: LeavesService;
   dashboardService: DashboardService;
   holidaysService: HolidaysService;
+  cutoffSchedulerService?: CutoffSchedulerService;
 }
 
 export type RoleProcedure = ReturnType<TrpcService['procedureForRoles']>;
 
 export interface RouterContext extends RouterServices {
+  cutoffSchedulerService: CutoffSchedulerService;
   trpc: TrpcService;
   publicProcedure: TrpcService['publicProcedure'];
   protectedProcedure: TrpcService['protectedProcedure'];
@@ -108,6 +111,8 @@ export function createRouterContext(
   return {
     trpc,
     ...services,
+    cutoffSchedulerService:
+      services.cutoffSchedulerService ?? new CutoffSchedulerService(),
     publicProcedure: trpc.publicProcedure,
     protectedProcedure: trpc.protectedProcedure,
     employeeRecordProcedure: trpc.procedureForRoles(EMPLOYEE_RECORD_ROLES),
