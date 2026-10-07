@@ -21,6 +21,10 @@ function cleanStorageKey(value: string): string {
   if (
     !cleanKey ||
     isAbsolute(cleanKey) ||
+    // A Windows drive-absolute path (e.g. "C:\\escape.pdf") is absolute on
+    // Windows but looks relative to `path.isAbsolute` on POSIX hosts. Reject
+    // the drive prefix explicitly so validation is identical on every host.
+    /^[A-Za-z]:/.test(cleanKey) ||
     /^[/\\]/.test(cleanKey) ||
     cleanKey.split(/[/\\]+/).some((segment) => segment === '..')
   ) {
