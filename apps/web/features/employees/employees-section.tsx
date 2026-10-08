@@ -6,7 +6,9 @@ import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
+  CardAction,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
@@ -37,7 +39,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { EmployeeDataTable } from "./employee-data-table";
@@ -101,24 +103,31 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
       <Card role="region" aria-label="Employees">
         <CardHeader>
           <CardTitle>Employees</CardTitle>
+          <CardDescription>
+            Manage organization staff directory, employment status, and
+            compensation profiles.
+          </CardDescription>
           {canCreate && (
-            <Button
-              type="button"
-              variant="outline"
-              aria-expanded={showCreate}
-              aria-controls="employee-create-form"
-              disabled={isCreating}
-              onClick={() => {
-                setShowCreate(true);
-                setCreatedNumber(null);
-              }}
-            >
-              Add employee
-            </Button>
+            <CardAction>
+              <Button
+                type="button"
+                variant="default"
+                aria-expanded={showCreate}
+                aria-controls="employee-create-form"
+                disabled={isCreating}
+                onClick={() => {
+                  setShowCreate(true);
+                  setCreatedNumber(null);
+                }}
+              >
+                <Plus className="size-4" />
+                Add employee
+              </Button>
+            </CardAction>
           )}
         </CardHeader>
         <CardContent>
-          {createdNumber && (
+          {createdNumber && !selectedId && (
             <p role="status" className="mb-4 break-words">
               Employee {createdNumber} created. No login account was created.
             </p>
@@ -180,17 +189,11 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
       >
         <SheetContent
           side="right"
-          showCloseButton={false}
-          className="w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl overflow-hidden p-0 h-full flex flex-col"
+          className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
         >
           {canCreate && showCreate && (
             <CreateEmployeeForm
-              isCreating={isCreating}
               onPendingChange={setIsCreating}
-              onCancel={() => {
-                setShowCreate(false);
-                setCreatedNumber(null);
-              }}
               onCreated={(employee) => {
                 setCreatedNumber(employee.employeeNumber);
                 setSelectedId(employee.id);
@@ -208,15 +211,18 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
       >
         <SheetContent
           side="right"
-          showCloseButton={false}
-          className="w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl overflow-hidden p-0 h-full flex flex-col"
+          className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
         >
           {selectedId && (
             <EmployeeDetails
               key={selectedId}
               id={selectedId}
               canEdit={canCreate}
-              onClose={() => setSelectedId(null)}
+              createdMessage={
+                createdNumber
+                  ? `Employee ${createdNumber} created. No login account was created.`
+                  : null
+              }
             />
           )}
         </SheetContent>
@@ -283,13 +289,9 @@ function TextFields({
 function CreateEmployeeForm({
   onCreated,
   onPendingChange,
-  onCancel,
-  isCreating,
 }: {
   onCreated: (employee: { id: string; employeeNumber: string }) => void;
   onPendingChange: (pending: boolean) => void;
-  onCancel: () => void;
-  isCreating: boolean;
 }) {
   const options = trpc.employees.getRegistrationOptions.useQuery(undefined, {
     retry: false,
@@ -423,27 +425,16 @@ function CreateEmployeeForm({
       aria-label="Create employee"
       className="flex flex-col h-full min-h-0 bg-background"
     >
-      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-5 backdrop-blur-sm text-left">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1 text-left">
-            <SheetTitle className="font-heading text-lg font-semibold tracking-tight text-foreground">
-              Create employee
-            </SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground">
-              HR/admin only. Creates an employee and compensation profile, not a
-              login account. All profile fields are required; do not enter
-              placeholder identifiers.
-            </SheetDescription>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isCreating}
-            onClick={onCancel}
-          >
-            Cancel employee creation
-          </Button>
+      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-5 backdrop-blur-sm pr-12 text-left">
+        <div className="flex flex-col gap-1 text-left">
+          <SheetTitle className="font-heading text-lg font-semibold tracking-tight text-foreground">
+            Create employee
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground">
+            HR/admin only. Creates an employee and compensation profile, not a
+            login account. All profile fields are required; do not enter
+            placeholder identifiers.
+          </SheetDescription>
         </div>
       </SheetHeader>
       <div className="flex-1 min-h-0 overflow-y-auto p-6">
@@ -722,11 +713,11 @@ function formatDateInput(value: Date | string | null | undefined): string {
 function EmployeeDetails({
   id,
   canEdit,
-  onClose,
+  createdMessage,
 }: {
   id: string;
   canEdit: boolean;
-  onClose: () => void;
+  createdMessage?: string | null;
 }) {
   const details = trpc.employees.getById.useQuery({ id }, { retry: false });
   const [isEditing, setIsEditing] = useState(false);
@@ -743,7 +734,7 @@ function EmployeeDetails({
       aria-label="Employee details"
       className="flex flex-col h-full min-h-0 bg-background"
     >
-      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-4 backdrop-blur-sm text-left">
+      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-4 backdrop-blur-sm pr-12 text-left">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Avatar className="size-10 shrink-0 rounded-full border border-border shadow-sm">
@@ -793,14 +784,19 @@ function EmployeeDetails({
                 Cancel editing
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Close employee details
-            </Button>
           </div>
         </div>
       </SheetHeader>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-6">
+        {createdMessage && (
+          <p
+            role="status"
+            className="mb-4 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground break-words"
+          >
+            {createdMessage}
+          </p>
+        )}
         {details.isPending ? (
           <p role="status">Loading employee details…</p>
         ) : details.isError ? (

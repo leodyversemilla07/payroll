@@ -340,9 +340,6 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
     form.getByRole("button", { name: "Creating employee…" }),
   ).toBeDisabled();
   await expect(form.getByLabel("First name")).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Cancel employee creation" }),
-  ).toBeDisabled();
   release();
   await expect(
     page
@@ -372,6 +369,8 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
   await expect(details).not.toContainText(employee.bankAccountNumber);
   await expect(details).not.toContainText(employee.tin);
   await expect(form).toHaveCount(0);
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(details).toHaveCount(0);
   await page.getByRole("button", { name: /^Account:/ }).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(
@@ -429,7 +428,7 @@ test("branch and department loading errors have a working retry", async ({
   );
   await form.getByRole("button", { name: "Retry" }).click();
   await expect(form.getByLabel("Branch", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel employee creation" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(form).toHaveCount(0);
 });
 
@@ -475,7 +474,7 @@ test("payroll specialists can read profiles but cannot open HR creation", async 
   await details.getByRole("button", { name: "Retry" }).click();
   await expect(details).toContainText("EMP-TEST-001");
   await expect(details).toContainText("₱30,000.25");
-  await details.getByRole("button", { name: "Close employee details" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(details).toHaveCount(0);
   expect(state.requests).not.toContain("employees.getRegistrationOptions");
 });
@@ -510,6 +509,10 @@ test("employee profiles and the creation form fit a mobile viewport", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     );
   await expect.poll(fitsViewport).toBe(true);
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(
+    page.getByRole("region", { name: "Employee details", exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Add employee" }).click();
   await fillEmployee(page);
   await expect.poll(fitsViewport).toBe(true);
