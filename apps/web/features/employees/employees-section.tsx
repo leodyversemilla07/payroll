@@ -32,11 +32,17 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import { cn } from "@workspace/ui/lib/utils";
 import { Loader2, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { PageHeaderAction } from "@/components/payroll-portal";
-import { EmployeeDataTable } from "./employee-data-table";
+import {
+  EmployeeDataTable,
+  formatEmploymentStatus,
+  formatEmploymentType,
+  getStatusBadgeClassName,
+} from "./employee-data-table";
 
 const EMPLOYMENT_TYPES = [
   "REGULAR",
@@ -47,13 +53,13 @@ const EMPLOYMENT_TYPES = [
 ].map((type) => ({ value: type, label: type.replaceAll("_", " ") }));
 
 const EMPLOYMENT_STATUSES = [
-  "ACTIVE",
-  "ON_LEAVE",
-  "SUSPENDED",
-  "RESIGNED",
-  "TERMINATED",
-  "RETIRED",
-].map((status) => ({ value: status, label: status.replaceAll("_", " ") }));
+  { value: "ACTIVE", label: "Active" },
+  { value: "ON_LEAVE", label: "On Leave" },
+  { value: "SUSPENDED", label: "Suspended" },
+  { value: "RESIGNED", label: "Resigned" },
+  { value: "TERMINATED", label: "Terminated" },
+  { value: "RETIRED", label: "Retired" },
+];
 
 const PAY_BASIS_ITEMS = [
   { value: "MONTHLY", label: "Monthly" },
@@ -735,8 +741,13 @@ function EmployeeDetails({
                   {fullName}
                 </SheetTitle>
                 {employee?.employmentStatus && (
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-secondary text-secondary-foreground">
-                    {employee.employmentStatus.replaceAll("_", " ")}
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium tracking-tight",
+                      getStatusBadgeClassName(employee.employmentStatus),
+                    )}
+                  >
+                    {formatEmploymentStatus(employee.employmentStatus)}
                   </span>
                 )}
               </div>
@@ -1528,8 +1539,13 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
             Status & Role
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
-              {employee.employmentStatus?.replaceAll("_", " ") ?? "Active"}
+            <span
+              className={cn(
+                "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium tracking-tight",
+                getStatusBadgeClassName(employee.employmentStatus ?? "ACTIVE"),
+              )}
+            >
+              {formatEmploymentStatus(employee.employmentStatus ?? "ACTIVE")}
             </span>
             <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
               {employee.isManagerial ? "Managerial" : "Rank-and-file"}
@@ -1567,14 +1583,13 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
             <span className="text-muted-foreground">Employment type</span>
             <span className="sm:col-span-2 font-medium text-foreground">
-              {employee.employmentType?.replaceAll("_", " ") ?? "Not recorded"}
+              {formatEmploymentType(employee.employmentType)}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
             <span className="text-muted-foreground">Employment status</span>
             <span className="sm:col-span-2 font-medium text-foreground">
-              {employee.employmentStatus?.replaceAll("_", " ") ??
-                "Not recorded"}
+              {formatEmploymentStatus(employee.employmentStatus)}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
@@ -1614,8 +1629,8 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
         <div className="divide-y divide-border/50 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
             <span className="text-muted-foreground">Pay basis</span>
-            <span className="sm:col-span-2 font-mono font-medium text-foreground">
-              {employee.payBasis}
+            <span className="sm:col-span-2 font-medium text-foreground capitalize">
+              {employee.payBasis?.toLowerCase()}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">

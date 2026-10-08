@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table";
+import { cn } from "@workspace/ui/lib/utils";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -70,14 +71,70 @@ interface EmployeeDataTableProps {
   onSelectEmployee: (id: string) => void;
 }
 
+export function formatEmploymentStatus(status?: string | null): string {
+  if (!status) return "—";
+  switch (status) {
+    case "ACTIVE":
+      return "Active";
+    case "ON_LEAVE":
+      return "On Leave";
+    case "SUSPENDED":
+      return "Suspended";
+    case "RESIGNED":
+      return "Resigned";
+    case "TERMINATED":
+      return "Terminated";
+    case "RETIRED":
+      return "Retired";
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
+
+export function formatEmploymentType(type?: string | null): string {
+  if (!type) return "—";
+  switch (type) {
+    case "REGULAR":
+      return "Regular";
+    case "PROBATIONARY":
+      return "Probationary";
+    case "CONTRACTUAL":
+      return "Contractual";
+    case "PROJECT_BASED":
+      return "Project-based";
+    case "PART_TIME":
+      return "Part-time";
+    default:
+      return type.replaceAll("_", " ");
+  }
+}
+
+export function getStatusBadgeClassName(status?: string | null): string {
+  switch (status) {
+    case "ACTIVE":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20";
+    case "ON_LEAVE":
+      return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20";
+    case "SUSPENDED":
+      return "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20";
+    case "RESIGNED":
+    case "TERMINATED":
+      return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20";
+    case "RETIRED":
+      return "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20";
+    default:
+      return "bg-secondary text-secondary-foreground border border-transparent";
+  }
+}
+
 const EMPLOYMENT_STATUSES = [
-  "ACTIVE",
-  "ON_LEAVE",
-  "SUSPENDED",
-  "RESIGNED",
-  "TERMINATED",
-  "RETIRED",
-].map((status) => ({ value: status, label: status.replaceAll("_", " ") }));
+  { value: "ACTIVE", label: "Active" },
+  { value: "ON_LEAVE", label: "On Leave" },
+  { value: "SUSPENDED", label: "Suspended" },
+  { value: "RESIGNED", label: "Resigned" },
+  { value: "TERMINATED", label: "Terminated" },
+  { value: "RETIRED", label: "Retired" },
+];
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All statuses" },
@@ -180,7 +237,14 @@ export function EmployeeDataTable({
               </strong>
               <span className="max-w-full break-words text-xs text-muted-foreground sm:hidden">
                 {employee.employeeNumber} ·{" "}
-                {employee.employmentStatus.replaceAll("_", " ")}
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-1.5 py-0.2 text-[10px] font-medium tracking-tight",
+                    getStatusBadgeClassName(employee.employmentStatus),
+                  )}
+                >
+                  {formatEmploymentStatus(employee.employmentStatus)}
+                </span>
               </span>
             </Button>
           );
@@ -245,9 +309,8 @@ export function EmployeeDataTable({
         accessorFn: (row) => row.employmentType,
         header: () => <span>Employment Type</span>,
         cell: ({ row }) => (
-          <span className="text-xs capitalize text-muted-foreground">
-            {row.original.employmentType?.replaceAll("_", " ").toLowerCase() ??
-              "—"}
+          <span className="text-sm text-muted-foreground">
+            {formatEmploymentType(row.original.employmentType)}
           </span>
         ),
       },
@@ -272,11 +335,19 @@ export function EmployeeDataTable({
             )}
           </Button>
         ),
-        cell: ({ row }) => (
-          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
-            {row.original.employmentStatus.replaceAll("_", " ")}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const status = row.original.employmentStatus;
+          return (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium tracking-tight",
+                getStatusBadgeClassName(status),
+              )}
+            >
+              {formatEmploymentStatus(status)}
+            </span>
+          );
+        },
       },
       {
         id: "actions",
