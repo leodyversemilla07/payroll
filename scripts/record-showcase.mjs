@@ -119,25 +119,52 @@ async function run() {
     await page.waitForURL("**/portal/employees**", { timeout: 10000 });
     await sleep(2000);
 
-    // Scroll through employees list
-    await smoothScroll(page, 350, 8, 60);
-    await sleep(2000);
-
-    // Click "Edit" or view on an employee if available
-    const editButton = page
-      .locator('button:has-text("Edit"), button:has-text("View")')
-      .first();
-    if (await editButton.isVisible()) {
-      await editButton.click();
-      await sleep(2000);
-      // Scroll inside modal / form
-      await page.keyboard.press("PageDown");
+    // Interactive Data Table search showcase
+    const searchInput = page.locator('input[placeholder*="Search employees"]');
+    if (await searchInput.isVisible()) {
+      await humanType(searchInput, "Ana", 60);
       await sleep(1500);
-      await page.keyboard.press("Escape");
+      await searchInput.fill("");
       await sleep(1000);
     }
 
-    await smoothScroll(page, -350, 8, 50);
+    // Scroll through employees list
+    await smoothScroll(page, 200, 6, 60);
+    await sleep(1500);
+
+    // Showcase Action Dropdown Menu & slide-over details drawer
+    const actionMenuBtn = page
+      .locator(
+        'button:has([class*="lucide-more-horizontal"]), button:has-text("Open menu")',
+      )
+      .first();
+    if (await actionMenuBtn.isVisible()) {
+      await actionMenuBtn.click();
+      await sleep(1500);
+      const viewDetailsItem = page
+        .locator('div[data-slot="dropdown-menu-item"]:has-text("View details")')
+        .first();
+      if (await viewDetailsItem.isVisible()) {
+        await viewDetailsItem.click();
+        await sleep(2000);
+        await page.keyboard.press("PageDown");
+        await sleep(1500);
+        await page.keyboard.press("Escape");
+        await sleep(1000);
+      } else {
+        await page.keyboard.press("Escape");
+      }
+    } else {
+      const firstRowBtn = page.locator("table tbody tr button").first();
+      if (await firstRowBtn.isVisible()) {
+        await firstRowBtn.click();
+        await sleep(2000);
+        await page.keyboard.press("Escape");
+        await sleep(1000);
+      }
+    }
+
+    await smoothScroll(page, -200, 6, 50);
     await sleep(1000);
 
     // ==========================================
