@@ -202,7 +202,7 @@ export function PayrollPortal({
                 and bank-file checks remain outstanding.
               </p>
               {me.data && !signedOut && (
-                <p className="text-sm text-muted-foreground">
+                <p className="sr-only">
                   Signed in as{" "}
                   <strong className="font-medium text-foreground">
                     {me.data.name}
