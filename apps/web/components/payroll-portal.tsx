@@ -28,7 +28,14 @@ import {
 import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createContext, type ReactNode, useContext, useEffect } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   isSectionAllowedForRole,
   usePortalSection,
@@ -256,17 +263,23 @@ export function PayrollPortal({
                   >
                     <PrincipalQueryProvider scope={scope}>
                       <div className="space-y-6">
-                        <div className="space-y-1">
-                          <h1 className="text-2xl font-semibold tracking-tight">
-                            {isEmployee && activeSection.id === "overview"
-                              ? "Dashboard"
-                              : activeSection.label}
-                          </h1>
-                          <p className="text-sm text-muted-foreground">
-                            {isEmployee && activeSection.id === "overview"
-                              ? "View your employee self-service dashboard, leave balances, attendance summary, and payslips."
-                              : activeSection.description}
-                          </p>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="space-y-1">
+                            <h1 className="text-2xl font-semibold tracking-tight">
+                              {isEmployee && activeSection.id === "overview"
+                                ? "Dashboard"
+                                : activeSection.label}
+                            </h1>
+                            <p className="text-sm text-muted-foreground">
+                              {isEmployee && activeSection.id === "overview"
+                                ? "View your employee self-service dashboard, leave balances, attendance summary, and payslips."
+                                : activeSection.description}
+                            </p>
+                          </div>
+                          <div
+                            id="portal-header-actions"
+                            className="flex items-center gap-2 shrink-0 empty:hidden"
+                          />
                         </div>
                         {isSectionAllowedForRole(
                           activeSection.id,
@@ -337,4 +350,23 @@ export function PayrollPortal({
       </SidebarProvider>
     </TooltipProvider>
   );
+}
+
+export function PageHeaderAction({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  const container = document.getElementById("portal-header-actions");
+  if (!container) {
+    return null;
+  }
+
+  return createPortal(children, container);
 }

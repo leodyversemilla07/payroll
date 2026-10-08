@@ -158,6 +158,7 @@ test("sidebar routes replace page content, share the layout and preserve history
     exact: true,
   });
   await editor.getByLabel("First name").fill("Unsaved sidebar draft");
+  await page.keyboard.press("Escape");
   await nav
     .getByRole("link", { name: "Attendance & DTR", exact: true })
     .click();

@@ -4,14 +4,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
 import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
 import { Button } from "@workspace/ui/components/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card";
+import { Card, CardContent } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
   Field,
@@ -42,6 +35,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Loader2, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { PageHeaderAction } from "@/components/payroll-portal";
 import { EmployeeDataTable } from "./employee-data-table";
 
 const EMPLOYMENT_TYPES = [
@@ -100,32 +94,25 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
 
   return (
     <div className="min-w-0 space-y-6">
+      {canCreate && (
+        <PageHeaderAction>
+          <Button
+            type="button"
+            variant="default"
+            aria-expanded={showCreate}
+            aria-controls="employee-create-form"
+            disabled={isCreating}
+            onClick={() => {
+              setShowCreate(true);
+              setCreatedNumber(null);
+            }}
+          >
+            <Plus className="size-4" />
+            Add employee
+          </Button>
+        </PageHeaderAction>
+      )}
       <Card role="region" aria-label="Employees">
-        <CardHeader>
-          <CardTitle>Employees</CardTitle>
-          <CardDescription>
-            Manage organization staff directory, employment status, and
-            compensation profiles.
-          </CardDescription>
-          {canCreate && (
-            <CardAction>
-              <Button
-                type="button"
-                variant="default"
-                aria-expanded={showCreate}
-                aria-controls="employee-create-form"
-                disabled={isCreating}
-                onClick={() => {
-                  setShowCreate(true);
-                  setCreatedNumber(null);
-                }}
-              >
-                <Plus className="size-4" />
-                Add employee
-              </Button>
-            </CardAction>
-          )}
-        </CardHeader>
         <CardContent>
           {createdNumber && !selectedId && (
             <p role="status" className="mb-4 break-words">
