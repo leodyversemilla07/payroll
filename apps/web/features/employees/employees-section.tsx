@@ -2,11 +2,11 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
+import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
@@ -29,14 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { Sheet, SheetContent } from "@workspace/ui/components/sheet";
-import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@workspace/ui/components/table";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -181,7 +181,7 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-0"
+          className="w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl overflow-hidden p-0 h-full flex flex-col"
         >
           {canCreate && showCreate && (
             <CreateEmployeeForm
@@ -209,7 +209,7 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-0"
+          className="w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl overflow-hidden p-0 h-full flex flex-col"
         >
           {selectedId && (
             <EmployeeDetails
@@ -418,21 +418,22 @@ function CreateEmployeeForm({
   }
 
   return (
-    <Card
+    <section
       id="employee-create-form"
-      role="region"
       aria-label="Create employee"
-      className="border-0 shadow-none rounded-none bg-transparent"
+      className="flex flex-col h-full min-h-0 bg-background"
     >
-      <CardHeader className="border-b px-6 py-5">
+      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-5 backdrop-blur-sm text-left">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <CardTitle>Create employee</CardTitle>
-            <CardDescription>
+          <div className="flex flex-col gap-1 text-left">
+            <SheetTitle className="font-heading text-lg font-semibold tracking-tight text-foreground">
+              Create employee
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
               HR/admin only. Creates an employee and compensation profile, not a
               login account. All profile fields are required; do not enter
               placeholder identifiers.
-            </CardDescription>
+            </SheetDescription>
           </div>
           <Button
             type="button"
@@ -444,8 +445,8 @@ function CreateEmployeeForm({
             Cancel employee creation
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="p-6">
+      </SheetHeader>
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         {options.isPending ? (
           <p role="status">Loading branches and departments…</p>
         ) : options.isError && !options.data ? (
@@ -707,8 +708,8 @@ function CreateEmployeeForm({
             </FieldGroup>
           </form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -729,49 +730,77 @@ function EmployeeDetails({
 }) {
   const details = trpc.employees.getById.useQuery({ id }, { retry: false });
   const [isEditing, setIsEditing] = useState(false);
+  const employee = details.data;
+  const initials = employee
+    ? `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase()
+    : "EM";
+  const fullName = employee
+    ? `${employee.firstName} ${employee.lastName}`
+    : "Employee details";
 
   return (
-    <Card
-      role="region"
+    <section
       aria-label="Employee details"
-      className="border-0 shadow-none rounded-none bg-transparent"
+      className="flex flex-col h-full min-h-0 bg-background"
     >
-      <CardHeader className="border-b px-6 py-5">
-        <div className="flex flex-col gap-1">
-          <CardTitle>Employee details</CardTitle>
-          <CardDescription>
-            {isEditing
-              ? "Update personal, employment, and statutory information."
-              : canEdit
-                ? "View profile or edit employee details."
-                : "Read-only profile."}
-          </CardDescription>
-        </div>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {canEdit && details.data && !isEditing && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsEditing(true)}
-            >
-              Edit employee
+      <SheetHeader className="flex-none border-b bg-card/60 px-6 py-4 backdrop-blur-sm text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar className="size-10 shrink-0 rounded-full border border-border shadow-sm">
+              <AvatarFallback className="font-semibold text-xs bg-primary/10 text-primary">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 text-left">
+              <div className="flex flex-wrap items-center gap-2">
+                <SheetTitle className="text-base font-semibold tracking-tight text-foreground truncate">
+                  {fullName}
+                </SheetTitle>
+                {employee?.employmentStatus && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-secondary text-secondary-foreground">
+                    {employee.employmentStatus.replaceAll("_", " ")}
+                  </span>
+                )}
+              </div>
+              <SheetDescription className="text-xs text-muted-foreground truncate">
+                {employee?.employeeNumber && (
+                  <span className="font-mono">{employee.employeeNumber}</span>
+                )}
+                {employee?.department && ` · ${employee.department.name}`}
+                {employee?.branch && ` · ${employee.branch.name}`}
+              </SheetDescription>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {canEdit && details.data && !isEditing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+              >
+                Edit employee
+              </Button>
+            )}
+            {isEditing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel editing
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              Close employee details
             </Button>
-          )}
-          {isEditing && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsEditing(false)}
-            >
-              Cancel editing
-            </Button>
-          )}
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close employee details
-          </Button>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </SheetHeader>
+
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         {details.isPending ? (
           <p role="status">Loading employee details…</p>
         ) : details.isError ? (
@@ -796,8 +825,8 @@ function EmployeeDetails({
         ) : (
           <EmployeeProfile employee={details.data} />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -1468,78 +1497,302 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
     .filter(Boolean)
     .join(" ");
 
-  const rows = [
-    ["Name", fullName],
-    ["Employee number", employee.employeeNumber],
-    ["Email", employee.email],
-    ["Contact number", employee.contactNumber],
-    ["Residential address", employee.residentialAddress],
-    ["Date of birth", date(employee.dateOfBirth)],
-    ["Gender", employee.gender],
-    ["Civil status", employee.civilStatus],
-    ["Branch", employee.branch?.name ?? "Not recorded"],
-    ["Department", employee.department?.name ?? "Not recorded"],
-    ["Hire date", date(employee.hireDate)],
-    [
-      "Regularization date",
-      employee.regularizationDate
-        ? date(employee.regularizationDate)
-        : "Not recorded",
-    ],
-    [
-      "Resignation / Exit date",
-      employee.resignationDate
-        ? date(employee.resignationDate)
-        : "Not recorded",
-    ],
-    ["Employment type", employee.employmentType?.replaceAll("_", " ")],
-    ["Employment status", employee.employmentStatus?.replaceAll("_", " ")],
-    ["Pay basis", employee.payBasis],
-    [
-      "Monthly basic rate",
-      compensation ? pesos(compensation.basicRateMonthlyCents) : "Not recorded",
-    ],
-    [
-      "Daily basic rate",
-      compensation ? pesos(compensation.basicRateDailyCents) : "Not recorded",
-    ],
-    [
-      "Hourly basic rate",
-      compensation ? pesos(compensation.basicRateHourlyCents) : "Not recorded",
-    ],
-    ["Compensation effective date", date(compensation?.effectiveDate)],
-    ["Managerial", employee.isManagerial ? "Yes" : "No"],
-    [
-      "Tax exempt",
-      compensation ? (compensation.isTaxExempt ? "Yes" : "No") : "Not recorded",
-    ],
-    ["TIN", masked(employee.tin)],
-    ["SSS number", masked(employee.sssNo)],
-    ["PhilHealth number", masked(employee.philhealthNo)],
-    ["Pag-IBIG number", masked(employee.pagibigNo)],
-    ["Bank", employee.bankName],
-    ["Bank account number", masked(employee.bankAccountNumber)],
-    ["Bank account name", employee.bankAccountName],
-  ];
+  const primaryRate = compensation
+    ? employee.payBasis === "DAILY"
+      ? pesos(compensation.basicRateDailyCents)
+      : employee.payBasis === "HOURLY"
+        ? pesos(compensation.basicRateHourlyCents)
+        : pesos(compensation.basicRateMonthlyCents)
+    : "Not recorded";
+
+  const primaryRateUnit =
+    employee.payBasis === "DAILY"
+      ? "Per day"
+      : employee.payBasis === "HOURLY"
+        ? "Per hour"
+        : "Per month";
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableBody>
-            {rows.map(([label, value]) => (
-              <TableRow key={label}>
-                <TableCell className="w-1/3 font-medium text-muted-foreground text-sm py-2">
-                  {label}
-                </TableCell>
-                <TableCell className="break-words py-2 font-normal">
-                  {value || "Not recorded"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div className="space-y-6">
+      {/* Quick KPI Highlights */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground">
+            Basic Rate ({employee.payBasis})
+          </div>
+          <div className="mt-1 text-xl font-bold tracking-tight text-foreground">
+            {primaryRate}
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {primaryRateUnit}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground">
+            Computed Equivalent
+          </div>
+          <div className="mt-1 text-sm font-semibold text-foreground">
+            {compensation ? pesos(compensation.basicRateDailyCents) : "—"} / day
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {compensation ? pesos(compensation.basicRateHourlyCents) : "—"} / hr
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground">
+            Status & Role
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
+              {employee.employmentStatus?.replaceAll("_", " ") ?? "Active"}
+            </span>
+            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
+              {employee.isManagerial ? "Managerial" : "Rank-and-file"}
+            </span>
+          </div>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">
+
+      {/* Section 1: Employment Details */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Employment Details
+          </h3>
+        </div>
+        <div className="divide-y divide-border/50 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Employee number</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {employee.employeeNumber}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Branch</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.branch?.name ?? "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Department</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.department?.name ?? "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Employment type</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.employmentType?.replaceAll("_", " ") ?? "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Employment status</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.employmentStatus?.replaceAll("_", " ") ??
+                "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Hire date</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {date(employee.hireDate)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Regularization date</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.regularizationDate
+                ? date(employee.regularizationDate)
+                : "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">
+              Resignation / Exit date
+            </span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.resignationDate
+                ? date(employee.resignationDate)
+                : "Not recorded"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 2: Compensation & Statutory Classification */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Compensation & Statutory Profile
+          </h3>
+        </div>
+        <div className="divide-y divide-border/50 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Pay basis</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {employee.payBasis}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Monthly basic rate</span>
+            <span className="sm:col-span-2 font-semibold text-foreground">
+              {compensation
+                ? pesos(compensation.basicRateMonthlyCents)
+                : "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Daily basic rate</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {compensation
+                ? pesos(compensation.basicRateDailyCents)
+                : "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Hourly basic rate</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {compensation
+                ? pesos(compensation.basicRateHourlyCents)
+                : "Not recorded"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">
+              Compensation effective date
+            </span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {date(compensation?.effectiveDate)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Managerial</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.isManagerial ? "Yes" : "No"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Tax exempt</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {compensation
+                ? compensation.isTaxExempt
+                  ? "Yes"
+                  : "No"
+                : "Not recorded"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Personal Information */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Personal Information
+          </h3>
+        </div>
+        <div className="divide-y divide-border/50 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Name</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {fullName}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Email</span>
+            <span className="sm:col-span-2 font-medium text-foreground break-all">
+              {employee.email}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Contact number</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.contactNumber}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Residential address</span>
+            <span className="sm:col-span-2 font-medium text-foreground break-words">
+              {employee.residentialAddress}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Date of birth</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {date(employee.dateOfBirth)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Gender</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.gender}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Civil status</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.civilStatus}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Government Statutory Identifiers & Banking */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Government Identifiers & Disbursement Bank
+          </h3>
+        </div>
+        <div className="divide-y divide-border/50 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">TIN</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {masked(employee.tin)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">SSS number</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {masked(employee.sssNo)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">PhilHealth number</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {masked(employee.philhealthNo)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Pag-IBIG number</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {masked(employee.pagibigNo)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Bank</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.bankName}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Bank account number</span>
+            <span className="sm:col-span-2 font-mono font-medium text-foreground">
+              {masked(employee.bankAccountNumber)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 p-3 sm:px-4 gap-1 items-center">
+            <span className="text-muted-foreground">Bank account name</span>
+            <span className="sm:col-span-2 font-medium text-foreground">
+              {employee.bankAccountName}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground px-1 leading-relaxed">
         Government and bank identifiers are masked in this view. Stored
         identifiers and tax classifications still require verification.
       </p>
