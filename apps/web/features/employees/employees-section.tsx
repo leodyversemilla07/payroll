@@ -29,7 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import { Sheet, SheetContent } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -153,27 +162,89 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
           ) : employees.data.length === 0 ? (
             <p>No employees found.</p>
           ) : (
-            <ul className="space-y-2">
-              {employees.data.map((employee) => (
-                <li key={employee.id}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto w-full flex-col items-start whitespace-normal p-3 text-left"
-                    aria-pressed={selectedId === employee.id}
-                    onClick={() => setSelectedId(employee.id)}
-                  >
-                    <strong className="max-w-full break-words">
-                      {employee.firstName} {employee.lastName}
-                    </strong>
-                    <span className="max-w-full break-words text-sm text-muted-foreground">
-                      {employee.employeeNumber} ·{" "}
-                      {employee.employmentStatus.replaceAll("_", " ")}
-                    </span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-lg border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      Department
+                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Employment Type
+                    </TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employees.data.map((employee) => (
+                    <TableRow
+                      key={employee.id}
+                      data-state={
+                        selectedId === employee.id ? "selected" : undefined
+                      }
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
+                      onClick={() => setSelectedId(employee.id)}
+                    >
+                      <TableCell className="font-medium">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-auto w-full flex-col items-start whitespace-normal p-0 text-left justify-start hover:bg-transparent"
+                          aria-pressed={selectedId === employee.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(employee.id);
+                          }}
+                        >
+                          <strong className="max-w-full break-words text-foreground">
+                            {employee.firstName} {employee.lastName}
+                          </strong>
+                          <span className="max-w-full break-words text-xs text-muted-foreground sm:hidden">
+                            {employee.employeeNumber} ·{" "}
+                            {employee.employmentStatus.replaceAll("_", " ")}
+                          </span>
+                        </Button>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {employee.employeeNumber}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                        {employee.department?.name ?? "—"}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs capitalize text-muted-foreground">
+                        {employee.employmentType
+                          ?.replaceAll("_", " ")
+                          .toLowerCase() ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
+                          {employee.employmentStatus.replaceAll("_", " ")}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant={
+                            selectedId === employee.id ? "secondary" : "outline"
+                          }
+                          size="sm"
+                          className="h-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(employee.id);
+                          }}
+                        >
+                          {selectedId === employee.id ? "Selected" : "View"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -187,14 +258,27 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
           }}
         />
       )}
-      {selectedId && (
-        <EmployeeDetails
-          key={selectedId}
-          id={selectedId}
-          canEdit={canCreate}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
+      <Sheet
+        open={Boolean(selectedId)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+      >
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-0"
+        >
+          {selectedId && (
+            <EmployeeDetails
+              key={selectedId}
+              id={selectedId}
+              canEdit={canCreate}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -683,17 +767,23 @@ function EmployeeDetails({
   const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <Card role="region" aria-label="Employee details">
-      <CardHeader>
-        <CardTitle>Employee details</CardTitle>
-        <CardDescription>
-          {isEditing
-            ? "Update personal, employment, and statutory information."
-            : canEdit
-              ? "View profile or edit employee details."
-              : "Read-only profile."}
-        </CardDescription>
-        <div className="flex flex-wrap gap-2">
+    <Card
+      role="region"
+      aria-label="Employee details"
+      className="border-0 shadow-none rounded-none bg-transparent"
+    >
+      <CardHeader className="border-b px-6 py-5">
+        <div className="flex flex-col gap-1">
+          <CardTitle>Employee details</CardTitle>
+          <CardDescription>
+            {isEditing
+              ? "Update personal, employment, and statutory information."
+              : canEdit
+                ? "View profile or edit employee details."
+                : "Read-only profile."}
+          </CardDescription>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2">
           {canEdit && details.data && !isEditing && (
             <Button
               type="button"
@@ -1469,14 +1559,22 @@ function EmployeeProfile({ employee }: { employee: EmployeeData }) {
   ];
   return (
     <div className="space-y-4">
-      <dl className="space-y-3">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-sm text-muted-foreground">{label}</dt>
-            <dd className="break-words">{value || "Not recorded"}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="rounded-lg border bg-card">
+        <Table>
+          <TableBody>
+            {rows.map(([label, value]) => (
+              <TableRow key={label}>
+                <TableCell className="w-1/3 font-medium text-muted-foreground text-sm py-2">
+                  {label}
+                </TableCell>
+                <TableCell className="break-words py-2 font-normal">
+                  {value || "Not recorded"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
       <p className="text-sm text-muted-foreground">
         Government and bank identifiers are masked in this view. Stored
         identifiers and tax classifications still require verification.
