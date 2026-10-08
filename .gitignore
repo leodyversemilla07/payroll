@@ -58,3 +58,6 @@ next-env.d.ts
 # Next.js auto-generated docs
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+
+# Video recordings
+recordings/
