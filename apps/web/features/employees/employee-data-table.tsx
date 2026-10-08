@@ -15,9 +15,13 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import { Input } from "@workspace/ui/components/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select";
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import {
   Pagination,
   PaginationContent,
@@ -74,6 +78,16 @@ const EMPLOYMENT_STATUSES = [
   "TERMINATED",
   "RETIRED",
 ].map((status) => ({ value: status, label: status.replaceAll("_", " ") }));
+
+const STATUS_OPTIONS = [
+  { value: "ALL", label: "All statuses" },
+  ...EMPLOYMENT_STATUSES,
+];
+
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50].map((size) => ({
+  value: String(size),
+  label: String(size),
+}));
 
 type PageItem =
   | { type: "page"; page: number; key: string }
@@ -387,24 +401,35 @@ export function EmployeeDataTable({
             />
           </div>
 
-          <NativeSelect
-            size="sm"
+          <Select
+            items={STATUS_OPTIONS}
             value={statusFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setStatusFilter(val);
-              table
-                .getColumn("employmentStatus")
-                ?.setFilterValue(val === "ALL" ? undefined : val);
+            onValueChange={(val) => {
+              if (val) {
+                setStatusFilter(val);
+                table
+                  .getColumn("employmentStatus")
+                  ?.setFilterValue(val === "ALL" ? undefined : val);
+              }
             }}
           >
-            <NativeSelectOption value="ALL">All statuses</NativeSelectOption>
-            {EMPLOYMENT_STATUSES.map((status) => (
-              <NativeSelectOption key={status.value} value={status.value}>
-                {status.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger
+              size="sm"
+              className="h-8 gap-1.5 min-w-[130px] text-xs"
+              aria-label="Filter by employment status"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false} side="bottom">
+              <SelectGroup>
+                {STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
@@ -516,17 +541,30 @@ export function EmployeeDataTable({
           </div>
           <div className="flex items-center gap-1.5">
             <span>Rows per page</span>
-            <NativeSelect
-              size="sm"
+            <Select
+              items={PAGE_SIZE_OPTIONS}
               value={String(pageSize)}
-              onChange={(e) => table.setPageSize(Number(e.target.value))}
+              onValueChange={(val) => {
+                if (val) table.setPageSize(Number(val));
+              }}
             >
-              {[5, 10, 20, 50].map((size) => (
-                <NativeSelectOption key={size} value={String(size)}>
-                  {size}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger
+                size="sm"
+                className="h-7 w-[68px] text-xs"
+                aria-label="Rows per page"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} side="top">
+                <SelectGroup>
+                  {PAGE_SIZE_OPTIONS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
