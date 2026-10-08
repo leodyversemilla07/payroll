@@ -13,6 +13,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Input } from "@workspace/ui/components/input";
 import {
   Select,
@@ -591,12 +599,37 @@ export function EmployeeDataTable({
                 </TableRow>
               ))
             ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-sm text-muted-foreground"
-                >
-                  No employees found.
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columns.length} className="p-8 text-center">
+                  <Empty className="rounded-2xl border border-dashed border-border/80 p-8">
+                    <EmptyMedia variant="icon">
+                      <Search className="size-5 text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyHeader>
+                      <EmptyTitle>No employees found</EmptyTitle>
+                      <EmptyDescription>
+                        {globalFilter || statusFilter !== "ALL"
+                          ? "No employees match the current filter or search criteria."
+                          : "No employee records found in this view."}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    {(globalFilter || statusFilter !== "ALL") && (
+                      <EmptyContent>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setGlobalFilter("");
+                            setStatusFilter("ALL");
+                            table.resetColumnFilters();
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      </EmptyContent>
+                    )}
+                  </Empty>
                 </TableCell>
               </TableRow>
             )}

@@ -17,6 +17,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -33,7 +41,7 @@ import {
 } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { cn } from "@workspace/ui/lib/utils";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Users } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { PageHeaderAction } from "@/components/payroll-portal";
@@ -161,7 +169,32 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
               </Button>
             </p>
           ) : employees.data.length === 0 ? (
-            <p>No employees found.</p>
+            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
+              <EmptyMedia variant="icon">
+                <Users className="size-5 text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyHeader>
+                <EmptyTitle>No employees yet</EmptyTitle>
+                <EmptyDescription>
+                  Start building your organization staff directory and
+                  compensation profiles by onboarding your first employee.
+                </EmptyDescription>
+              </EmptyHeader>
+              {canCreate && (
+                <EmptyContent>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setShowCreate(true);
+                      setCreatedNumber(null);
+                    }}
+                  >
+                    <Plus className="size-4" />
+                    Onboard first employee
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
           ) : (
             <EmployeeDataTable
               data={employees.data}
