@@ -82,34 +82,11 @@ async function main() {
   });
 
   // 5. Create Employees with Compensations & Allowances
+  // NOTE: The demo administrator (admin@sweldoph.local) is a pure system
+  // account and intentionally has no employee record. It stays unlinked,
+  // matching the production bootstrap, so the staff directory, headcount,
+  // and payroll runs cover real employees only.
   const employeesData = [
-    {
-      employeeNumber: "EMP-2026-000",
-      firstName: "Local Demo",
-      lastName: "Administrator",
-      email: "admin@sweldoph.local",
-      contactNumber: "+639170000000",
-      residentialAddress: "Makati City, Metro Manila",
-      gender: "Male",
-      civilStatus: "Single",
-      dateOfBirth: new Date("1988-01-01"),
-      tin: "111-222-333-000",
-      sssNo: "01-1122334-5",
-      philhealthNo: "11-123456789-0",
-      pagibigNo: "1111-2222-3333",
-      hireDate: new Date("2021-01-01"),
-      employmentType: "REGULAR" as const,
-      employmentStatus: "ACTIVE" as const,
-      role: "SUPER_ADMIN" as const,
-      payBasis: "MONTHLY" as const,
-      branchId: makatiBranch.id,
-      departmentId: opsDept.id,
-      bankName: "BDO Unibank",
-      bankAccountNumber: "000011223344",
-      bankAccountName: "Local Demo Administrator",
-      basicRateMonthlyCents: 12000000n, // PHP 120,000.00
-      isTaxExempt: false,
-    },
     {
       employeeNumber: "EMP-2026-001",
       firstName: "Juan",

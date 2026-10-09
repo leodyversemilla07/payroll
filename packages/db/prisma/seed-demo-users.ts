@@ -39,105 +39,11 @@ async function hashPassword(password: string): Promise<string> {
 
 async function main() {
   const org = await prisma.organization.findFirstOrThrow();
-  const makatiBranch = await prisma.branch.findFirstOrThrow({
-    where: { organizationId: org.id },
-  });
-  const opsDept = await prisma.department.findFirstOrThrow({
-    where: { organizationId: org.id },
-  });
 
-  // Ensure Admin Employee Profile (EMP-2026-000) exists
-  let adminEmp = await prisma.employee.findFirst({
-    where: { employeeNumber: "EMP-2026-000" },
-  });
-
-  if (!adminEmp) {
-    const basicRateMonthlyCents = 12000000n; // PHP 120,000.00
-    const dailyRateCents = (basicRateMonthlyCents * 12n) / 261n;
-    const hourlyRateCents = dailyRateCents / 8n;
-
-    adminEmp = await prisma.employee.create({
-      data: {
-        organizationId: org.id,
-        branchId: makatiBranch.id,
-        departmentId: opsDept.id,
-        employeeNumber: "EMP-2026-000",
-        firstName: "Local Demo",
-        lastName: "Administrator",
-        email: "admin@sweldoph.local",
-        contactNumber: "+639170000000",
-        residentialAddress: "Makati City, Metro Manila",
-        gender: "Male",
-        civilStatus: "Single",
-        dateOfBirth: new Date("1988-01-01"),
-        tin: "111-222-333-000",
-        sssNo: "01-1122334-5",
-        philhealthNo: "11-123456789-0",
-        pagibigNo: "1111-2222-3333",
-        hireDate: new Date("2021-01-01"),
-        employmentType: "REGULAR",
-        employmentStatus: "ACTIVE",
-        role: "SUPER_ADMIN",
-        payBasis: "MONTHLY",
-        bankName: "BDO Unibank",
-        bankAccountNumber: "000011223344",
-        bankAccountName: "Local Demo Administrator",
-        compensation: {
-          create: {
-            basicRateMonthlyCents,
-            basicRateDailyCents: dailyRateCents,
-            basicRateHourlyCents: hourlyRateCents,
-            isTaxExempt: false,
-          },
-        },
-        allowances: {
-          create: [
-            {
-              name: "Rice Subsidy",
-              type: "DE_MINIMIS",
-              deMinimisCategory: "RICE_SUBSIDY",
-              amountCents: 200000n, // PHP 2,000/mo
-              frequency: "MONTHLY",
-            },
-          ],
-        },
-      },
-    });
-
-    const workDates = [
-      "2026-08-17",
-      "2026-08-18",
-      "2026-08-19",
-      "2026-08-20",
-      "2026-08-21",
-      "2026-08-24",
-      "2026-08-25",
-      "2026-08-26",
-      "2026-08-27",
-      "2026-08-28",
-    ];
-
-    for (const dateStr of workDates) {
-      await prisma.dailyTimeRecord.create({
-        data: {
-          employeeId: adminEmp.id,
-          date: new Date(dateStr),
-          dayType: "REGULAR_WORKDAY",
-          timeIn: new Date(`${dateStr}T09:00:00Z`),
-          timeOut: new Date(`${dateStr}T18:00:00Z`),
-          actualWorkedMinutes: 480,
-          tardinessMinutes: 0,
-          overtimeMinutes: 0,
-          nightDiffMinutes: 0,
-          isApproved: true,
-        },
-      });
-    }
-
-    console.log(
-      `✅ Created Admin Employee Profile: ${adminEmp.employeeNumber}`,
-    );
-  }
+  // The local demo administrator is a pure system account and intentionally
+  // has no employee record. It stays unlinked (matching the production
+  // bootstrap) so the staff directory, headcount, and payroll runs cover
+  // real employees only.
 
   // Ensure all employees have 2026 leave balances
   const allEmployees = await prisma.employee.findMany();
@@ -194,7 +100,7 @@ async function main() {
       email: "admin@sweldoph.local",
       name: "Local Demo Administrator",
       role: Role.SUPER_ADMIN,
-      employeeId: adminEmp.id,
+      employeeId: null,
       password: "AdminPassword123!",
     },
     {
@@ -260,6 +166,13 @@ async function main() {
       );
     }
   }
+
+  // The demo administrator is a pure system account: keep it unlinked even on
+  // re-runs against databases seeded before this change.
+  await prisma.user.update({
+    where: { email: "admin@sweldoph.local" },
+    data: { employeeId: null },
+  });
 }
 
 main()
