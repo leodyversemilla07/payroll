@@ -1,46 +1,46 @@
 import { expect, type Page, test } from "@playwright/test";
 
 const destinations = [
-  { label: "Overview", href: "/portal", region: null, query: null },
+  { label: "Overview", href: "/overview", region: null, query: null },
   {
     label: "Employees",
-    href: "/portal/employees",
+    href: "/employees",
     region: "Employees",
     query: "employees.list",
   },
   {
     label: "Attendance & DTR",
-    href: "/portal/attendance",
+    href: "/attendance",
     region: "Attendance and DTR",
     query: "employees.list",
   },
   {
     label: "Leave management",
-    href: "/portal/leaves",
+    href: "/leaves",
     region: "Leave management",
     query: "employees.list",
   },
   {
     label: "Holiday calendar",
-    href: "/portal/holidays",
+    href: "/holidays",
     region: "Holiday calendar",
     query: "holidays.list",
   },
   {
     label: "Process payroll",
-    href: "/portal/process-payroll",
+    href: "/process-payroll",
     region: "Process payroll run",
     query: null,
   },
   {
     label: "Payroll runs & payslips",
-    href: "/portal/payroll-runs",
+    href: "/payroll-runs",
     region: "Payroll runs",
     query: "payroll.listRuns",
   },
   {
     label: "Year-end tax",
-    href: "/portal/year-end-tax",
+    href: "/year-end-tax",
     region: "Year-end tax",
     query: "employees.list",
   },
@@ -151,7 +151,7 @@ test("sidebar routes replace page content, share the layout and preserve history
     ),
   );
   await nav.getByRole("link", { name: "Employees", exact: true }).click();
-  await expect(page).toHaveURL(/\/portal\/employees$/);
+  await expect(page).toHaveURL(/\/employees$/);
   await page.getByRole("button", { name: "Add employee", exact: true }).click();
   const editor = page.getByRole("region", {
     name: "Create employee",
@@ -162,7 +162,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   await nav
     .getByRole("link", { name: "Attendance & DTR", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/portal\/attendance$/);
+  await expect(page).toHaveURL(/\/attendance$/);
   await expect(
     nav.getByRole("link", { name: "Attendance & DTR", exact: true }),
   ).toHaveAttribute("aria-current", "page");
@@ -184,13 +184,13 @@ test("sidebar routes replace page content, share the layout and preserve history
     ),
   ).toBe(true);
   await nav.getByRole("link", { name: "Employees", exact: true }).click();
-  await expect(page).toHaveURL(/\/portal\/employees$/);
+  await expect(page).toHaveURL(/\/employees$/);
   await page.goBack();
-  await expect(page).toHaveURL(/\/portal\/attendance$/);
+  await expect(page).toHaveURL(/\/attendance$/);
   await page.goForward();
-  await expect(page).toHaveURL(/\/portal\/employees$/);
+  await expect(page).toHaveURL(/\/employees$/);
   await page.goBack();
-  await expect(page).toHaveURL(/\/portal\/attendance$/);
+  await expect(page).toHaveURL(/\/attendance$/);
   await page.mouse.move(800, 100);
   await expect(
     nav.getByRole("link", { name: "Attendance & DTR", exact: true }),
@@ -218,14 +218,21 @@ test("sidebar routes replace page content, share the layout and preserve history
   await expect(accountButton).toBeVisible();
   await accountButton.click();
   await expect(
-    page.getByRole("menuitem", { name: "Profile & Account" }),
+    page.getByRole("menuitem", { name: "Account", exact: true }),
   ).toBeVisible();
+  // Security, Attendance and Holidays live outside the dropdown (settings
+  // rail and sidebar), so they stay out of the account menu.
   await expect(
     page.getByRole("menuitem", { name: "Security & 2FA" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "My Attendance" }),
+  ).toHaveCount(0);
+  // Holidays lives in the sidebar for every role, so it stays out of the
+  // account dropdown to avoid a redundant entry.
   await expect(
     page.getByRole("menuitem", { name: "Holidays & Calendar" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: "Log out" })).toBeVisible();
   await page.keyboard.press("Escape");
   expect(
@@ -236,13 +243,13 @@ test("sidebar routes replace page content, share the layout and preserve history
   await nav
     .getByRole("link", { name: "Payroll runs & payslips", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/portal\/payroll-runs$/);
+  await expect(page).toHaveURL(/\/payroll-runs$/);
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
   await expect(
     page.getByRole("region", { name: "Payroll runs", exact: true }),
   ).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/portal\/attendance$/);
+  await expect(page).toHaveURL(/\/attendance$/);
   await page.mouse.move(800, 100);
   await nav
     .getByRole("link", { name: "Payroll runs & payslips", exact: true })
@@ -258,7 +265,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   );
   await page.keyboard.press("Control+b");
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
-  await page.goto("/portal/year-end-tax");
+  await page.goto("/year-end-tax");
   await expect(
     nav.getByRole("link", { name: "Year-end tax", exact: true }),
   ).toHaveAttribute("aria-current", "page");
@@ -275,7 +282,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   expect(exceptions).toEqual([]);
 });
 
-test("sidebar profile dropdown navigates to profile, security, and signs out", async ({
+test("sidebar profile dropdown navigates to account settings and signs out", async ({
   page,
 }) => {
   const exceptions: string[] = [];
@@ -288,19 +295,37 @@ test("sidebar profile dropdown navigates to profile, security, and signs out", a
   });
   await expect(accountButton).toBeVisible();
 
-  // Test opening profile dropdown and navigating to Profile & Account
+  // The account dropdown holds a single Account shortcut; Security and
+  // Attendance live in the settings rail instead of the dropdown.
   await accountButton.click();
-  const profileItem = page.getByRole("menuitem", { name: "Profile & Account" });
-  await expect(profileItem).toBeVisible();
-  await profileItem.click();
-  await expect(page).toHaveURL(/\/portal\/my-profile$/);
+  await expect(page.getByRole("menuitem", { name: "Account" })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Security & 2FA" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "My Attendance" }),
+  ).toHaveCount(0);
 
-  // Test navigating to Security & 2FA from profile dropdown
-  await accountButton.click();
-  const securityItem = page.getByRole("menuitem", { name: "Security & 2FA" });
-  await expect(securityItem).toBeVisible();
-  await securityItem.click();
-  await expect(page).toHaveURL(/\/portal\/my-profile#mfa$/);
+  // Test opening profile dropdown and navigating to Account
+  const profileItem = page.getByRole("menuitem", { name: "Account" });
+  await profileItem.click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(
+    page.getByRole("navigation", { name: "Profile settings" }),
+  ).toHaveCount(1);
+
+  // Test navigating between settings pages through the rail
+  const rail = page.getByRole("navigation", { name: "Profile settings" });
+  await rail.getByRole("link", { name: "Security", exact: true }).click();
+  await expect(page).toHaveURL(/\/security$/);
+  await expect(
+    page.getByRole("navigation", { name: "Profile settings" }),
+  ).toHaveCount(1);
+  await rail.getByRole("link", { name: "Attendance", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-attendance$/);
+  await expect(
+    page.getByRole("navigation", { name: "Profile settings" }),
+  ).toHaveCount(1);
 
   // Test log out from profile dropdown
   await accountButton.click();
@@ -333,7 +358,7 @@ test("mobile sidebar closes on navigation, Escape and the explicit close control
   await nav
     .getByRole("link", { name: "Leave management", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/portal\/leaves$/);
+  await expect(page).toHaveURL(/\/leaves$/);
   await expect(drawer).toHaveCount(0);
   await toggle.click();
   await expect(
@@ -435,7 +460,7 @@ for (const colorScheme of ["light", "dark"] as const) {
       const selectors = [
         '[aria-label="Payroll workspace"]',
         '[aria-label="Account: Sidebar Tester"]',
-        'nav[aria-label="Payroll navigation"] a[href="/portal/employees"]',
+        'nav[aria-label="Payroll navigation"] a[href="/employees"]',
       ];
       return selectors.map((selector) => {
         const element = document.querySelector(selector);

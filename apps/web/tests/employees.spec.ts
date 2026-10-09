@@ -87,6 +87,7 @@ async function mockPortal(
   const requests: string[] = [];
   const creations: Record<string, unknown>[] = [];
   const updates: Record<string, unknown>[] = [];
+  const deletions: Record<string, unknown>[] = [];
   const user = {
     id: "u1",
     organizationId: "o1",
@@ -227,6 +228,25 @@ async function mockPortal(
         ];
         return { result: { data: { json: employees[0] } } };
       }
+      if (path === "employees.delete") {
+        const payload = request.postDataJSON()[String(index)].json;
+        deletions.push(payload);
+        const deleted = employees.find((e) => e.id === payload.id) ?? employee;
+        employees = employees.filter((e) => e.id !== payload.id);
+        return {
+          result: {
+            data: {
+              json: {
+                id: deleted.id,
+                employeeNumber: deleted.employeeNumber,
+                firstName: deleted.firstName,
+                lastName: deleted.lastName,
+                email: deleted.email,
+              },
+            },
+          },
+        };
+      }
       const json =
         path === "auth.me"
           ? user
@@ -248,7 +268,7 @@ async function mockPortal(
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
-  await page.goto("/portal/employees");
+  await page.goto("/employees");
   if (["HR_ADMIN", "SUPER_ADMIN", "PAYROLL_SPECIALIST"].includes(user.role)) {
     await expect(
       page.getByRole("region", { name: "Employees", exact: true }),
@@ -256,7 +276,7 @@ async function mockPortal(
   } else {
     await expect(page.getByText("No staff records available")).toBeVisible();
   }
-  return { requests, creations, updates };
+  return { requests, creations, updates, deletions };
 }
 
 async function fillEmployee(page: Page) {
@@ -557,6 +577,59 @@ test("HR edits an existing employee profile and sees updated details", async ({
     monthlyBasicRatePesos: 35000,
     isManagerial: true,
   });
+});
+
+test("HR opens the edit form directly from the row actions menu", async ({
+  page,
+}) => {
+  await mockPortal(page);
+  const section = page.getByRole("region", {
+    name: "Employees",
+    exact: true,
+  });
+  await section
+    .getByRole("row", { name: /Ana Santos/ })
+    .getByRole("button", { name: "Open menu" })
+    .click();
+  await page.getByRole("menuitem", { name: "Edit employee" }).click();
+
+  const details = page.getByRole("region", {
+    name: "Employee details",
+    exact: true,
+  });
+  await expect(details).toContainText("Ana Santos");
+  await expect(
+    details.getByRole("button", { name: "Save changes" }),
+  ).toBeVisible();
+});
+
+test("HR deletes an employee from the row actions menu", async ({ page }) => {
+  const state = await mockPortal(page);
+  const section = page.getByRole("region", {
+    name: "Employees",
+    exact: true,
+  });
+  await section
+    .getByRole("row", { name: /Ana Santos/ })
+    .getByRole("button", { name: "Open menu" })
+    .click();
+  await page.getByRole("menuitem", { name: "Delete employee" }).click();
+
+  const deleteDialog = page.getByRole("alertdialog");
+  await expect(deleteDialog).toBeVisible();
+  await expect(deleteDialog).toContainText("EMP-TEST-001");
+  await deleteDialog
+    .getByRole("button", { name: "Delete employee", exact: true })
+    .click();
+
+  await expect(
+    section
+      .getByRole("status")
+      .filter({ hasText: "Employee EMP-TEST-001 deleted." }),
+  ).toBeVisible();
+  expect(state.deletions).toHaveLength(1);
+  expect(state.deletions[0]).toMatchObject({ id: employee.id });
+  await expect(section.getByText("Ana Santos")).toHaveCount(0);
 });
 
 test("HR creates a daily-paid employee and views computed rates", async ({

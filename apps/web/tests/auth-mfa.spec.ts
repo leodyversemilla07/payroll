@@ -176,7 +176,7 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
     await page.click('button[type="submit"]:has-text("Verify and Login")');
 
     // 6. Successfully authenticated into portal
-    await expect(page).toHaveURL(/\/portal/);
+    await expect(page).toHaveURL(/\/overview/);
   });
 
   test("allows setup of MFA and generates backup codes in My Profile", async ({
@@ -298,10 +298,10 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
     await page.fill("#email", "maria@example.com");
     await page.fill("#password", "Password123456!");
     await page.click('button[type="submit"]:has-text("Login")');
-    await expect(page).toHaveURL(/\/portal/);
+    await expect(page).toHaveURL(/\/overview/);
 
-    // Navigate to My Profile
-    await page.goto("/portal/my-profile");
+    // Navigate to Security
+    await page.goto("/security");
 
     // Verify MFA card is visible with "Disabled" status
     await expect(

@@ -84,7 +84,7 @@ test("a shared-cookie account switch cannot expose the former tenant's cached em
       page.getByText("Alpha Private Employee", { exact: true }),
     ).toBeVisible();
     const other = await context.newPage();
-    await other.goto("/portal");
+    await other.goto("/overview");
     await other.getByRole("button", { name: /^Account:/ }).click();
     await other.getByRole("menuitem", { name: "Log out" }).click();
     await other.getByLabel("Email", { exact: true }).fill(beta.email);

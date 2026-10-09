@@ -264,7 +264,7 @@ test.describe("Feature 9: Payslip PDF Generation & Batch Download", () => {
     await expect(page.getByText(adminUser.name).first()).toBeVisible();
 
     // 2. Navigate to Payroll Runs
-    await page.goto("/portal/payroll-runs");
+    await page.goto("/payroll-runs");
     await expect(
       page.getByRole("region", { name: "Payroll runs" }),
     ).toBeVisible();
@@ -423,7 +423,7 @@ test.describe("Feature 9: Payslip PDF Generation & Batch Download", () => {
     await expect(page.getByText(employeeUser.name).first()).toBeVisible();
 
     // 2. Go to My Profile
-    await page.goto("/portal/my-profile");
+    await page.goto("/profile");
     await expect(
       page.getByRole("region", { name: "My Profile" }),
     ).toBeVisible();

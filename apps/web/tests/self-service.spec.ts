@@ -377,7 +377,7 @@ test("employee views my-profile page with masked statutory IDs and can unmask th
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   const section = page.getByRole("region", { name: "My Profile" });
   await expect(section).toBeVisible();
 
@@ -433,7 +433,7 @@ test("employee files a leave request from my-profile page", async ({
     },
   });
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   const section = page.getByRole("region", { name: "My Profile" });
   await expect(section).toBeVisible();
 
@@ -465,7 +465,7 @@ test("employee can view leave history with pending leave withdraw functionality"
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   const section = page.getByRole("region", { name: "My Profile" });
   await expect(section).toBeVisible();
 
@@ -488,7 +488,7 @@ test("employee views payslip history and clicks detail to see earnings/deduction
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   const section = page.getByRole("region", { name: "My Profile" });
   await expect(section).toBeVisible();
 
@@ -514,7 +514,7 @@ test("employee views official BIR 2316 card and downloads annual tax certificate
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   const section = page.getByRole("region", { name: "My Profile" });
   await expect(section).toBeVisible();
 
@@ -543,9 +543,16 @@ test("employee visits my-attendance and sees KPI cards and DTR table", async ({
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/my-attendance");
+  await page.goto("/my-attendance");
   const section = page.getByRole("region", { name: "My Attendance" });
   await expect(section).toBeVisible();
+
+  // Settings rail covers Account, Attendance (active here), and Security
+  const rail = page.getByRole("navigation", { name: "Profile settings" });
+  await expect(rail).toHaveCount(1);
+  await expect(
+    rail.getByRole("link", { name: "Attendance", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 
   // Section header
   await expect(section.getByText("My Attendance & DTR Records")).toBeVisible();
@@ -586,7 +593,7 @@ test("department manager sees and can approve/reject pending leave requests on l
     "leaves.listPendingRequests": pendingLeaveRequests,
   });
 
-  await page.goto("/portal/leaves");
+  await page.goto("/leaves");
 
   // Should see the "Pending Leave Approvals" section
   const section = page.getByRole("region", { name: "Pending leave approvals" });
@@ -649,21 +656,29 @@ test("employee role shows self-service navigation, not admin sections", async ({
 
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
 
-  // Employee should see self-service links (Dashboard, My Attendance, Holiday Calendar)
+  // Employee should see self-service links (Dashboard, Holiday Calendar).
+  // My Attendance moved to the account dropdown.
   await expect(nav.getByText("Dashboard")).toBeVisible();
-  await expect(nav.getByText("My Attendance")).toBeVisible();
   await expect(nav.getByText("Holiday Calendar")).toBeVisible();
+  await expect(nav.getByText("My Attendance")).toHaveCount(0);
 
   // My Profile should NOT be in the sidebar navigation (available in user profile dropdown)
   await expect(nav.getByText("My Profile")).toHaveCount(0);
 
-  // User profile dropdown should have Profile & Account
+  // User profile dropdown holds only the Account shortcut; Security and
+  // Attendance live in the settings rail instead of the dropdown.
   const userButton = page.getByLabel(`Account: ${employeeUser.name}`);
   await expect(userButton).toBeVisible();
   await userButton.click();
   await expect(
-    page.getByRole("menuitem", { name: "Profile & Account" }),
+    page.getByRole("menuitem", { name: "Account", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Security & 2FA" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "My Attendance" }),
+  ).toHaveCount(0);
 
   // Employee should NOT see admin sections
   await expect(nav.getByText("Employees", { exact: true })).toHaveCount(0);
@@ -678,16 +693,13 @@ test("department manager sidebar shows workspace and self-service navigation", a
 
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
 
-  // Manager should see workspace items
+  // Manager should see workspace items (employees/attendance are intentionally
+  // omitted: the role is denied on those sections, so links would dead-end)
   await expect(
     nav.getByRole("link", { name: "Overview", exact: true }),
   ).toBeVisible();
-  await expect(
-    nav.getByRole("link", { name: "Employees", exact: true }),
-  ).toBeVisible();
-  await expect(
-    nav.getByRole("link", { name: "Attendance & DTR", exact: true }),
-  ).toBeVisible();
+  await expect(nav.getByText("Employees", { exact: true })).toHaveCount(0);
+  await expect(nav.getByText("Attendance & DTR")).toHaveCount(0);
   await expect(
     nav.getByRole("link", { name: "Leave management", exact: true }),
   ).toBeVisible();
@@ -695,13 +707,10 @@ test("department manager sidebar shows workspace and self-service navigation", a
     nav.getByRole("link", { name: "Holiday calendar", exact: true }),
   ).toBeVisible();
 
-  // Manager should also see self-service
-  await expect(
-    nav.getByRole("link", { name: "My Profile", exact: true }),
-  ).toBeVisible();
-  await expect(
-    nav.getByRole("link", { name: "My Attendance", exact: true }),
-  ).toBeVisible();
+  // Manager should also see self-service (My Profile and My Attendance live
+  // in the account dropdown)
+  await expect(nav.getByText("My Attendance")).toHaveCount(0);
+  await expect(nav.getByText("My Profile")).toHaveCount(0);
 
   // Manager should NOT see payroll operations
   await expect(nav.getByText("Payroll runs & payslips")).toHaveCount(0);
@@ -741,13 +750,10 @@ test("HR admin sidebar shows full workspace including payroll operations", async
     nav.getByRole("link", { name: "Year-end tax", exact: true }),
   ).toBeVisible();
 
-  // HR should also see self-service
-  await expect(
-    nav.getByRole("link", { name: "My Profile", exact: true }),
-  ).toBeVisible();
-  await expect(
-    nav.getByRole("link", { name: "My Attendance", exact: true }),
-  ).toBeVisible();
+  // HR should also see self-service (My Profile and My Attendance live in
+  // the account dropdown)
+  await expect(nav.getByText("My Attendance")).toHaveCount(0);
+  await expect(nav.getByText("My Profile")).toHaveCount(0);
 });
 
 // ── Test: RBAC Route Guard & Maker-Checker ────────────────────────────────────
@@ -757,7 +763,7 @@ test("employee directly accessing unauthorized payroll routes sees Access Restri
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/process-payroll");
+  await page.goto("/process-payroll");
   const restrictedCard = page.getByRole("region", {
     name: "Access restricted",
   });
@@ -767,7 +773,7 @@ test("employee directly accessing unauthorized payroll routes sees Access Restri
     restrictedCard.getByRole("link", { name: "Return to Overview" }),
   ).toBeVisible();
 
-  await page.goto("/portal/payroll-runs");
+  await page.goto("/payroll-runs");
   await expect(
     page.getByRole("region", { name: "Access restricted" }),
   ).toBeVisible();
@@ -778,7 +784,7 @@ test("department manager directly accessing payroll process sees Access Restrict
 }) => {
   await setupAndLogin(page, managerUser);
 
-  await page.goto("/portal/process-payroll");
+  await page.goto("/process-payroll");
   const restrictedCard = page.getByRole("region", {
     name: "Access restricted",
   });
@@ -791,7 +797,7 @@ test("HR admin accessing process-payroll sees Maker-Checker separation of duties
 }) => {
   await setupAndLogin(page, hrUser);
 
-  await page.goto("/portal/process-payroll");
+  await page.goto("/process-payroll");
   const makerCheckerCard = page.getByRole("region", {
     name: "Process payroll run",
   });
@@ -811,16 +817,18 @@ test("unlinked administrator visiting my-profile sees administrative card and MF
 }) => {
   await setupAndLogin(page, unlinkedAdminUser);
 
-  await page.goto("/portal/my-profile");
+  await page.goto("/profile");
   await expect(
     page.getByRole("heading", { name: "System Administrator" }),
   ).toBeVisible();
   await expect(page.getByText("Administrative System Account")).toBeVisible();
   await expect(
-    page.getByText("Two-Factor Authentication (TOTP)"),
-  ).toBeVisible();
-  await expect(
     page.getByRole("link", { name: "Employee Directory" }),
+  ).toBeVisible();
+
+  await page.goto("/security");
+  await expect(
+    page.getByText("Two-Factor Authentication (TOTP)"),
   ).toBeVisible();
 });
 
@@ -829,7 +837,7 @@ test("unlinked administrator visiting my-attendance sees administrative attendan
 }) => {
   await setupAndLogin(page, unlinkedAdminUser);
 
-  await page.goto("/portal/my-attendance");
+  await page.goto("/my-attendance");
   await expect(page.getByText("Administrative Account Notice")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Go to Attendance & DTR Workspace" }),
@@ -841,10 +849,12 @@ test("employee can view holiday calendar in read-only mode without management co
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  await page.goto("/portal/holidays");
+  await page.goto("/holidays");
   const section = page.getByRole("region", { name: "Holiday calendar" });
   await expect(section).toBeVisible();
-  await expect(section.getByText("Holiday Calendar")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Holiday calendar", exact: true }),
+  ).toBeVisible();
 
   // Employee can view the configured holidays
   await expect(section.getByText("Christmas Day")).toBeVisible();

@@ -393,7 +393,7 @@ async function mockLeaves(
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
-  await page.goto("/portal/leaves");
+  await page.goto("/leaves");
   return { calls, saves, reads };
 }
 async function load(page: Page) {

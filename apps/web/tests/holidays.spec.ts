@@ -161,7 +161,7 @@ async function mockHolidaysPortal(
   await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
-  await page.goto("/portal/holidays");
+  await page.goto("/holidays");
 
   return { requests, mutations };
 }
@@ -234,8 +234,9 @@ test("HR_ADMIN edits and deletes a holiday", async ({ page }) => {
     exact: true,
   });
 
-  // Click edit button for Christmas Day
-  await section.getByRole("button", { name: "Edit Christmas Day" }).click();
+  // Open the row actions menu for Christmas Day and edit
+  await section.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "Edit holiday" }).click();
 
   const editForm = page.getByRole("region", {
     name: "Edit holiday",
@@ -262,10 +263,13 @@ test("HR_ADMIN edits and deletes a holiday", async ({ page }) => {
     },
   });
 
-  // Accept delete confirmation
-  page.on("dialog", (dialog) => dialog.accept());
-  await section
-    .getByRole("button", { name: "Delete Christmas Day (National)" })
+  await section.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "Delete holiday" }).click();
+
+  const deleteDialog = page.getByRole("alertdialog");
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog
+    .getByRole("button", { name: "Delete holiday", exact: true })
     .click();
 
   await expect(
@@ -327,10 +331,7 @@ test("PAYROLL_SPECIALIST can view holidays in read-only mode without edit or add
   await expect(
     page.getByRole("button", { name: /Populate .* Presets/i }),
   ).toHaveCount(0);
-  await expect(
-    section.getByRole("button", { name: "Edit Christmas Day" }),
-  ).toHaveCount(0);
-  await expect(
-    section.getByRole("button", { name: "Delete Christmas Day" }),
-  ).toHaveCount(0);
+  await expect(section.getByRole("button", { name: "Open menu" })).toHaveCount(
+    0,
+  );
 });

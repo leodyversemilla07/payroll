@@ -292,8 +292,8 @@ test.describe("Loans & Amortization Management", () => {
   test("displays KPI metrics and loans list for staff", async ({ page }) => {
     await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
 
-    // Navigate to /portal/loans
-    await page.goto("/portal/loans");
+    // Navigate to /loans
+    await page.goto("/loans");
 
     // Verify header
     await expect(
@@ -313,26 +313,26 @@ test.describe("Loans & Amortization Management", () => {
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
   });
 
-  test("dashboard 'Active Loans' card links directly to /portal/loans", async ({
+  test("dashboard 'Active Loans' card links directly to /loans", async ({
     page,
   }) => {
     await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
-    await page.goto("/portal");
+    await page.goto("/overview");
 
-    // On /portal overview page
+    // On overview page
     const loansCardLink = page.getByRole("link", {
       name: /Manage loans & advances/i,
     });
     await expect(loansCardLink).toBeVisible();
     await loansCardLink.click();
-    await expect(page).toHaveURL(/\/portal\/loans/);
+    await expect(page).toHaveURL(/\/loans/);
   });
 
   test("opens Create Loan modal, previews schedule, and cancels", async ({
     page,
   }) => {
     await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
-    await page.goto("/portal/loans");
+    await page.goto("/loans");
 
     // Click "Create Loan"
     await page.getByRole("button", { name: "Create Loan" }).click();
@@ -361,7 +361,7 @@ test.describe("Loans & Amortization Management", () => {
     page,
   }) => {
     await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
-    await page.goto("/portal/loans");
+    await page.goto("/loans");
 
     // Click "Ledger"
     await page.getByRole("button", { name: "Ledger" }).first().click();
@@ -381,7 +381,7 @@ test.describe("Loans & Amortization Management", () => {
     page,
   }) => {
     await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
-    await page.goto("/portal/loans");
+    await page.goto("/loans");
 
     // Click "Pay" quick action
     await page.getByRole("button", { name: "Pay" }).first().click();
@@ -411,7 +411,7 @@ test.describe("Loans & Amortization Management", () => {
     });
 
     // Employee navigates to My Profile
-    await page.goto("/portal/my-profile");
+    await page.goto("/profile");
 
     // Verify "My Loans & Cash Advances" section
     await expect(page.getByText("My Loans & Cash Advances")).toBeVisible();
@@ -428,7 +428,7 @@ test.describe("Loans & Amortization Management", () => {
     await expect(page.getByText("Hide Payment History")).toBeVisible();
   });
 
-  test("employee is restricted from accessing staff /portal/loans", async ({
+  test("employee is restricted from accessing staff /loans", async ({
     page,
   }) => {
     await mockLoansPortal(page, {
@@ -436,8 +436,8 @@ test.describe("Loans & Amortization Management", () => {
       employeeId: "emp-1",
     });
 
-    // Navigate to /portal/loans directly
-    await page.goto("/portal/loans");
+    // Navigate to /loans directly
+    await page.goto("/loans");
 
     // Should display access restricted card
     await expect(

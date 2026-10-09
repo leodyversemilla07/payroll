@@ -250,7 +250,7 @@ async function mockPoliciesPortal(
   await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
-  await page.goto("/portal/leaves");
+  await page.goto("/leaves");
 
   return { requests, mutations };
 }

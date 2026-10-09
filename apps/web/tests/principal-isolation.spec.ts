@@ -166,7 +166,7 @@ test("another tab's account change cannot reuse cached employees, even if the ne
   page,
 }) => {
   const { state } = await setup(page);
-  await page.goto("/portal/employees");
+  await page.goto("/employees");
   await expect(
     page.getByText("Alpha Private Employee", { exact: true }),
   ).toBeVisible();
@@ -211,7 +211,7 @@ for (const change of ["organization", "role", "employee link"] as const) {
     page,
   }) => {
     const { state } = await setup(page);
-    await page.goto("/portal/employees");
+    await page.goto("/employees");
     await expect(
       page.getByText("Alpha Private Employee", { exact: true }),
     ).toBeVisible();
@@ -240,7 +240,7 @@ test("late responses belonging to the old account cannot repopulate the new acco
 }) => {
   const { state, release } = await setup(page);
   state.delayAlpha = true;
-  await page.goto("/portal/employees");
+  await page.goto("/employees");
   await expect
     .poll(() => state.headers.includes(owner(state.people.alpha)))
     .toBe(true);
@@ -259,7 +259,7 @@ test("expired sessions discard business records instead of leaving cached data b
   page,
 }) => {
   await setup(page);
-  await page.goto("/portal/employees");
+  await page.goto("/employees");
   await expect(
     page.getByText("Alpha Private Employee", { exact: true }),
   ).toBeVisible();
@@ -277,7 +277,7 @@ test("same-principal session and data outages preserve an unsaved editor", async
   page,
 }) => {
   const { state } = await setup(page);
-  await page.goto("/portal/employees");
+  await page.goto("/employees");
   await expect(
     page.getByText("Alpha Private Employee", { exact: true }),
   ).toBeVisible();
@@ -304,7 +304,7 @@ test("a stale account mutation is rejected and rechecks authentication without a
   const { state } = await setup(page);
   state.people.alpha.role = "SUPER_ADMIN";
   state.people.beta.role = "SUPER_ADMIN";
-  await page.goto("/portal/process-payroll");
+  await page.goto("/process-payroll");
   await expect(page.getByText("Signed in as")).toContainText("Alpha Account");
   await page
     .getByLabel("Regular run cutoff start", { exact: true })

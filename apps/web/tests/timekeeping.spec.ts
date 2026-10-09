@@ -199,7 +199,7 @@ async function mockDtr(
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByText("Signed in as")).toBeVisible();
-  await page.goto("/portal/attendance");
+  await page.goto("/attendance");
   return { requests, saves, imports };
 }
 async function loadDtr(page: Page) {
