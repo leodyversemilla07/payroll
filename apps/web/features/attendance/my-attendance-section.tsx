@@ -86,7 +86,7 @@ export function MyAttendanceSection() {
               </p>
               <div>
                 <Link
-                  href="/portal/attendance"
+                  href="/attendance"
                   className={buttonVariants({ variant: "default" })}
                 >
                   Go to Attendance & DTR Workspace &rarr;

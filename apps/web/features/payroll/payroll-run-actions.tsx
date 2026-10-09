@@ -89,7 +89,7 @@ export function TriggerRunForms() {
           </p>
           <div className="pt-2">
             <Link
-              href="/portal/payroll-runs"
+              href="/payroll-runs"
               className={buttonVariants({ variant: "default" })}
             >
               Review Payroll Runs
@@ -293,7 +293,7 @@ export function TriggerRunForms() {
                   <p role="status">
                     Run processed.{" "}
                     <Link
-                      href="/portal/payroll-runs"
+                      href="/payroll-runs"
                       className="text-primary underline"
                     >
                       Review payroll runs
@@ -365,7 +365,7 @@ export function TriggerRunForms() {
                   <p role="status">
                     13th-month run processed.{" "}
                     <Link
-                      href="/portal/payroll-runs"
+                      href="/payroll-runs"
                       className="text-primary underline"
                     >
                       Review payroll runs

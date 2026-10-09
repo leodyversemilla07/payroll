@@ -15,7 +15,9 @@
       "!!**/.turbo",
       "!!**/coverage",
       "!!pnpm-lock.yaml",
-      "!!packages/db/prisma/migrations"
+      "!!packages/db/prisma/migrations",
+      "!!packages/ui/src/components/calendar.tsx",
+      "!!packages/ui/src/components/popover.tsx"
     ]
   },
   "formatter": {

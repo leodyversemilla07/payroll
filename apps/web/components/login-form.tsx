@@ -63,7 +63,7 @@ export function LoginForm() {
       queryClient.clear();
       saveEmailDraft("");
       setEmailDraft("");
-      await router.push("/portal");
+      await router.push("/overview");
     },
   });
 
@@ -72,7 +72,7 @@ export function LoginForm() {
       queryClient.clear();
       saveEmailDraft("");
       setEmailDraft("");
-      await router.push("/portal");
+      await router.push("/overview");
     },
   });
 
@@ -95,7 +95,7 @@ export function LoginForm() {
     // its UNAUTHORIZED error. Cached identity alone must not redirect back
     // into the portal and create a sign-in/portal navigation loop.
     if (me.isSuccess && me.data) {
-      void router.replace("/portal");
+      void router.replace("/overview");
     }
   }, [me.data, me.isSuccess, router]);
 

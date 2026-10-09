@@ -98,7 +98,7 @@ const quartersList = [
 ];
 
 export function LeavePoliciesSection({
-  canManage = true,
+  canManage = false,
 }: {
   canManage?: boolean;
 }) {
@@ -254,6 +254,7 @@ export function LeavePoliciesSection({
 
   function handleSavePolicy(e: FormEvent) {
     e.preventDefault();
+    if (!canManage) return;
     const annualNum = Number(policyAnnualCredits);
     const monthsNum = Number(policyEligibleMonths);
     const maxDaysNum =
@@ -446,217 +447,221 @@ export function LeavePoliciesSection({
         )}
 
         {/* 1. CREATE OR EDIT POLICY FORM */}
-        {(activePanel === "CREATE_POLICY" || activePanel === "EDIT_POLICY") && (
-          <form
-            onSubmit={handleSavePolicy}
-            className="rounded-lg border bg-muted/20 p-4 space-y-4"
-            aria-label={
-              activePanel === "CREATE_POLICY"
-                ? "Create leave policy"
-                : "Edit leave policy"
-            }
-          >
-            <h3 className="text-sm font-semibold">
-              {activePanel === "CREATE_POLICY"
-                ? "Create New Leave Policy"
-                : `Edit Leave Policy: ${editingPolicy?.leaveType}`}
-            </h3>
+        {canManage &&
+          (activePanel === "CREATE_POLICY" ||
+            activePanel === "EDIT_POLICY") && (
+            <form
+              onSubmit={handleSavePolicy}
+              className="rounded-lg border bg-muted/20 p-4 space-y-4"
+              aria-label={
+                activePanel === "CREATE_POLICY"
+                  ? "Create leave policy"
+                  : "Edit leave policy"
+              }
+            >
+              <h3 className="text-sm font-semibold">
+                {activePanel === "CREATE_POLICY"
+                  ? "Create New Leave Policy"
+                  : `Edit Leave Policy: ${editingPolicy?.leaveType}`}
+              </h3>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {activePanel === "CREATE_POLICY" ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {activePanel === "CREATE_POLICY" ? (
+                  <Field>
+                    <FieldLabel htmlFor="policy-leave-type">
+                      Leave Policy Code
+                    </FieldLabel>
+                    <Input
+                      id="policy-leave-type"
+                      placeholder="e.g. VACATION, SICK, SIL"
+                      value={policyLeaveType}
+                      onChange={(e) => setPolicyLeaveType(e.target.value)}
+                      required
+                    />
+                    <FieldDescription>
+                      Uppercase policy identifier (e.g. VACATION, SICK, SIL,
+                      EMERGENCY).
+                    </FieldDescription>
+                  </Field>
+                ) : (
+                  <Field>
+                    <FieldLabel>Leave Policy Code</FieldLabel>
+                    <Input value={editingPolicy?.leaveType} disabled />
+                    <FieldDescription>
+                      Policy code cannot be changed once created.
+                    </FieldDescription>
+                  </Field>
+                )}
+
                 <Field>
-                  <FieldLabel htmlFor="policy-leave-type">
-                    Leave Policy Code
+                  <FieldLabel htmlFor="policy-annual-credits">
+                    Annual Credits (Days / Year)
                   </FieldLabel>
                   <Input
-                    id="policy-leave-type"
-                    placeholder="e.g. VACATION, SICK, SIL"
-                    value={policyLeaveType}
-                    onChange={(e) => setPolicyLeaveType(e.target.value)}
-                    required
-                  />
-                  <FieldDescription>
-                    Uppercase policy identifier (e.g. VACATION, SICK, SIL,
-                    EMERGENCY).
-                  </FieldDescription>
-                </Field>
-              ) : (
-                <Field>
-                  <FieldLabel>Leave Policy Code</FieldLabel>
-                  <Input value={editingPolicy?.leaveType} disabled />
-                  <FieldDescription>
-                    Policy code cannot be changed once created.
-                  </FieldDescription>
-                </Field>
-              )}
-
-              <Field>
-                <FieldLabel htmlFor="policy-annual-credits">
-                  Annual Credits (Days / Year)
-                </FieldLabel>
-                <Input
-                  id="policy-annual-credits"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="365"
-                  value={policyAnnualCredits}
-                  onChange={(e) => setPolicyAnnualCredits(e.target.value)}
-                  required
-                />
-                <FieldDescription>
-                  Total statutory or company leave days per calendar year.
-                </FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="policy-accrual-frequency">
-                  Accrual Frequency
-                </FieldLabel>
-                <Select
-                  items={ACCRUAL_FREQUENCY_ITEMS}
-                  value={policyAccrualFrequency}
-                  onValueChange={(val) => {
-                    if (val)
-                      setPolicyAccrualFrequency(
-                        val as "MONTHLY" | "QUARTERLY" | "ANNUAL",
-                      );
-                  }}
-                >
-                  <SelectTrigger
-                    id="policy-accrual-frequency"
-                    className="w-full"
-                  >
-                    <SelectValue placeholder="Select accrual frequency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {ACCRUAL_FREQUENCY_ITEMS.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="policy-carryover-policy">
-                  Year-End Carryover Policy
-                </FieldLabel>
-                <Select
-                  items={CARRYOVER_POLICY_ITEMS}
-                  value={policyCarryoverPolicy}
-                  onValueChange={(val) => {
-                    if (val)
-                      setPolicyCarryoverPolicy(
-                        val as "NO_CARRYOVER" | "CAPPED" | "UNLIMITED",
-                      );
-                  }}
-                >
-                  <SelectTrigger
-                    id="policy-carryover-policy"
-                    className="w-full"
-                  >
-                    <SelectValue placeholder="Select carryover policy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {CARRYOVER_POLICY_ITEMS.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              {policyCarryoverPolicy === "CAPPED" && (
-                <Field>
-                  <FieldLabel htmlFor="policy-max-carryover">
-                    Maximum Carryover Days
-                  </FieldLabel>
-                  <Input
-                    id="policy-max-carryover"
+                    id="policy-annual-credits"
                     type="number"
                     step="0.5"
-                    min="0.5"
+                    min="0"
                     max="365"
-                    value={policyMaxCarryoverDays}
-                    onChange={(e) => setPolicyMaxCarryoverDays(e.target.value)}
+                    value={policyAnnualCredits}
+                    onChange={(e) => setPolicyAnnualCredits(e.target.value)}
                     required
                   />
                   <FieldDescription>
-                    Maximum unused credits allowed to carry forward into the
-                    next year.
+                    Total statutory or company leave days per calendar year.
                   </FieldDescription>
                 </Field>
-              )}
 
-              <Field>
-                <FieldLabel htmlFor="policy-eligible-months">
-                  Eligible After Tenure (Months)
-                </FieldLabel>
-                <Input
-                  id="policy-eligible-months"
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={policyEligibleMonths}
-                  onChange={(e) => setPolicyEligibleMonths(e.target.value)}
-                  required
+                <Field>
+                  <FieldLabel htmlFor="policy-accrual-frequency">
+                    Accrual Frequency
+                  </FieldLabel>
+                  <Select
+                    items={ACCRUAL_FREQUENCY_ITEMS}
+                    value={policyAccrualFrequency}
+                    onValueChange={(val) => {
+                      if (val)
+                        setPolicyAccrualFrequency(
+                          val as "MONTHLY" | "QUARTERLY" | "ANNUAL",
+                        );
+                    }}
+                  >
+                    <SelectTrigger
+                      id="policy-accrual-frequency"
+                      className="w-full"
+                    >
+                      <SelectValue placeholder="Select accrual frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {ACCRUAL_FREQUENCY_ITEMS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="policy-carryover-policy">
+                    Year-End Carryover Policy
+                  </FieldLabel>
+                  <Select
+                    items={CARRYOVER_POLICY_ITEMS}
+                    value={policyCarryoverPolicy}
+                    onValueChange={(val) => {
+                      if (val)
+                        setPolicyCarryoverPolicy(
+                          val as "NO_CARRYOVER" | "CAPPED" | "UNLIMITED",
+                        );
+                    }}
+                  >
+                    <SelectTrigger
+                      id="policy-carryover-policy"
+                      className="w-full"
+                    >
+                      <SelectValue placeholder="Select carryover policy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {CARRYOVER_POLICY_ITEMS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                {policyCarryoverPolicy === "CAPPED" && (
+                  <Field>
+                    <FieldLabel htmlFor="policy-max-carryover">
+                      Maximum Carryover Days
+                    </FieldLabel>
+                    <Input
+                      id="policy-max-carryover"
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      max="365"
+                      value={policyMaxCarryoverDays}
+                      onChange={(e) =>
+                        setPolicyMaxCarryoverDays(e.target.value)
+                      }
+                      required
+                    />
+                    <FieldDescription>
+                      Maximum unused credits allowed to carry forward into the
+                      next year.
+                    </FieldDescription>
+                  </Field>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="policy-eligible-months">
+                    Eligible After Tenure (Months)
+                  </FieldLabel>
+                  <Input
+                    id="policy-eligible-months"
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={policyEligibleMonths}
+                    onChange={(e) => setPolicyEligibleMonths(e.target.value)}
+                    required
+                  />
+                  <FieldDescription>
+                    Minimum completed months of service before accruals start
+                    (e.g. 6 for regular, 12 for SIL).
+                  </FieldDescription>
+                </Field>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Checkbox
+                  id="policy-is-active"
+                  checked={policyIsActive}
+                  onCheckedChange={(checked) => setPolicyIsActive(!!checked)}
                 />
-                <FieldDescription>
-                  Minimum completed months of service before accruals start
-                  (e.g. 6 for regular, 12 for SIL).
-                </FieldDescription>
-              </Field>
-            </div>
+                <FieldLabel
+                  htmlFor="policy-is-active"
+                  className="cursor-pointer text-sm font-normal"
+                >
+                  Policy is Active and available for accruals
+                </FieldLabel>
+              </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <Checkbox
-                id="policy-is-active"
-                checked={policyIsActive}
-                onCheckedChange={(checked) => setPolicyIsActive(!!checked)}
-              />
-              <FieldLabel
-                htmlFor="policy-is-active"
-                className="cursor-pointer text-sm font-normal"
-              >
-                Policy is Active and available for accruals
-              </FieldLabel>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setActivePanel("LIST");
-                  setErrorMessage(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  createPolicyMutation.isPending ||
-                  updatePolicyMutation.isPending
-                }
-              >
-                {activePanel === "CREATE_POLICY"
-                  ? "Save Policy"
-                  : "Save Changes"}
-              </Button>
-            </div>
-          </form>
-        )}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setActivePanel("LIST");
+                    setErrorMessage(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    createPolicyMutation.isPending ||
+                    updatePolicyMutation.isPending
+                  }
+                >
+                  {activePanel === "CREATE_POLICY"
+                    ? "Save Policy"
+                    : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          )}
 
         {/* 2. RUN ACCRUAL PANEL */}
-        {activePanel === "ACCRUAL" && (
+        {canManage && activePanel === "ACCRUAL" && (
           <section
             className="rounded-lg border bg-muted/20 p-4 space-y-4"
             aria-label="Run leave accrual"
@@ -922,7 +927,7 @@ export function LeavePoliciesSection({
         )}
 
         {/* 3. RUN CARRYOVER PANEL */}
-        {activePanel === "CARRYOVER" && (
+        {canManage && activePanel === "CARRYOVER" && (
           <section
             className="rounded-lg border bg-muted/20 p-4 space-y-4"
             aria-label="Run leave carryover"

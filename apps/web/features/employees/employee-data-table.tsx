@@ -77,6 +77,9 @@ interface EmployeeDataTableProps {
   data: EmployeeListItem[];
   selectedId: string | null;
   onSelectEmployee: (id: string) => void;
+  onEditEmployee: (id: string) => void;
+  onDeleteEmployee: (id: string) => void;
+  canManage?: boolean;
 }
 
 export function formatEmploymentStatus(status?: string | null): string {
@@ -197,6 +200,9 @@ export function EmployeeDataTable({
   data,
   selectedId,
   onSelectEmployee,
+  onEditEmployee,
+  onDeleteEmployee,
+  canManage = false,
 }: EmployeeDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -403,6 +409,27 @@ export function EmployeeDataTable({
                     >
                       View details
                     </DropdownMenuItem>
+                    {canManage && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditEmployee(employee.id);
+                        }}
+                      >
+                        Edit employee
+                      </DropdownMenuItem>
+                    )}
+                    {canManage && (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteEmployee(employee.id);
+                        }}
+                      >
+                        Delete employee
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -411,7 +438,7 @@ export function EmployeeDataTable({
         },
       },
     ],
-    [selectedId, onSelectEmployee],
+    [selectedId, onSelectEmployee, onEditEmployee, onDeleteEmployee, canManage],
   );
 
   const table = useReactTable({

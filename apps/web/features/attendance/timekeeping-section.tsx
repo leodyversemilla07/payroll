@@ -100,7 +100,7 @@ function needsManualReview(record: DTRRecord) {
 export function TimekeepingSection({
   employees,
   employeeListFailed,
-  canImport = true,
+  canImport = false,
 }: {
   employees: EmployeeOption[];
   employeeListFailed: boolean;

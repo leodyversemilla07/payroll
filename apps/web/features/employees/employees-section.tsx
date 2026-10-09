@@ -2,8 +2,18 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog";
 import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
-import { Button } from "@workspace/ui/components/button";
+import { Button, buttonVariants } from "@workspace/ui/components/button";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
@@ -43,6 +53,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { cn } from "@workspace/ui/lib/utils";
 import { Loader2, Plus, Users } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { DatePicker } from "@/components/date-picker";
 import { PageHeaderAction } from "@/components/payroll-portal";
 import { trpc } from "@/lib/trpc";
 import {
@@ -100,11 +111,34 @@ function masked(value: string | null | undefined) {
 }
 
 export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
+  const utils = trpc.useUtils();
   const employees = trpc.employees.list.useQuery(undefined, { retry: false });
   const [showCreate, setShowCreate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editOnOpen, setEditOnOpen] = useState(false);
   const [createdNumber, setCreatedNumber] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const pendingDeleteEmployee =
+    employees.data?.find((item) => item.id === pendingDeleteId) ?? null;
+
+  const deleteEmployee = trpc.employees.delete.useMutation({
+    onSuccess: (deleted) => {
+      void utils.employees.list.invalidate();
+      setPendingDeleteId(null);
+      if (selectedId === deleted.id) {
+        setSelectedId(null);
+        setEditOnOpen(false);
+      }
+      setNotice(`Employee ${deleted.employeeNumber} deleted.`);
+    },
+    onError: (err) => {
+      setPendingDeleteId(null);
+      setNotice(err.message || "Failed to delete employee. Please retry.");
+    },
+  });
 
   return (
     <div className="min-w-0 space-y-6">
@@ -131,6 +165,11 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
           {createdNumber && !selectedId && (
             <p role="status" className="mb-4 break-words">
               Employee {createdNumber} created. No login account was created.
+            </p>
+          )}
+          {notice && !selectedId && (
+            <p role="status" className="mb-4 break-words">
+              {notice}
             </p>
           )}
           {employees.isPending ? (
@@ -199,7 +238,18 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
             <EmployeeDataTable
               data={employees.data}
               selectedId={selectedId}
-              onSelectEmployee={(id) => setSelectedId(id)}
+              onSelectEmployee={(id) => {
+                setEditOnOpen(false);
+                setSelectedId(id);
+              }}
+              onEditEmployee={(id) => {
+                setEditOnOpen(true);
+                setSelectedId(id);
+              }}
+              onDeleteEmployee={(id) => {
+                if (!deleteEmployee.isPending) setPendingDeleteId(id);
+              }}
+              canManage={canCreate}
             />
           )}
         </CardContent>
@@ -232,7 +282,10 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
       <Sheet
         open={Boolean(selectedId)}
         onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
+          if (!open) {
+            setSelectedId(null);
+            setEditOnOpen(false);
+          }
         }}
       >
         <SheetContent
@@ -244,6 +297,7 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
               key={selectedId}
               id={selectedId}
               canEdit={canCreate}
+              initialEditing={editOnOpen}
               createdMessage={
                 createdNumber
                   ? `Employee ${createdNumber} created. No login account was created.`
@@ -253,11 +307,61 @@ export function EmployeesSection({ canCreate }: { canCreate: boolean }) {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Employee Confirmation Dialog */}
+      <AlertDialog
+        open={!!pendingDeleteEmployee}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete employee?</AlertDialogTitle>
+            {pendingDeleteEmployee && (
+              <AlertDialogDescription>
+                This permanently removes {pendingDeleteEmployee.firstName}{" "}
+                {pendingDeleteEmployee.lastName} (
+                {pendingDeleteEmployee.employeeNumber}) and their compensation
+                profile. This action cannot be undone.
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteEmployee.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={deleteEmployee.isPending}
+              onClick={() => {
+                if (pendingDeleteEmployee) {
+                  deleteEmployee.mutate({ id: pendingDeleteEmployee.id });
+                }
+              }}
+            >
+              {deleteEmployee.isPending ? "Deleting…" : "Delete employee"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-const profileFields = [
+interface TextFieldConfig {
+  name: string;
+  label: string;
+  maxLength?: number;
+  type?: string;
+  captionLayout?: "label" | "dropdown" | "dropdown-months" | "dropdown-years";
+  min?: string;
+  max?: string;
+}
+
+const todayIso = new Date().toISOString().slice(0, 10);
+
+const profileFields: readonly TextFieldConfig[] = [
   { name: "firstName", label: "First name", maxLength: 100 },
   { name: "lastName", label: "Last name", maxLength: 100 },
   { name: "email", label: "Employee email", maxLength: 320, type: "email" },
@@ -268,11 +372,18 @@ const profileFields = [
     type: "tel",
   },
   { name: "residentialAddress", label: "Residential address", maxLength: 500 },
-  { name: "dateOfBirth", label: "Date of birth", type: "date" },
+  {
+    name: "dateOfBirth",
+    label: "Date of birth",
+    type: "date",
+    captionLayout: "dropdown",
+    min: "1900-01-01",
+    max: todayIso,
+  },
   { name: "gender", label: "Gender", maxLength: 50 },
   { name: "civilStatus", label: "Civil status", maxLength: 50 },
-] as const;
-const statutoryFields = [
+];
+const statutoryFields: readonly TextFieldConfig[] = [
   { name: "tin", label: "TIN", maxLength: 50 },
   { name: "sssNo", label: "SSS number", maxLength: 50 },
   { name: "philhealthNo", label: "PhilHealth number", maxLength: 50 },
@@ -280,34 +391,41 @@ const statutoryFields = [
   { name: "bankName", label: "Bank name", maxLength: 100 },
   { name: "bankAccountNumber", label: "Bank account number", maxLength: 100 },
   { name: "bankAccountName", label: "Bank account name", maxLength: 200 },
-] as const;
+];
 
-function TextFields({
-  fields,
-}: {
-  fields: readonly {
-    name: string;
-    label: string;
-    maxLength?: number;
-    type?: string;
-  }[];
-}) {
+function TextFields({ fields }: { fields: readonly TextFieldConfig[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {fields.map((field) => (
-        <Field key={field.name}>
-          <FieldLabel htmlFor={`employee-${field.name}`}>
-            {field.label}
-          </FieldLabel>
-          <Input
-            id={`employee-${field.name}`}
-            name={field.name}
-            type={field.type ?? "text"}
-            maxLength={field.maxLength}
-            required
-          />
-        </Field>
-      ))}
+      {fields.map((field) =>
+        field.type === "date" ? (
+          <Field key={field.name}>
+            <FieldLabel htmlFor={`employee-${field.name}`}>
+              {field.label}
+            </FieldLabel>
+            <DatePicker
+              id={`employee-${field.name}`}
+              name={field.name}
+              required
+              captionLayout={field.captionLayout ?? "dropdown"}
+              min={field.min}
+              max={field.max}
+            />
+          </Field>
+        ) : (
+          <Field key={field.name}>
+            <FieldLabel htmlFor={`employee-${field.name}`}>
+              {field.label}
+            </FieldLabel>
+            <Input
+              id={`employee-${field.name}`}
+              name={field.name}
+              type={field.type ?? "text"}
+              maxLength={field.maxLength}
+              required
+            />
+          </Field>
+        ),
+      )}
     </div>
   );
 }
@@ -559,7 +677,12 @@ function CreateEmployeeForm({
                 </Field>
                 <TextFields
                   fields={[
-                    { name: "hireDate", label: "Hire date", type: "date" },
+                    {
+                      name: "hireDate",
+                      label: "Hire date",
+                      type: "date",
+                      captionLayout: "dropdown",
+                    },
                   ]}
                 />
                 <Field>
@@ -739,14 +862,18 @@ function formatDateInput(value: Date | string | null | undefined): string {
 function EmployeeDetails({
   id,
   canEdit,
+  initialEditing,
   createdMessage,
 }: {
   id: string;
   canEdit: boolean;
+  initialEditing?: boolean;
   createdMessage?: string | null;
 }) {
   const details = trpc.employees.getById.useQuery({ id }, { retry: false });
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(
+    canEdit && (initialEditing ?? false),
+  );
   const employee = details.data;
   const initials = employee
     ? `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase()
@@ -794,8 +921,8 @@ function EmployeeDetails({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {canEdit && details.data && !isEditing && (
+          {canEdit && details.data && !isEditing && (
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -804,18 +931,8 @@ function EmployeeDetails({
               >
                 Edit employee
               </Button>
-            )}
-            {isEditing && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(false)}
-              >
-                Cancel editing
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </SheetHeader>
 
@@ -843,7 +960,7 @@ function EmployeeDetails({
           </p>
         ) : !details.data ? (
           <p>Employee not found in this organization.</p>
-        ) : isEditing ? (
+        ) : isEditing && canEdit ? (
           <EditEmployeeForm
             employee={details.data}
             onCancel={() => setIsEditing(false)}
@@ -1116,12 +1233,14 @@ function EditEmployeeForm({
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-dob">Date of birth</FieldLabel>
-              <Input
+              <DatePicker
                 id="edit-dob"
                 name="dateOfBirth"
-                type="date"
                 defaultValue={formatDateInput(employee.dateOfBirth)}
                 required
+                captionLayout="dropdown"
+                min="1900-01-01"
+                max={todayIso}
               />
             </Field>
             <Field>
@@ -1202,34 +1321,34 @@ function EditEmployeeForm({
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-hire-date">Hire date</FieldLabel>
-              <Input
+              <DatePicker
                 id="edit-hire-date"
                 name="hireDate"
-                type="date"
                 defaultValue={formatDateInput(employee.hireDate)}
                 required
+                captionLayout="dropdown"
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-regularization-date">
                 Regularization date
               </FieldLabel>
-              <Input
+              <DatePicker
                 id="edit-regularization-date"
                 name="regularizationDate"
-                type="date"
                 defaultValue={formatDateInput(employee.regularizationDate)}
+                captionLayout="dropdown"
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="edit-resignation-date">
                 Resignation / Exit date
               </FieldLabel>
-              <Input
+              <DatePicker
                 id="edit-resignation-date"
                 name="resignationDate"
-                type="date"
                 defaultValue={formatDateInput(employee.resignationDate)}
+                captionLayout="dropdown"
               />
             </Field>
             <Field>

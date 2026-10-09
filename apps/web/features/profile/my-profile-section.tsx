@@ -55,7 +55,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { MfaSettingsCard } from "@/components/mfa-settings-card";
 import { usePortalUser } from "@/components/payroll-portal";
 import { LOAN_TYPE_LABELS } from "@/features/loans/loans-section";
 import { manilaToday } from "@/lib/attendance-time";
@@ -384,7 +383,7 @@ export function MyProfileSection() {
 
               <div className="flex flex-wrap gap-2 pt-1">
                 <Link
-                  href="/portal/employees"
+                  href="/employees"
                   className={buttonVariants({
                     variant: "default",
                     size: "sm",
@@ -394,7 +393,7 @@ export function MyProfileSection() {
                   Employee Directory
                 </Link>
                 <Link
-                  href="/portal/payroll-runs"
+                  href="/payroll-runs"
                   className={buttonVariants({
                     variant: "outline",
                     size: "sm",
@@ -404,7 +403,7 @@ export function MyProfileSection() {
                   Payroll Operations
                 </Link>
                 <Link
-                  href="/portal"
+                  href="/overview"
                   className={buttonVariants({
                     variant: "outline",
                     size: "sm",
@@ -1850,10 +1849,6 @@ export function MyProfileSection() {
           </CardContent>
         </Card>
       )}
-
-      <div id="mfa" className="pt-2">
-        <MfaSettingsCard />
-      </div>
     </section>
   );
 }

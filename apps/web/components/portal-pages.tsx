@@ -216,7 +216,7 @@ export function PortalOverview() {
                   {overview.data.employees.resigned} resigned
                 </p>
                 <Link
-                  href="/portal/employees"
+                  href="/employees"
                   className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
                 >
                   Manage employees &rarr;
@@ -248,7 +248,7 @@ export function PortalOverview() {
                     : "Start your first payroll run"}
                 </p>
                 <Link
-                  href="/portal/payroll-runs"
+                  href="/payroll-runs"
                   className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
                 >
                   View payroll runs &rarr;
@@ -276,7 +276,7 @@ export function PortalOverview() {
                     : `${overview.data.leaves.pendingCount} requests require review`}
                 </p>
                 <Link
-                  href="/portal/leaves"
+                  href="/leaves"
                   className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
                 >
                   Review leave requests &rarr;
@@ -305,7 +305,7 @@ export function PortalOverview() {
                     : "active loans"}
                 </p>
                 <Link
-                  href="/portal/loans"
+                  href="/loans"
                   className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
                 >
                   Manage loans & advances &rarr;
@@ -327,7 +327,7 @@ export function PortalOverview() {
                   </CardDescription>
                 </div>
                 <Link
-                  href="/portal/payroll-runs"
+                  href="/payroll-runs"
                   className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   View all
@@ -444,7 +444,7 @@ export function PortalEmployees() {
             and payslips in your profile.
           </p>
           <Link
-            href="/portal/my-profile"
+            href="/profile"
             className={buttonVariants({ variant: "default" })}
           >
             Go to My Profile
@@ -476,7 +476,7 @@ export function PortalAttendance() {
             personal attendance page.
           </p>
           <Link
-            href="/portal/my-attendance"
+            href="/my-attendance"
             className={buttonVariants({ variant: "default" })}
           >
             Go to My Attendance
@@ -539,7 +539,7 @@ export function PortalLoans() {
             profile.
           </p>
           <Link
-            href="/portal/my-profile"
+            href="/profile"
             className={buttonVariants({ variant: "default" })}
           >
             Go to My Profile

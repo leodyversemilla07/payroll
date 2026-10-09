@@ -9,6 +9,7 @@ import {
   FileCheck,
   Landmark,
   LayoutDashboard,
+  ShieldCheck,
   UserCircle,
   Users,
 } from "lucide-react";
@@ -17,35 +18,35 @@ import { usePathname } from "next/navigation";
 export const portalSections = [
   {
     id: "overview",
-    href: "/portal",
+    href: "/overview",
     label: "Overview",
     icon: LayoutDashboard,
     description: "Choose a workspace or payroll operation.",
   },
   {
     id: "employees",
-    href: "/portal/employees",
+    href: "/employees",
     label: "Employees",
     icon: Users,
     description: "View employee profiles and onboard new employees.",
   },
   {
     id: "attendance",
-    href: "/portal/attendance",
+    href: "/attendance",
     label: "Attendance & DTR",
     icon: Clock,
     description: "Review and correct recorded attendance in Asia/Manila.",
   },
   {
     id: "leaves",
-    href: "/portal/leaves",
+    href: "/leaves",
     label: "Leave management",
     icon: CalendarDays,
     description: "Manage recorded credits, requests and decisions.",
   },
   {
     id: "holidays",
-    href: "/portal/holidays",
+    href: "/holidays",
     label: "Holiday calendar",
     icon: CalendarCheck,
     description:
@@ -53,7 +54,7 @@ export const portalSections = [
   },
   {
     id: "loans",
-    href: "/portal/loans",
+    href: "/loans",
     label: "Loans & Advances",
     icon: Landmark,
     description:
@@ -61,38 +62,45 @@ export const portalSections = [
   },
   {
     id: "process-payroll",
-    href: "/portal/process-payroll",
+    href: "/process-payroll",
     label: "Process payroll",
     icon: Banknote,
     description: "Calculate regular and 13th-month payroll runs.",
   },
   {
     id: "payroll-runs",
-    href: "/portal/payroll-runs",
+    href: "/payroll-runs",
     label: "Payroll runs & payslips",
     icon: ClipboardList,
     description: "Review runs, lifecycle actions and read-only payslips.",
   },
   {
     id: "year-end-tax",
-    href: "/portal/year-end-tax",
+    href: "/year-end-tax",
     label: "Year-end tax",
     icon: FileCheck,
     description: "Review annual reconciliation and recorded tax evidence.",
   },
   {
     id: "my-profile",
-    href: "/portal/my-profile",
+    href: "/profile",
     label: "My Profile",
     icon: UserCircle,
     description: "View personal details, compensation, leaves, and payslips.",
   },
   {
     id: "my-attendance",
-    href: "/portal/my-attendance",
+    href: "/my-attendance",
     label: "My Attendance",
     icon: Clock,
     description: "Review your recorded daily time records and punch history.",
+  },
+  {
+    id: "security",
+    href: "/security",
+    label: "Security",
+    icon: ShieldCheck,
+    description: "Manage two-factor authentication and account security.",
   },
 ] as const;
 
@@ -121,10 +129,6 @@ export const portalNavigationGroups = [
       sectionMap["payroll-runs"],
       sectionMap["year-end-tax"],
     ],
-  },
-  {
-    label: "Self-service",
-    items: [sectionMap["my-profile"], sectionMap["my-attendance"]],
   },
 ];
 
@@ -169,6 +173,13 @@ export const SECTION_PERMISSIONS: Record<PortalSection, readonly string[]> = {
     "DEPARTMENT_MANAGER",
     "EMPLOYEE",
   ],
+  security: [
+    "SUPER_ADMIN",
+    "HR_ADMIN",
+    "PAYROLL_SPECIALIST",
+    "DEPARTMENT_MANAGER",
+    "EMPLOYEE",
+  ],
 };
 
 export function isSectionAllowedForRole(
@@ -188,13 +199,12 @@ export function getNavigationGroupsForRole(role?: string) {
         items: [
           {
             id: "overview" as const,
-            href: "/portal",
+            href: "/overview",
             label: "Dashboard",
             icon: LayoutDashboard,
             description:
               "View your employee self-service dashboard, leave balances, and attendance summary.",
           },
-          sectionMap["my-attendance"],
           sectionMap.holidays,
         ],
       },
@@ -205,17 +215,10 @@ export function getNavigationGroupsForRole(role?: string) {
     return [
       {
         label: "Workspace",
-        items: [
-          sectionMap.overview,
-          sectionMap.employees,
-          sectionMap.attendance,
-          sectionMap.leaves,
-          sectionMap.holidays,
-        ],
-      },
-      {
-        label: "Self-service",
-        items: [sectionMap["my-profile"], sectionMap["my-attendance"]],
+        // NOTE: employees/attendance are intentionally omitted: SECTION_PERMISSIONS
+        // denies DEPARTMENT_MANAGER on those sections, so linking them would
+        // only land on "Access Restricted".
+        items: [sectionMap.overview, sectionMap.leaves, sectionMap.holidays],
       },
     ];
   }

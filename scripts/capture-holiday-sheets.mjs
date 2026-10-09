@@ -47,11 +47,12 @@ async function run() {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
 
-  // Click Edit on the first holiday row if exists
-  const editButtons = page.locator('button[aria-label^="Edit "]');
-  if ((await editButtons.count()) > 0) {
+  // Open the row actions menu on the first holiday row if exists
+  const menuButtons = page.getByRole("button", { name: "Open menu" });
+  if ((await menuButtons.count()) > 0) {
     console.log("Opening edit holiday sheet...");
-    await editButtons.first().click();
+    await menuButtons.first().click();
+    await page.getByRole("menuitem", { name: "Edit holiday" }).click();
     await page.waitForTimeout(1000);
     await page.screenshot({ path: editHolidayScreenshot, fullPage: false });
     console.log(`Saved Edit Holiday screenshot to ${editHolidayScreenshot}`);

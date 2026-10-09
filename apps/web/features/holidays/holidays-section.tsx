@@ -2,15 +2,27 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
-import { Button } from "@workspace/ui/components/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog";
+import { Button, buttonVariants } from "@workspace/ui/components/button";
+import { Card, CardContent } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import {
   Field,
   FieldDescription,
@@ -37,15 +49,9 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import {
-  CalendarDays,
-  CheckCircle2,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+import { CalendarDays, Loader2, Plus, Sparkles } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { DatePicker } from "@/components/date-picker";
 import { PageHeaderAction } from "@/components/payroll-portal";
 import { trpc } from "@/lib/trpc";
 import { HolidaysDataTable, holidayDayTypes } from "./holidays-data-table";
@@ -59,10 +65,15 @@ function formatHolidayDate(dateValue: Date | string) {
   }).format(new Date(dateValue));
 }
 
-export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
+export function HolidaysSection({
+  canManage = false,
+}: {
+  canManage?: boolean;
+}) {
   const currentYear = new Date().getUTCFullYear();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Holiday | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -100,6 +111,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
   const deleteMutation = trpc.holidays.delete.useMutation({
     onSuccess: (deleted) => {
       void utils.holidays.list.invalidate();
+      setPendingDelete(null);
       setStatusMessage(`Holiday "${deleted.name}" deleted.`);
     },
     onError: (err) => {
@@ -174,37 +186,29 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
   function handleDelete(holiday: Holiday) {
     if (deleteMutation.isPending) return;
-    if (
-      window.confirm(
-        `Are you sure you want to delete "${holiday.name}" on ${formatHolidayDate(holiday.date)}?`,
-      )
-    ) {
-      deleteMutation.mutate({ id: holiday.id });
-    }
+    setPendingDelete(holiday);
   }
 
   const holidays = holidaysQuery.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {canManage && (
         <PageHeaderAction>
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              size="sm"
               disabled={populateMutation.isPending}
               onClick={() => populateMutation.mutate({ year: selectedYear })}
             >
-              <Sparkles className="mr-1.5 size-4 text-amber-500" />
+              <Sparkles className="size-4 text-amber-500" />
               {populateMutation.isPending
                 ? "Populating…"
                 : `Populate ${selectedYear} Presets`}
             </Button>
             <Button
               type="button"
-              size="sm"
               aria-expanded={showCreateForm}
               disabled={showCreateForm || !!editingHoliday}
               onClick={() => {
@@ -214,7 +218,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                 setFormError(null);
               }}
             >
-              <Plus className="mr-1.5 size-4" />
+              <Plus className="size-4" />
               Add holiday
             </Button>
           </div>
@@ -222,14 +226,6 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
       )}
 
       <Card role="region" aria-label="Holiday calendar">
-        <CardHeader>
-          <CardTitle>Holiday Calendar</CardTitle>
-          <CardDescription>
-            Configure Philippine statutory regular holidays, special non-working
-            days, and company holidays. Classifications determine statutory
-            premiums during DTR processing and payroll calculation.
-          </CardDescription>
-        </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
             <div className="flex items-center gap-2">
@@ -254,6 +250,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                   setStatusMessage(null);
                   setShowCreateForm(false);
                   setEditingHoliday(null);
+                  setPendingDelete(null);
                 }}
               >
                 <SelectTrigger
@@ -286,13 +283,9 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
           </div>
 
           {statusMessage && (
-            <div
-              role="status"
-              className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-300"
-            >
-              <CheckCircle2 className="size-4 shrink-0" />
-              <span>{statusMessage}</span>
-            </div>
+            <p role="status" className="break-words">
+              {statusMessage}
+            </p>
           )}
 
           {holidaysQuery.isPending ? (
@@ -302,7 +295,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                 <span>Loading holidays…</span>
               </div>
               <div className="space-y-2">
-                {[1, 2, 3, 4].map((i) => (
+                {[1, 2, 3, 4, 5].map((i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between rounded-lg border p-3"
@@ -317,21 +310,46 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
               </div>
             </div>
           ) : holidaysQuery.isError ? (
-            <div
-              role="alert"
-              className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
-            >
-              <span>Could not load holiday calendar.</span>
+            <p role="alert">
+              Could not load holiday calendar.{" "}
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => void holidaysQuery.refetch()}
               >
-                <RefreshCw className="mr-1.5 size-3.5" />
                 Retry
               </Button>
-            </div>
+            </p>
+          ) : holidays.length === 0 ? (
+            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
+              <EmptyMedia variant="icon">
+                <CalendarDays className="size-5 text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyHeader>
+                <EmptyTitle>
+                  No holidays configured for {selectedYear}
+                </EmptyTitle>
+                <EmptyDescription>
+                  You can add individual company holidays or use the preset
+                  button to auto-populate Philippine statutory national
+                  holidays.
+                </EmptyDescription>
+              </EmptyHeader>
+              {canManage && (
+                <EmptyContent>
+                  <Button
+                    type="button"
+                    disabled={populateMutation.isPending}
+                    onClick={() =>
+                      populateMutation.mutate({ year: selectedYear })
+                    }
+                  >
+                    <Sparkles className="size-4 text-amber-500" />
+                    Populate {selectedYear} Philippine Presets
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
           ) : (
             <HolidaysDataTable
               data={holidays}
@@ -342,24 +360,6 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                 setFormError(null);
               }}
               onDelete={handleDelete}
-              emptyTitle={`No holidays configured for ${selectedYear}`}
-              emptyDescription="You can add individual company holidays or use the preset button to auto-populate Philippine statutory national holidays."
-              emptyAction={
-                canManage ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={populateMutation.isPending}
-                    onClick={() =>
-                      populateMutation.mutate({ year: selectedYear })
-                    }
-                  >
-                    <Sparkles className="mr-1.5 size-4 text-amber-500" />
-                    Populate {selectedYear} Philippine Presets
-                  </Button>
-                ) : undefined
-              }
             />
           )}
         </CardContent>
@@ -367,7 +367,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
       {/* Add Holiday Slide-over Sheet */}
       <Sheet
-        open={showCreateForm}
+        open={canManage && showCreateForm}
         onOpenChange={(open) => {
           setShowCreateForm(open);
           if (!open) setFormError(null);
@@ -375,7 +375,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
       >
         <SheetContent
           side="right"
-          className="data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl p-0"
+          className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
         >
           <section
             id="holiday-create-form"
@@ -403,10 +403,9 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                         <FieldLabel htmlFor="create-holiday-date">
                           Holiday date
                         </FieldLabel>
-                        <Input
+                        <DatePicker
                           id="create-holiday-date"
                           name="date"
-                          type="date"
                           defaultValue={`${selectedYear}-01-01`}
                           required
                         />
@@ -484,24 +483,11 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
                   {formError && <FieldError>{formError}</FieldError>}
 
-                  <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={createMutation.isPending}
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setFormError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending
-                        ? "Saving holiday…"
-                        : "Save holiday"}
-                    </Button>
-                  </div>
+                  <Button type="submit" disabled={createMutation.isPending}>
+                    {createMutation.isPending
+                      ? "Saving holiday…"
+                      : "Save holiday"}
+                  </Button>
                 </FieldGroup>
               </form>
             </div>
@@ -511,7 +497,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
       {/* Edit Holiday Slide-over Sheet */}
       <Sheet
-        open={!!editingHoliday}
+        open={canManage && !!editingHoliday}
         onOpenChange={(open) => {
           if (!open) {
             setEditingHoliday(null);
@@ -521,7 +507,7 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
       >
         <SheetContent
           side="right"
-          className="data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl p-0"
+          className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
         >
           {editingHoliday && (
             <section
@@ -613,7 +599,12 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
                     {formError && <FieldError>{formError}</FieldError>}
 
-                    <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t">
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={updateMutation.isPending}>
+                        {updateMutation.isPending
+                          ? "Saving changes…"
+                          : "Save changes"}
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
@@ -625,11 +616,6 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={updateMutation.isPending}>
-                        {updateMutation.isPending
-                          ? "Saving changes…"
-                          : "Save changes"}
-                      </Button>
                     </div>
                   </FieldGroup>
                 </form>
@@ -638,6 +624,43 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Holiday Confirmation Dialog */}
+      <AlertDialog
+        open={canManage && !!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete holiday?</AlertDialogTitle>
+            {pendingDelete && (
+              <AlertDialogDescription>
+                This permanently removes &ldquo;{pendingDelete.name}&rdquo; (
+                {formatHolidayDate(pendingDelete.date)}) from the {selectedYear}{" "}
+                calendar. This action cannot be undone.
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (pendingDelete) {
+                  deleteMutation.mutate({ id: pendingDelete.id });
+                }
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete holiday"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

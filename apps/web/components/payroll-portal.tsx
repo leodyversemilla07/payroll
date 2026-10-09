@@ -65,8 +65,6 @@ export interface PortalUserContextValue {
   canManageHolidays: boolean;
   canManageLeavePolicies: boolean;
   canApproveLeaves: boolean;
-  canViewStaffRecords: boolean;
-  isManager: boolean;
   isStaff: boolean;
   isEmployee: boolean;
 }
@@ -159,7 +157,7 @@ export function PayrollPortal({
                 <Breadcrumb className="min-w-0">
                   <BreadcrumbList className="flex-nowrap">
                     <BreadcrumbItem className="hidden md:inline-flex">
-                      <BreadcrumbLink render={<Link href="/portal" />}>
+                      <BreadcrumbLink render={<Link href="/overview" />}>
                         Payroll
                       </BreadcrumbLink>
                     </BreadcrumbItem>
@@ -248,12 +246,6 @@ export function PayrollPortal({
                         me.data.role === "SUPER_ADMIN" ||
                         me.data.role === "HR_ADMIN" ||
                         me.data.role === "DEPARTMENT_MANAGER",
-                      canViewStaffRecords:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN" ||
-                        me.data.role === "PAYROLL_SPECIALIST" ||
-                        me.data.role === "DEPARTMENT_MANAGER",
-                      isManager: me.data.role === "DEPARTMENT_MANAGER",
                       isStaff:
                         me.data.role === "SUPER_ADMIN" ||
                         me.data.role === "HR_ADMIN" ||
@@ -304,7 +296,7 @@ export function PayrollPortal({
                                 department.
                               </p>
                               <Link
-                                href="/portal"
+                                href="/overview"
                                 className={buttonVariants({
                                   variant: "default",
                                 })}

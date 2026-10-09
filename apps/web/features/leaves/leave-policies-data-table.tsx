@@ -23,7 +23,7 @@ interface LeavePoliciesDataTableProps {
 
 export function LeavePoliciesDataTable({
   data,
-  canManage = true,
+  canManage = false,
   onEdit,
   onDelete,
   emptyAction,

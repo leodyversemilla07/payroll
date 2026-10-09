@@ -4,7 +4,16 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
 import { Button } from "@workspace/ui/components/button";
-import { Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 
@@ -60,7 +69,7 @@ interface HolidaysDataTableProps {
 
 export function HolidaysDataTable({
   data,
-  canManage = true,
+  canManage = false,
   onEdit,
   onDelete,
   emptyAction,
@@ -135,32 +144,52 @@ export function HolidaysDataTable({
     if (canManage) {
       cols.push({
         id: "actions",
-        header: () => <div className="text-right">Actions</div>,
-        enableSorting: false,
         enableHiding: false,
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => {
           const holiday = row.original;
           return (
-            <div className="flex items-center justify-end gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Edit ${holiday.name}`}
-                onClick={() => onEdit?.(holiday)}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Delete ${holiday.name}`}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => onDelete?.(holiday)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
+            <div className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  }
+                >
+                  <span className="sr-only">Open menu</span>
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit?.(holiday);
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                      Edit holiday
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete?.(holiday);
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete holiday
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         },

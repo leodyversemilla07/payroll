@@ -167,16 +167,13 @@ export function EmployeeDashboard({
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/portal/my-attendance"
+              href="/my-attendance"
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               <Clock data-icon="inline-start" />
               My attendance
             </Link>
-            <Link
-              href="/portal/my-profile"
-              className={buttonVariants({ size: "sm" })}
-            >
+            <Link href="/profile" className={buttonVariants({ size: "sm" })}>
               <UserCircle data-icon="inline-start" />
               View profile
             </Link>
@@ -196,7 +193,7 @@ export function EmployeeDashboard({
               ? `${formatDate(latestPayslip.payrollRun.cutoffStartDate)} – ${formatDate(latestPayslip.payrollRun.cutoffEndDate)}`
               : "Awaiting next payroll"
           }
-          href="/portal/my-profile"
+          href="/profile"
           actionLabel="View payslips"
         >
           {payslipsQuery.isPending ? (
@@ -221,7 +218,7 @@ export function EmployeeDashboard({
           title="Leave balances"
           icon={<CalendarDays />}
           description={`${currentYear} available credits`}
-          href="/portal/my-profile"
+          href="/profile"
           actionLabel="Request leave"
         >
           {leaveBalancesQuery.isPending ? (
@@ -246,7 +243,7 @@ export function EmployeeDashboard({
           title="Attendance this month"
           icon={<Clock />}
           description={`${dtrRecords.length} records logged`}
-          href="/portal/my-attendance"
+          href="/my-attendance"
           actionLabel="View attendance"
         >
           {dtrQuery.isPending ? (
@@ -269,7 +266,7 @@ export function EmployeeDashboard({
           description={
             nextHoliday ? formatDate(nextHoliday.date) : "Philippine calendar"
           }
-          href="/portal/holidays"
+          href="/holidays"
           actionLabel="View calendar"
         >
           {holidaysQuery.isPending ? (
@@ -314,7 +311,7 @@ export function EmployeeDashboard({
           <CardContent className="grid gap-3 sm:grid-cols-2">
             {latestPayslip ? (
               <Link
-                href="/portal/my-profile"
+                href="/profile"
                 className="flex items-center justify-between gap-3 rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
               >
                 <span className="flex items-center gap-3">
@@ -333,7 +330,7 @@ export function EmployeeDashboard({
             ) : null}
             {dtrRecords.length === 0 ? (
               <Link
-                href="/portal/my-attendance"
+                href="/my-attendance"
                 className="flex items-center justify-between gap-3 rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
               >
                 <span className="flex items-center gap-3">
@@ -371,25 +368,25 @@ export function EmployeeDashboard({
           <CardContent className="grid gap-3 sm:grid-cols-2">
             {[
               {
-                href: "/portal/my-attendance",
+                href: "/my-attendance",
                 title: "My attendance",
                 description: "DTR punches and worked hours",
                 icon: <Clock />,
               },
               {
-                href: "/portal/my-profile",
+                href: "/profile",
                 title: "Leaves and credits",
                 description: "Review balances and requests",
                 icon: <CalendarDays />,
               },
               {
-                href: "/portal/my-profile",
+                href: "/profile",
                 title: "Payslips and tax",
                 description: "Itemized pay and deductions",
                 icon: <Banknote />,
               },
               {
-                href: "/portal/holidays",
+                href: "/holidays",
                 title: "Holiday calendar",
                 description: "Philippine statutory holidays",
                 icon: <CalendarCheck />,
@@ -426,7 +423,7 @@ export function EmployeeDashboard({
               <CardDescription>Latest disbursed compensation.</CardDescription>
             </div>
             <Link
-              href="/portal/my-profile"
+              href="/profile"
               className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
               View all <ArrowRight />
@@ -484,7 +481,7 @@ export function EmployeeDashboard({
                         {pesos(payslip.netPayCents)}
                       </p>
                       <Link
-                        href="/portal/my-profile"
+                        href="/profile"
                         className="text-xs text-primary hover:underline"
                       >
                         Details

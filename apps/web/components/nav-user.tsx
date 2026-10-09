@@ -21,13 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@workspace/ui/components/sidebar";
-import {
-  CalendarDays,
-  ChevronsUpDown,
-  LogOut,
-  ShieldCheck,
-  User,
-} from "lucide-react";
+import { ChevronsUpDown, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
@@ -124,31 +118,13 @@ export function NavUser({ user }: NavUserProps) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                render={<Link href="/portal/my-profile" />}
+                render={<Link href="/profile" />}
                 onClick={() => {
                   if (isMobile) setOpenMobile(false);
                 }}
               >
                 <User className="size-4" />
-                <span>Profile & Account</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                render={<Link href="/portal/my-profile#mfa" />}
-                onClick={() => {
-                  if (isMobile) setOpenMobile(false);
-                }}
-              >
-                <ShieldCheck className="size-4" />
-                <span>Security & 2FA</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                render={<Link href="/portal/holidays" />}
-                onClick={() => {
-                  if (isMobile) setOpenMobile(false);
-                }}
-              >
-                <CalendarDays className="size-4" />
-                <span>Holidays & Calendar</span>
+                <span>Account</span>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
