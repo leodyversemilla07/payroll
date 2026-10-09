@@ -202,28 +202,28 @@ async function main() {
       name: "HR Admin (Maria Santos)",
       role: Role.HR_ADMIN,
       employeeId: maria?.id ?? null,
-      password: "DemoPassword123!",
+      password: "AdminPassword123!",
     },
     {
       email: "payroll@sweldoph.local",
       name: "Payroll Specialist (Ana Gomez)",
       role: Role.PAYROLL_SPECIALIST,
       employeeId: ana?.id ?? null,
-      password: "DemoPassword123!",
+      password: "AdminPassword123!",
     },
     {
       email: "manager@sweldoph.local",
       name: "Carlos Reyes (Manager)",
       role: Role.DEPARTMENT_MANAGER,
       employeeId: carlos?.id ?? null,
-      password: "DemoPassword123!",
+      password: "AdminPassword123!",
     },
     {
       email: "employee@sweldoph.local",
       name: "Juan Dela Cruz (Employee)",
       role: Role.EMPLOYEE,
       employeeId: juan?.id ?? null,
-      password: "DemoPassword123!",
+      password: "AdminPassword123!",
     },
   ];
 
