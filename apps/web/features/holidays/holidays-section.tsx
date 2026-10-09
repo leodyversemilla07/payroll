@@ -52,7 +52,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { CalendarDays, Loader2, Plus, Sparkles } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { DatePicker } from "@/components/date-picker";
-import { PageHeaderAction } from "@/components/payroll-portal";
+import { PageHeaderAction } from "@/components/page-header-action";
 import { trpc } from "@/lib/trpc";
 import { HolidaysDataTable, holidayDayTypes } from "./holidays-data-table";
 

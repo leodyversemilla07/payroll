@@ -55,7 +55,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { usePortalUser } from "@/components/payroll-portal";
+import { useWorkspaceUser } from "@/components/user-context";
 import { LOAN_TYPE_LABELS } from "@/features/loans/loans-section";
 import { manilaToday } from "@/lib/attendance-time";
 import { downloadBase64File } from "@/lib/download-file";
@@ -86,7 +86,7 @@ function maskId(val: string | null | undefined, visibleCount = 4): string {
 }
 
 export function MyProfileSection() {
-  const { user, isStaff, canManageEmployees } = usePortalUser();
+  const { user, isStaff, canManageEmployees } = useWorkspaceUser();
   const utils = trpc.useUtils();
 
   const [showSensitive, setShowSensitive] = useState(false);

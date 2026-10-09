@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { usePortalUser } from "@/components/payroll-portal";
+import { useWorkspaceUser } from "@/components/user-context";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
 import { MyAttendanceDataTable } from "./my-attendance-data-table";
@@ -38,7 +38,7 @@ function formatDate(value: Date | string) {
 }
 
 export function MyAttendanceSection() {
-  const { user, isStaff } = usePortalUser();
+  const { user, isStaff } = useWorkspaceUser();
 
   const today = manilaToday();
   const defaultStart = `${today.slice(0, 7)}-01`;

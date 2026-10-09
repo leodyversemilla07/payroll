@@ -24,7 +24,7 @@ export function createApiClient(expectedPrincipal?: string) {
 }
 
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
-  // This root cache owns authentication only. Portal business data has a
+  // This root cache owns authentication only. Workspace business data has a
   // separately disposable cache scoped to the verified principal.
   const [queryClient] = useState(() => new QueryClient());
   const [trpcClient] = useState(() => createApiClient());

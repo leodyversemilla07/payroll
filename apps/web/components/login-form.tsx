@@ -93,7 +93,7 @@ export function LoginForm() {
   useEffect(() => {
     // An expired session may leave previous data in React Query alongside
     // its UNAUTHORIZED error. Cached identity alone must not redirect back
-    // into the portal and create a sign-in/portal navigation loop.
+    // into the workspace and create a sign-in/workspace navigation loop.
     if (me.isSuccess && me.data) {
       void router.replace("/overview");
     }

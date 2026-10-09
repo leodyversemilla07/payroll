@@ -54,7 +54,7 @@ import { cn } from "@workspace/ui/lib/utils";
 import { Loader2, Plus, Users } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { DatePicker } from "@/components/date-picker";
-import { PageHeaderAction } from "@/components/payroll-portal";
+import { PageHeaderAction } from "@/components/page-header-action";
 import { trpc } from "@/lib/trpc";
 import {
   EmployeeDataTable,

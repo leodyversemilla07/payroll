@@ -1,8 +1,6 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@workspace/api";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,7 +9,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@workspace/ui/components/breadcrumb";
-import { Button, buttonVariants } from "@workspace/ui/components/button";
+import { Button } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
@@ -28,24 +26,15 @@ import {
 import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import {
-  isSectionAllowedForRole,
-  usePortalSection,
-} from "@/lib/portal-navigation";
+import { type ReactNode, useEffect } from "react";
 import {
   PrincipalQueryProvider,
   principalKey,
 } from "@/lib/principal-query-provider";
 import { trpc } from "@/lib/trpc";
+import { useWorkspaceSection } from "@/lib/workspace-navigation";
 import { AppSidebar, AppSidebarSkeleton } from "./app-sidebar";
+import { UserProvider } from "./user-context";
 import { WorkspaceLoadingSkeleton } from "./workspace-loading-skeleton";
 
 const supportedRoles = [
@@ -56,29 +45,7 @@ const supportedRoles = [
   "EMPLOYEE",
 ];
 
-type PortalUser = inferRouterOutputs<AppRouter>["auth"]["me"];
-export interface PortalUserContextValue {
-  user: PortalUser;
-  canManageEmployees: boolean;
-  canTriggerPayroll: boolean;
-  canApprovePayroll: boolean;
-  canManageHolidays: boolean;
-  canManageLeavePolicies: boolean;
-  canApproveLeaves: boolean;
-  isStaff: boolean;
-  isEmployee: boolean;
-}
-
-const PortalUserContext = createContext<PortalUserContextValue | null>(null);
-
-export function usePortalUser() {
-  const context = useContext(PortalUserContext);
-  if (!context)
-    throw new Error("Portal pages require an authenticated layout.");
-  return context;
-}
-
-export function PayrollPortal({
+export function WorkspaceShell({
   defaultSidebarOpen = true,
   children,
 }: {
@@ -91,7 +58,7 @@ export function PayrollPortal({
   const signedOut = me.error?.data?.code === "UNAUTHORIZED";
   const hasNavigation =
     !!me.data && !signedOut && supportedRoles.includes(me.data.role);
-  const activeSection = usePortalSection();
+  const activeSection = useWorkspaceSection();
   const isEmployee = me.data?.role === "EMPLOYEE";
   const scope = me.data ? principalKey(me.data) : "";
   const logout = trpc.auth.logout.useMutation({
@@ -223,92 +190,11 @@ export function PayrollPortal({
                   <p role="alert">Sign out failed. Please retry.</p>
                 )}
                 {supportedRoles.includes(me.data.role) ? (
-                  <PortalUserContext.Provider
-                    key={scope}
-                    value={{
-                      user: me.data,
-                      canManageEmployees:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN",
-                      canTriggerPayroll:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "PAYROLL_SPECIALIST",
-                      canApprovePayroll:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN",
-                      canManageHolidays:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN",
-                      canManageLeavePolicies:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN",
-                      canApproveLeaves:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN" ||
-                        me.data.role === "DEPARTMENT_MANAGER",
-                      isStaff:
-                        me.data.role === "SUPER_ADMIN" ||
-                        me.data.role === "HR_ADMIN" ||
-                        me.data.role === "PAYROLL_SPECIALIST",
-                      isEmployee: me.data.role === "EMPLOYEE",
-                    }}
-                  >
+                  <UserProvider key={scope} user={me.data}>
                     <PrincipalQueryProvider scope={scope}>
-                      <div className="space-y-6">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="space-y-1">
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                              {isEmployee && activeSection.id === "overview"
-                                ? "Dashboard"
-                                : activeSection.label}
-                            </h1>
-                            <p className="text-sm text-muted-foreground">
-                              {isEmployee && activeSection.id === "overview"
-                                ? "View your employee self-service dashboard, leave balances, attendance summary, and payslips."
-                                : activeSection.description}
-                            </p>
-                          </div>
-                          <div
-                            id="portal-header-actions"
-                            className="flex items-center gap-2 shrink-0 empty:hidden"
-                          />
-                        </div>
-                        {isSectionAllowedForRole(
-                          activeSection.id,
-                          me.data.role,
-                        ) ? (
-                          children
-                        ) : (
-                          <Card role="region" aria-label="Access restricted">
-                            <CardHeader>
-                              <CardTitle>Access Restricted</CardTitle>
-                              <CardDescription>
-                                No staff records available. Your role (
-                                {me.data.role.replaceAll("_", " ")}) does not
-                                have permission to access the{" "}
-                                {activeSection.label} workspace.
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                              <p className="text-sm text-muted-foreground">
-                                If you need access to this resource, please
-                                contact your system administrator or HR
-                                department.
-                              </p>
-                              <Link
-                                href="/overview"
-                                className={buttonVariants({
-                                  variant: "default",
-                                })}
-                              >
-                                Return to Overview
-                              </Link>
-                            </CardContent>
-                          </Card>
-                        )}
-                      </div>
+                      {children}
                     </PrincipalQueryProvider>
-                  </PortalUserContext.Provider>
+                  </UserProvider>
                 ) : (
                   <Card>
                     <CardHeader>
@@ -342,23 +228,4 @@ export function PayrollPortal({
       </SidebarProvider>
     </TooltipProvider>
   );
-}
-
-export function PageHeaderAction({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
-  const container = document.getElementById("portal-header-actions");
-  if (!container) {
-    return null;
-  }
-
-  return createPortal(children, container);
 }

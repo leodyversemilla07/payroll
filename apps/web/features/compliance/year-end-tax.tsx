@@ -34,7 +34,7 @@ import {
 import { Separator } from "@workspace/ui/components/separator";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { usePortalUser } from "@/components/payroll-portal";
+import { useWorkspaceUser } from "@/components/user-context";
 import { downloadBase64File, downloadTextFile } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
 
@@ -530,7 +530,7 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
     { taxYear },
     { retry: false },
   );
-  const { user } = usePortalUser();
+  const { user } = useWorkspaceUser();
   const invalidate = useInvalidateEvidence();
   const [notice, setNotice] = useState("");
   const review = trpc.compliance.reviewTaxCorrection.useMutation({

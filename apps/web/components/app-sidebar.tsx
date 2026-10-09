@@ -22,8 +22,8 @@ import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import {
   getNavigationGroupsForRole,
-  type PortalSection,
-} from "@/lib/portal-navigation";
+  type WorkspaceSection,
+} from "@/lib/workspace-navigation";
 
 export function AppSidebar({
   user,
@@ -36,7 +36,7 @@ export function AppSidebar({
     employeeId?: string;
     avatarUrl?: string | null;
   };
-  activeSection: PortalSection;
+  activeSection: WorkspaceSection;
 }) {
   const groups = getNavigationGroupsForRole(user.role);
   const { isMobile, setOpenMobile } = useSidebar();
@@ -61,7 +61,7 @@ export function AppSidebar({
               <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Payroll workspace</span>
                 <span className="truncate text-xs text-sidebar-foreground/70">
-                  API-backed records
+                  HR & payroll operations
                 </span>
               </div>
             </SidebarMenuButton>

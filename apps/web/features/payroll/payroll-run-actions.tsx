@@ -26,7 +26,7 @@ import {
 import { Calendar, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
-import { usePortalUser } from "@/components/payroll-portal";
+import { useWorkspaceUser } from "@/components/user-context";
 import { trpc } from "@/lib/trpc";
 
 function MutationError({ error }: { error: { message: string } | null }) {
@@ -43,7 +43,7 @@ function useInvalidateRuns() {
 }
 
 export function TriggerRunForms() {
-  const { canTriggerPayroll } = usePortalUser();
+  const { canTriggerPayroll } = useWorkspaceUser();
   const invalidate = useInvalidateRuns();
   const [sequence, setSequence] = useState("FIRST_CUTOFF");
   const [start, setStart] = useState("");
@@ -399,7 +399,7 @@ export function RunLifecycleActions({
   status: string;
   clearSelection: () => void;
 }) {
-  const { canApprovePayroll } = usePortalUser();
+  const { canApprovePayroll } = useWorkspaceUser();
   const invalidate = useInvalidateRuns();
   const [message, setMessage] = useState<string | null>(null);
   const [armCancel, setArmCancel] = useState(false);

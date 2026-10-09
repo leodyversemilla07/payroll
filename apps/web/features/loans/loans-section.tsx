@@ -46,7 +46,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { PageHeaderAction } from "@/components/payroll-portal";
+import { PageHeaderAction } from "@/components/page-header-action";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
 import { LoansDataTable } from "./loans-data-table";

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-export const portalSections = [
+export const workspaceSections = [
   {
     id: "overview",
     href: "/overview",
@@ -104,13 +104,13 @@ export const portalSections = [
   },
 ] as const;
 
-export type PortalSection = (typeof portalSections)[number]["id"];
+export type WorkspaceSection = (typeof workspaceSections)[number]["id"];
 
 const sectionMap = Object.fromEntries(
-  portalSections.map((s) => [s.id, s]),
-) as Record<PortalSection, (typeof portalSections)[number]>;
+  workspaceSections.map((s) => [s.id, s]),
+) as Record<WorkspaceSection, (typeof workspaceSections)[number]>;
 
-export const portalNavigationGroups = [
+export const navigationGroups = [
   {
     label: "Workspace",
     items: [
@@ -132,58 +132,59 @@ export const portalNavigationGroups = [
   },
 ];
 
-export const SECTION_PERMISSIONS: Record<PortalSection, readonly string[]> = {
-  overview: [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-    "EMPLOYEE",
-  ],
-  employees: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  attendance: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  leaves: [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-  ],
-  holidays: [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-    "EMPLOYEE",
-  ],
-  loans: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  "process-payroll": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  "payroll-runs": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  "year-end-tax": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-  "my-profile": [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-    "EMPLOYEE",
-  ],
-  "my-attendance": [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-    "EMPLOYEE",
-  ],
-  security: [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-    "EMPLOYEE",
-  ],
-};
+export const SECTION_PERMISSIONS: Record<WorkspaceSection, readonly string[]> =
+  {
+    overview: [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+    employees: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    attendance: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    leaves: [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+    ],
+    holidays: [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+    loans: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    "process-payroll": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    "payroll-runs": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    "year-end-tax": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
+    "my-profile": [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+    "my-attendance": [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+    security: [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+  };
 
 export function isSectionAllowedForRole(
-  sectionId: PortalSection,
+  sectionId: WorkspaceSection,
   role?: string,
 ): boolean {
   if (!role) return false;
@@ -224,13 +225,13 @@ export function getNavigationGroupsForRole(role?: string) {
   }
 
   // Staff roles: SUPER_ADMIN, HR_ADMIN, PAYROLL_SPECIALIST
-  return portalNavigationGroups;
+  return navigationGroups;
 }
 
-export function usePortalSection() {
+export function useWorkspaceSection() {
   const pathname = usePathname();
   return (
-    portalSections.find((section) => section.href === pathname) ??
-    portalSections[0]
+    workspaceSections.find((section) => section.href === pathname) ??
+    workspaceSections[0]
   );
 }

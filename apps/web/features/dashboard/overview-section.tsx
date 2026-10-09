@@ -26,21 +26,13 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { TimekeepingSection } from "@/features/attendance/timekeeping-section";
-import { YearEndTaxSection } from "@/features/compliance/year-end-tax";
+import { useWorkspaceUser } from "@/components/user-context";
 import { EmployeeDashboard } from "@/features/dashboard/employee-dashboard";
-import { EmployeesSection } from "@/features/employees/employees-section";
-import { HolidaysSection } from "@/features/holidays/holidays-section";
-import { LeavePoliciesSection } from "@/features/leaves/leave-policies-section";
-import { LeavesSection } from "@/features/leaves/leaves-section";
-import { PendingLeaveApprovalsSection } from "@/features/leaves/pending-leave-approvals";
-import { LoansSection } from "@/features/loans/loans-section";
+import { trpc } from "@/lib/trpc";
 import {
   isSectionAllowedForRole,
-  portalSections,
-} from "@/lib/portal-navigation";
-import { trpc } from "@/lib/trpc";
-import { usePortalUser } from "./payroll-portal";
+  workspaceSections,
+} from "@/lib/workspace-navigation";
 
 function pesos(value: bigint | number | string) {
   return new Intl.NumberFormat("en-PH", {
@@ -87,22 +79,8 @@ function formatStatus(status: string) {
     .join(" ");
 }
 
-function useStaffEmployees() {
-  const employees = trpc.employees.list.useQuery(undefined, { retry: false });
-  return {
-    employees: (employees.data ?? []).map((entry) => ({
-      id: entry.id,
-      firstName: entry.firstName,
-      lastName: entry.lastName,
-      employeeNumber: entry.employeeNumber,
-      employmentStatus: entry.employmentStatus,
-    })),
-    employeeListFailed: employees.isError,
-  };
-}
-
-export function PortalOverview() {
-  const { user, isEmployee } = usePortalUser();
+export function OverviewSection() {
+  const { user, isEmployee } = useWorkspaceUser();
 
   const overview = trpc.dashboard.getOverview.useQuery(undefined, {
     enabled: !isEmployee,
@@ -391,7 +369,7 @@ export function PortalOverview() {
           Workspace Navigation
         </h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {portalSections
+          {workspaceSections
             .filter(
               (section) =>
                 section.id !== "overview" &&
@@ -424,130 +402,4 @@ export function PortalOverview() {
       </div>
     </div>
   );
-}
-
-export function PortalEmployees() {
-  const { canManageEmployees, isStaff } = usePortalUser();
-
-  if (!isStaff) {
-    return (
-      <Card role="region" aria-label="Employee directory restricted">
-        <CardHeader>
-          <CardTitle>No staff records available</CardTitle>
-          <CardDescription>
-            Employee and payroll-run lists require a payroll or HR staff role.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            You can review your personal records, compensation, leave balances,
-            and payslips in your profile.
-          </p>
-          <Link
-            href="/profile"
-            className={buttonVariants({ variant: "default" })}
-          >
-            Go to My Profile
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <EmployeesSection canCreate={canManageEmployees} />;
-}
-
-export function PortalAttendance() {
-  const props = useStaffEmployees();
-  const { user, isStaff } = usePortalUser();
-
-  if (!isStaff) {
-    return (
-      <Card role="region" aria-label="Attendance restricted">
-        <CardHeader>
-          <CardTitle>No staff records available</CardTitle>
-          <CardDescription>
-            Employee and payroll-run lists require a payroll or HR staff role.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            You can view your daily time records and punch history in your
-            personal attendance page.
-          </p>
-          <Link
-            href="/my-attendance"
-            className={buttonVariants({ variant: "default" })}
-          >
-            Go to My Attendance
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const canImport = [
-    "SUPER_ADMIN",
-    "HR_ADMIN",
-    "PAYROLL_SPECIALIST",
-    "DEPARTMENT_MANAGER",
-  ].includes(user.role);
-  return <TimekeepingSection {...props} canImport={canImport} />;
-}
-
-export function PortalLeaves() {
-  const props = useStaffEmployees();
-  const { user, canManageLeavePolicies, canApproveLeaves } = usePortalUser();
-  return (
-    <div className="space-y-6">
-      {canApproveLeaves && <PendingLeaveApprovalsSection />}
-      <LeavesSection
-        {...props}
-        canDecide={canApproveLeaves}
-        actorEmployeeId={user.employeeId}
-      />
-      <LeavePoliciesSection canManage={canManageLeavePolicies} />
-    </div>
-  );
-}
-
-export function PortalYearEndTax() {
-  const { employees } = useStaffEmployees();
-  return <YearEndTaxSection employees={employees} />;
-}
-
-export function PortalHolidays() {
-  const { canManageHolidays } = usePortalUser();
-  return <HolidaysSection canManage={canManageHolidays} />;
-}
-
-export function PortalLoans() {
-  const { isStaff } = usePortalUser();
-
-  if (!isStaff) {
-    return (
-      <Card role="region" aria-label="Loans management restricted">
-        <CardHeader>
-          <CardTitle className="text-destructive">Access Restricted</CardTitle>
-          <CardDescription>
-            Managing employee loans requires payroll or HR staff privileges.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            You can view your personal loan deductions and advances in your
-            profile.
-          </p>
-          <Link
-            href="/profile"
-            className={buttonVariants({ variant: "default" })}
-          >
-            Go to My Profile
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <LoansSection />;
 }
