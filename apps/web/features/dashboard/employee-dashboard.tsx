@@ -8,6 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   ArrowRight,
@@ -444,13 +451,18 @@ export function EmployeeDashboard({
                 onRetry={() => void payslipsQuery.refetch()}
               />
             ) : payslips.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
-                <FileText aria-hidden />
-                <p className="text-sm font-medium">No payslips available yet</p>
-                <p className="text-xs">
-                  Finalized payslips will appear here after payroll is released.
-                </p>
-              </div>
+              <Empty className="py-6 border-0">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FileText className="size-6 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyTitle>No payslips available yet</EmptyTitle>
+                  <EmptyDescription>
+                    Finalized payslips will appear here after payroll is
+                    released.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <div className="flex flex-col gap-3">
                 {payslips.slice(0, 3).map((payslip) => (

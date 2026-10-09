@@ -10,6 +10,13 @@ import {
 } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
+import {
   Field,
   FieldDescription,
   FieldGroup,
@@ -147,7 +154,18 @@ export function YearEndTaxSection({
             </Button>
           </p>
         ) : rows.length === 0 ? (
-          <p>No reconciliation rows for {taxYear}.</p>
+          <Empty className="py-6 border rounded-lg">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <FileText className="size-6 text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyTitle>No reconciliation rows for {taxYear}.</EmptyTitle>
+              <EmptyDescription>
+                Annualized reconciliation records will appear once payroll runs
+                are finalized for this calendar year.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <ul className="space-y-2">
             {rows.map((row) => (
@@ -555,7 +573,18 @@ function TaxCorrectionQueue({ taxYear }: { taxYear: number }) {
           </Button>
         </p>
       ) : !pending.data?.length ? (
-        <p className="text-sm">No pending corrections.</p>
+        <Empty className="py-6 border rounded-lg">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileText className="size-6 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyTitle>No pending corrections.</EmptyTitle>
+            <EmptyDescription>
+              All filed tax adjustment and reconciliation requests have been
+              reviewed.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         pending.data.map((request) => (
           <TaxCorrectionReview
@@ -719,7 +748,18 @@ function EmployeeTaxDetail({
           </Button>
         </p>
       ) : !evidence.data ? (
-        <p>No tax evidence found.</p>
+        <Empty className="py-6 border rounded-lg">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileText className="size-6 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyTitle>No tax evidence found.</EmptyTitle>
+            <EmptyDescription>
+              Previous employer BIR 2316 forms and remittance receipts have not
+              been submitted for this tax year.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <>
           <EvidenceSummary evidence={evidence.data} />

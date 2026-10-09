@@ -1061,26 +1061,30 @@ function LoanLedgerModal({
 
               {loan.payments.length > 0 ? (
                 <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b bg-muted/50 uppercase text-[10px] text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2">Date</th>
-                        <th className="px-3 py-2">Source / Cutoff</th>
-                        <th className="px-3 py-2 text-right">Amount Paid</th>
-                        <th className="px-3 py-2 text-right">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="uppercase text-[10px]">
+                        <TableHead className="px-3 py-2">Date</TableHead>
+                        <TableHead className="px-3 py-2">
+                          Source / Cutoff
+                        </TableHead>
+                        <TableHead className="px-3 py-2 text-right">
+                          Amount Paid
+                        </TableHead>
+                        <TableHead className="px-3 py-2 text-right">
                           Remaining Balance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {loan.payments.map((p) => {
                         const payrollRun = p.payslip?.payrollRun;
                         return (
-                          <tr key={p.id}>
-                            <td className="px-3 py-2 font-medium">
+                          <TableRow key={p.id}>
+                            <TableCell className="px-3 py-2 font-medium">
                               {formatDate(p.paymentDate)}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground">
+                            </TableCell>
+                            <TableCell className="px-3 py-2 text-muted-foreground">
                               {payrollRun ? (
                                 <span>
                                   Payroll Run (
@@ -1092,24 +1096,32 @@ function LoanLedgerModal({
                                   Manual / Direct Payment
                                 </span>
                               )}
-                            </td>
-                            <td className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                            </TableCell>
+                            <TableCell className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
                               {pesos(p.amountPaidCents)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium">
+                            </TableCell>
+                            <TableCell className="px-3 py-2 text-right font-medium">
                               {pesos(p.balanceAfterCents)}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               ) : (
-                <div className="rounded-md border p-6 text-center text-xs text-muted-foreground">
-                  No payments recorded yet. Amortization will automatically
-                  deduct on the next payroll run.
-                </div>
+                <Empty className="py-6 border rounded-md">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <CreditCard className="size-6 text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyTitle>No payments recorded yet</EmptyTitle>
+                    <EmptyDescription>
+                      Amortization will automatically deduct on the next payroll
+                      run.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </div>
 

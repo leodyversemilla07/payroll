@@ -10,6 +10,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 import { AlertTriangle, CheckCircle2, FileText, Upload, X } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -340,30 +348,40 @@ export function BiometricImportPanel({
                 </span>
               </div>
               <div className="overflow-x-auto rounded-lg border bg-background">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/50 font-medium text-muted-foreground">
-                      <th className="p-2">#</th>
-                      <th className="p-2">Col 1 (Employee)</th>
-                      <th className="p-2">Col 2 (Timestamp / Date)</th>
-                      <th className="p-2">Col 3 (Type / Time)</th>
-                      <th className="p-2">Col 4 (Type)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y font-mono">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 font-medium text-muted-foreground">
+                      <TableHead className="p-2">#</TableHead>
+                      <TableHead className="p-2">Col 1 (Employee)</TableHead>
+                      <TableHead className="p-2">
+                        Col 2 (Timestamp / Date)
+                      </TableHead>
+                      <TableHead className="p-2">Col 3 (Type / Time)</TableHead>
+                      <TableHead className="p-2">Col 4 (Type)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="font-mono">
                     {previewRows.map((row) => (
-                      <tr key={row.rowNum} className="hover:bg-muted/20">
-                        <td className="p-2 text-muted-foreground font-sans">
+                      <TableRow key={row.rowNum}>
+                        <TableCell className="p-2 text-muted-foreground font-sans">
                           {row.rowNum}
-                        </td>
-                        <td className="p-2">{row.cols[0] ?? "—"}</td>
-                        <td className="p-2">{row.cols[1] ?? "—"}</td>
-                        <td className="p-2">{row.cols[2] ?? "—"}</td>
-                        <td className="p-2">{row.cols[3] ?? "—"}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="p-2">
+                          {row.cols[0] ?? "—"}
+                        </TableCell>
+                        <TableCell className="p-2">
+                          {row.cols[1] ?? "—"}
+                        </TableCell>
+                        <TableCell className="p-2">
+                          {row.cols[2] ?? "—"}
+                        </TableCell>
+                        <TableCell className="p-2">
+                          {row.cols[3] ?? "—"}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
 
@@ -470,39 +488,40 @@ export function BiometricImportPanel({
                   </span>
                 </div>
                 <div className="overflow-x-auto rounded-lg border bg-background">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b bg-muted/50 font-medium text-muted-foreground">
-                        <th className="p-2">Employee #</th>
-                        <th className="p-2">Date</th>
-                        <th className="p-2">Time In (Manila)</th>
-                        <th className="p-2">Time Out (Manila)</th>
-                        <th className="p-2">Issues / Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 font-medium text-muted-foreground">
+                        <TableHead className="p-2">Employee #</TableHead>
+                        <TableHead className="p-2">Date</TableHead>
+                        <TableHead className="p-2">Time In (Manila)</TableHead>
+                        <TableHead className="p-2">Time Out (Manila)</TableHead>
+                        <TableHead className="p-2">Issues / Remarks</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {anomalousDays.map((day) => (
-                        <tr
-                          key={`${day.employeeNumber}-${day.dateStr}`}
-                          className="hover:bg-muted/20"
-                        >
-                          <td className="p-2 font-mono font-medium">
+                        <TableRow key={`${day.employeeNumber}-${day.dateStr}`}>
+                          <TableCell className="p-2 font-mono font-medium">
                             {day.employeeNumber}
-                          </td>
-                          <td className="p-2">{day.dateStr}</td>
-                          <td className="p-2">{formatPunch(day.timeIn)}</td>
-                          <td className="p-2">{formatPunch(day.timeOut)}</td>
-                          <td className="p-2 text-amber-700 dark:text-amber-400 font-medium">
+                          </TableCell>
+                          <TableCell className="p-2">{day.dateStr}</TableCell>
+                          <TableCell className="p-2">
+                            {formatPunch(day.timeIn)}
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {formatPunch(day.timeOut)}
+                          </TableCell>
+                          <TableCell className="p-2 text-amber-700 dark:text-amber-400 font-medium">
                             {day.remarks.length > 0
                               ? day.remarks.join("; ")
                               : day.hasMissingPunch
                                 ? "Missing punch in or out"
                                 : "Review required"}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Records with missing punches or anomalies have been imported

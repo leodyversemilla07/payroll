@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@workspace/ui/components/badge";
 import { Button, buttonVariants } from "@workspace/ui/components/button";
 import {
   Card,
@@ -9,6 +10,13 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Field, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
@@ -20,6 +28,14 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { Separator } from "@workspace/ui/components/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 import {
   Banknote,
   Calendar,
@@ -820,10 +836,23 @@ export function MyProfileSection() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground col-span-full">
-                    No leave credit policies allocated yet for calendar year{" "}
-                    {currentYear}.
-                  </p>
+                  <div className="col-span-full">
+                    <Empty className="py-6 border-0">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Calendar className="size-6 text-muted-foreground" />
+                        </EmptyMedia>
+                        <EmptyTitle>
+                          No leave credit policies allocated yet for calendar
+                          year {currentYear}.
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          Annual leave credits will appear here once allocated
+                          by HR.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </div>
                 )}
               </div>
 
@@ -1022,19 +1051,17 @@ export function MyProfileSection() {
                             <span className="font-semibold text-foreground">
                               {req.leaveType.replaceAll("_", " ")}
                             </span>
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+                            <Badge
+                              variant={
                                 req.status === "APPROVED"
-                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                  ? "default"
                                   : req.status === "PENDING"
-                                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                                    : req.status === "REJECTED"
-                                      ? "bg-destructive/15 text-destructive"
-                                      : "bg-muted text-muted-foreground"
-                              }`}
+                                    ? "secondary"
+                                    : "destructive"
+                              }
                             >
                               {req.status}
-                            </span>
+                            </Badge>
                             <span className="text-xs text-muted-foreground">
                               ({req.daysCount}{" "}
                               {Number(req.daysCount) === 1 ? "day" : "days"})
@@ -1108,9 +1135,20 @@ export function MyProfileSection() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    No leave requests recorded for this year.
-                  </p>
+                  <Empty className="py-6 border-0">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Calendar className="size-6 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>
+                        No leave requests recorded for this year.
+                      </EmptyTitle>
+                      <EmptyDescription>
+                        Submitted leave applications and approvals will appear
+                        here.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )}
                 {withdrawError && (
                   <p role="alert" className="text-xs text-destructive mt-1">
@@ -1152,9 +1190,9 @@ export function MyProfileSection() {
                               " ",
                             )}
                           </span>
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          <Badge variant="outline">
                             {slip.payrollRun.status}
-                          </span>
+                          </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Period: {formatDate(slip.payrollRun.cutoffStartDate)}{" "}
@@ -1203,9 +1241,20 @@ export function MyProfileSection() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  No disbursed payslips are available for your account yet.
-                </p>
+                <Empty className="py-8 border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <FileText className="size-6 text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyTitle>
+                      No disbursed payslips are available for your account yet.
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      Payslips will be published here upon disbursement of
+                      completed payroll runs.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
 
               {/* Payslip Detail Modal */}
@@ -1563,43 +1612,47 @@ export function MyProfileSection() {
 
                             {isExpanded && (
                               <div className="mt-2 overflow-x-auto rounded-md border text-xs">
-                                <table className="w-full text-left">
-                                  <thead className="border-b bg-muted/40 uppercase text-[10px] text-muted-foreground">
-                                    <tr>
-                                      <th className="px-3 py-1.5">Date</th>
-                                      <th className="px-3 py-1.5">Source</th>
-                                      <th className="px-3 py-1.5 text-right">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="uppercase text-[10px]">
+                                      <TableHead className="px-3 py-1.5">
+                                        Date
+                                      </TableHead>
+                                      <TableHead className="px-3 py-1.5">
+                                        Source
+                                      </TableHead>
+                                      <TableHead className="px-3 py-1.5 text-right">
                                         Amount Paid
-                                      </th>
-                                      <th className="px-3 py-1.5 text-right">
+                                      </TableHead>
+                                      <TableHead className="px-3 py-1.5 text-right">
                                         Balance After
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y">
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
                                     {loan.payments.map((p) => {
                                       const payrollRun = p.payslip?.payrollRun;
                                       return (
-                                        <tr key={p.id}>
-                                          <td className="px-3 py-1.5">
+                                        <TableRow key={p.id}>
+                                          <TableCell className="px-3 py-1.5">
                                             {formatDate(p.paymentDate)}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-muted-foreground">
+                                          </TableCell>
+                                          <TableCell className="px-3 py-1.5 text-muted-foreground">
                                             {payrollRun
                                               ? `Payroll Cutoff (${formatDate(payrollRun.cutoffStartDate)} – ${formatDate(payrollRun.cutoffEndDate)})`
                                               : "Direct / Manual Payment"}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                          </TableCell>
+                                          <TableCell className="px-3 py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
                                             {pesos(p.amountPaidCents)}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-right">
+                                          </TableCell>
+                                          <TableCell className="px-3 py-1.5 text-right">
                                             {pesos(p.balanceAfterCents)}
-                                          </td>
-                                        </tr>
+                                          </TableCell>
+                                        </TableRow>
                                       );
                                     })}
-                                  </tbody>
-                                </table>
+                                  </TableBody>
+                                </Table>
                               </div>
                             )}
                           </div>
@@ -1609,9 +1662,20 @@ export function MyProfileSection() {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  No loans or cash advances are recorded for your account.
-                </p>
+                <Empty className="py-8 border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Landmark className="size-6 text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyTitle>
+                      No loans or cash advances are recorded for your account.
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      Approved company loans and statutory advances will appear
+                      here.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </CardContent>
           </Card>
@@ -1742,16 +1806,22 @@ export function MyProfileSection() {
                   )}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">
-                    No certificate issued for Tax Year {taxCertificateYear}
-                  </p>
-                  <p className="mt-1 text-xs">
-                    Your official BIR Form 2316 certificate has not yet been
-                    issued by HR for this tax year. Issued certificates will be
-                    available for download here once annualization is completed.
-                  </p>
-                </div>
+                <Empty className="py-8">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <FileText className="size-6 text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyTitle>
+                      No certificate issued for Tax Year {taxCertificateYear}
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      Your official BIR Form 2316 certificate has not yet been
+                      issued by HR for this tax year. Issued certificates will
+                      be available for download here once annualization is
+                      completed.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </CardContent>
           </Card>

@@ -2,6 +2,7 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
+import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
@@ -876,52 +877,53 @@ export function LeavePoliciesSection({
                   </div>
                 </div>
 
-                <div className="max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="p-2">Employee</th>
-                        <th className="p-2">Type</th>
-                        <th className="p-2">Tenure</th>
-                        <th className="p-2">Credit</th>
-                        <th className="p-2">Balance</th>
-                        <th className="p-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
+                <div className="max-h-60 overflow-y-auto rounded-md border">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="text-muted-foreground">
+                        <TableHead className="p-2">Employee</TableHead>
+                        <TableHead className="p-2">Type</TableHead>
+                        <TableHead className="p-2">Tenure</TableHead>
+                        <TableHead className="p-2">Credit</TableHead>
+                        <TableHead className="p-2">Balance</TableHead>
+                        <TableHead className="p-2">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {accrualResult.items.map((item) => (
-                        <tr
-                          key={`${item.employeeId}-${item.leaveType}`}
-                          className="hover:bg-muted/30"
-                        >
-                          <td className="p-2 font-medium">
+                        <TableRow key={`${item.employeeId}-${item.leaveType}`}>
+                          <TableCell className="p-2 font-medium">
                             {item.employeeName} ({item.employeeNumber})
-                          </td>
-                          <td className="p-2">{item.leaveType}</td>
-                          <td className="p-2">{item.tenureMonths} mos</td>
-                          <td className="p-2 font-semibold text-emerald-600 dark:text-emerald-400">
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {item.leaveType}
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {item.tenureMonths} mos
+                          </TableCell>
+                          <TableCell className="p-2 font-semibold text-emerald-600 dark:text-emerald-400">
                             +{item.creditsToAccrue}
-                          </td>
-                          <td className="p-2">
+                          </TableCell>
+                          <TableCell className="p-2">
                             {item.previousBalance} → {item.newBalance}
-                          </td>
-                          <td className="p-2">
-                            <span
-                              className={`rounded-full px-2 py-0.5 font-medium ${
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Badge
+                              variant={
                                 item.status === "ACCRUED"
-                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                  ? "default"
                                   : item.status === "ALREADY_ACCRUED"
-                                    ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                                    : "bg-muted text-muted-foreground"
-                              }`}
+                                    ? "secondary"
+                                    : "outline"
+                              }
                             >
                               {item.status.replaceAll("_", " ")}
-                            </span>
-                          </td>
-                        </tr>
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             )}
@@ -1066,50 +1068,49 @@ export function LeavePoliciesSection({
                   </div>
                 </div>
 
-                <div className="max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="p-2">Employee</th>
-                        <th className="p-2">Type</th>
-                        <th className="p-2">Prior Unused</th>
-                        <th className="p-2">Carried Over</th>
-                        <th className="p-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
+                <div className="max-h-60 overflow-y-auto rounded-md border">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="text-muted-foreground">
+                        <TableHead className="p-2">Employee</TableHead>
+                        <TableHead className="p-2">Type</TableHead>
+                        <TableHead className="p-2">Prior Unused</TableHead>
+                        <TableHead className="p-2">Carried Over</TableHead>
+                        <TableHead className="p-2">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {carryoverResult.items.map((item) => (
-                        <tr
-                          key={`${item.employeeId}-${item.leaveType}`}
-                          className="hover:bg-muted/30"
-                        >
-                          <td className="p-2 font-medium">
+                        <TableRow key={`${item.employeeId}-${item.leaveType}`}>
+                          <TableCell className="p-2 font-medium">
                             {item.employeeName} ({item.employeeNumber})
-                          </td>
-                          <td className="p-2">{item.leaveType}</td>
-                          <td className="p-2">
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {item.leaveType}
+                          </TableCell>
+                          <TableCell className="p-2">
                             {item.unusedFromPriorYear} days
-                          </td>
-                          <td className="p-2 font-semibold text-blue-600 dark:text-blue-400">
+                          </TableCell>
+                          <TableCell className="p-2 font-semibold text-blue-600 dark:text-blue-400">
                             +{item.carriedOver} days
-                          </td>
-                          <td className="p-2">
-                            <span
-                              className={`rounded-full px-2 py-0.5 font-medium ${
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Badge
+                              variant={
                                 item.status === "CARRIED_OVER"
-                                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                                  ? "default"
                                   : item.status === "ALREADY_PROCESSED"
-                                    ? "bg-purple-500/10 text-purple-700 dark:text-purple-300"
-                                    : "bg-muted text-muted-foreground"
-                              }`}
+                                    ? "secondary"
+                                    : "outline"
+                              }
                             >
                               {item.status.replaceAll("_", " ")}
-                            </span>
-                          </td>
-                        </tr>
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             )}

@@ -502,33 +502,35 @@ function EmployeeLeaves({
                         role="region"
                         aria-label={`Leave request ${date(request.startDate)} ${request.leaveType}`}
                       >
-                        <CardHeader className="pb-3">
-                          <CardTitle
-                            role="heading"
-                            aria-level={4}
-                            className="flex flex-wrap items-center justify-between gap-2 text-base"
-                          >
-                            <span>{request.leaveType}</span>
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-                                request.status === "APPROVED"
-                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                                  : request.status === "PENDING"
-                                    ? "border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                                    : request.status === "REJECTED"
-                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-                                      : "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-                              )}
+                        <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+                          <div className="space-y-1">
+                            <CardTitle
+                              role="heading"
+                              aria-level={4}
+                              className="text-base"
                             >
-                              {request.status}
-                            </span>
-                          </CardTitle>
-                          <CardDescription>
-                            {date(request.startDate)} to {date(request.endDate)}{" "}
-                            · {request.daysCount} day(s) ·{" "}
-                            {request.isPaid ? "Paid" : "Unpaid"}
-                          </CardDescription>
+                              {request.leaveType} · {request.status}
+                            </CardTitle>
+                            <CardDescription>
+                              {date(request.startDate)} to{" "}
+                              {date(request.endDate)} · {request.daysCount}{" "}
+                              day(s) · {request.isPaid ? "Paid" : "Unpaid"}
+                            </CardDescription>
+                          </div>
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                              request.status === "APPROVED"
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                : request.status === "PENDING"
+                                  ? "border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                                  : request.status === "REJECTED"
+                                    ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                                    : "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+                            )}
+                          >
+                            {request.status}
+                          </span>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {request.partialDate && (

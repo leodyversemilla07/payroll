@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@workspace/ui/components/badge";
 import { Button, buttonVariants } from "@workspace/ui/components/button";
 import {
   Card,
@@ -9,6 +10,14 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 import {
   Banknote,
   CalendarDays,
@@ -47,6 +56,35 @@ function formatDate(value: Date | string | null | undefined) {
         dateStyle: "medium",
       }).format(new Date(value))
     : "—";
+}
+
+function badgeVariant(
+  status: string,
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "PAID":
+    case "DISBURSED":
+    case "APPROVED":
+    case "ACTIVE":
+      return "default";
+    case "CALCULATED":
+    case "AUDITED":
+    case "PENDING":
+      return "secondary";
+    case "CANCELLED":
+    case "REJECTED":
+      return "destructive";
+    default:
+      return "outline";
+  }
+}
+
+function formatStatus(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function useStaffEmployees() {
@@ -296,23 +334,21 @@ export function PortalOverview() {
                 </Link>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-xs text-muted-foreground">
-                        <th className="pb-2 font-medium">Cutoff Period</th>
-                        <th className="pb-2 font-medium">Payment Date</th>
-                        <th className="pb-2 font-medium">Status</th>
-                        <th className="pb-2 font-medium text-right">Net Pay</th>
-                        <th className="pb-2 font-medium text-right">
-                          Employees
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cutoff Period</TableHead>
+                        <TableHead>Payment Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Net Pay</TableHead>
+                        <TableHead className="text-right">Employees</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {overview.data.payroll.recentRuns.map((run) => (
-                        <tr key={run.id} className="hover:bg-muted/50">
-                          <td className="py-2.5">
+                        <TableRow key={run.id}>
+                          <TableCell>
                             <span className="font-medium">
                               {formatDate(run.cutoffStartDate)} –{" "}
                               {formatDate(run.cutoffEndDate)}
@@ -324,25 +360,25 @@ export function PortalOverview() {
                                 : "2nd Cutoff"}
                               )
                             </span>
-                          </td>
-                          <td className="py-2.5 text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
                             {formatDate(run.paymentDate)}
-                          </td>
-                          <td className="py-2.5">
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
-                              {run.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 text-right font-medium">
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={badgeVariant(run.status)}>
+                              {formatStatus(run.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
                             {pesos(run.totalNetCents)}
-                          </td>
-                          <td className="py-2.5 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
                             {run.payslipCount}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
