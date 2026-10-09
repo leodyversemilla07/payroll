@@ -8,6 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Field, FieldError, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
@@ -128,9 +135,17 @@ export function PendingLeaveApprovalsSection() {
             </Button>
           </div>
         ) : pendingList.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            No pending leave requests awaiting approval.
-          </p>
+          <Empty className="my-4 rounded-xl border border-dashed border-border/80 p-8">
+            <EmptyMedia variant="icon">
+              <Clock className="size-5 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyHeader>
+              <EmptyTitle>No pending approvals</EmptyTitle>
+              <EmptyDescription>
+                No pending leave requests awaiting approval.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="divide-y rounded-md border">
             {pendingList.map((request) => (

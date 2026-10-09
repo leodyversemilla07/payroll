@@ -29,8 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Loader2 } from "lucide-react";
+import { cn } from "@workspace/ui/lib/utils";
+import { Calendar, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { leaveSchedule } from "@/lib/leave-schedule";
@@ -300,11 +308,18 @@ function EmployeeLeaves({
                 </p>
               )}
               {balances.data.length === 0 ? (
-                <p>
-                  No leave balances are recorded. Paid approval requires
-                  verified credits to be recorded by HR/admin. No entitlements
-                  are granted automatically.
-                </p>
+                <Empty className="my-4 rounded-xl border border-dashed border-border/80 p-8">
+                  <EmptyMedia variant="icon">
+                    <Calendar className="size-5 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyTitle>No leave balances are recorded</EmptyTitle>
+                    <EmptyDescription>
+                      Paid approval requires verified credits to be recorded by
+                      HR/admin. No entitlements are granted automatically.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : (
                 <ul className="space-y-3">
                   {balances.data.map((balance) => (
@@ -467,7 +482,17 @@ function EmployeeLeaves({
                 </p>
               )}
               {requests.data.length === 0 ? (
-                <p>No leave requests match this employee, year and status.</p>
+                <Empty className="my-4 rounded-xl border border-dashed border-border/80 p-8">
+                  <EmptyMedia variant="icon">
+                    <Calendar className="size-5 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyTitle>No leave requests found</EmptyTitle>
+                    <EmptyDescription>
+                      No leave requests match this employee, year and status.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : (
                 <ul className="space-y-3">
                   {requests.data.map((request) => (
@@ -477,9 +502,27 @@ function EmployeeLeaves({
                         role="region"
                         aria-label={`Leave request ${date(request.startDate)} ${request.leaveType}`}
                       >
-                        <CardHeader>
-                          <CardTitle role="heading" aria-level={4}>
-                            {request.leaveType} · {request.status}
+                        <CardHeader className="pb-3">
+                          <CardTitle
+                            role="heading"
+                            aria-level={4}
+                            className="flex flex-wrap items-center justify-between gap-2 text-base"
+                          >
+                            <span>{request.leaveType}</span>
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                request.status === "APPROVED"
+                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                  : request.status === "PENDING"
+                                    ? "border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                                    : request.status === "REJECTED"
+                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                                      : "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+                              )}
+                            >
+                              {request.status}
+                            </span>
                           </CardTitle>
                           <CardDescription>
                             {date(request.startDate)} to {date(request.endDate)}{" "}

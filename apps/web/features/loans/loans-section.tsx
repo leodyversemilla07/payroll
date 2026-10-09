@@ -11,6 +11,14 @@ import {
 import { FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -18,6 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 import {
   AlertCircle,
   Banknote,
@@ -324,20 +340,20 @@ export function LoansSection() {
               Loading loan accounts…
             </div>
           ) : loansQuery.data && loansQuery.data.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b bg-muted/50 text-xs text-muted-foreground uppercase">
-                  <tr>
-                    <th className="px-4 py-3">Employee</th>
-                    <th className="px-4 py-3">Loan Details</th>
-                    <th className="px-4 py-3 text-right">Principal</th>
-                    <th className="px-4 py-3 text-right">Amortization</th>
-                    <th className="px-4 py-3 text-right">Balance</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+            <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Loan Details</TableHead>
+                    <TableHead className="text-right">Principal</TableHead>
+                    <TableHead className="text-right">Amortization</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {loansQuery.data.map((loan) => {
                     const totalCents = Number(loan.totalAmountCents);
                     const balanceCents = Number(loan.balanceCents);
@@ -356,18 +372,18 @@ export function LoansSection() {
                         : 100;
 
                     return (
-                      <tr key={loan.id} className="hover:bg-muted/30">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-foreground">
+                      <TableRow key={loan.id} className="hover:bg-muted/30">
+                        <TableCell className="font-medium whitespace-nowrap">
+                          <div className="font-semibold text-foreground">
                             {loan.employee.firstName} {loan.employee.lastName}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {loan.employee.employeeNumber} ·{" "}
                             {loan.employee.department?.name ?? "General"}
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3">
+                        <TableCell>
                           <span
                             className={`inline-block rounded-md border px-2 py-0.5 text-xs font-medium ${
                               LOAN_TYPE_VARIANTS[loan.loanType] || "bg-muted"
@@ -386,25 +402,25 @@ export function LoansSection() {
                               ? ` · End: ${formatDate(loan.endDate)}`
                               : ""}
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3 text-right font-medium">
+                        <TableCell className="text-right font-medium">
                           {pesos(loan.principalCents)}
                           {loan.totalAmountCents !== loan.principalCents && (
                             <div className="text-xs text-muted-foreground">
                               Total: {pesos(loan.totalAmountCents)}
                             </div>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3 text-right font-medium text-foreground">
+                        <TableCell className="text-right font-medium text-foreground">
                           {pesos(loan.amortizationCents)}
                           <div className="text-[11px] text-muted-foreground">
                             / cutoff
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3 text-right">
+                        <TableCell className="text-right">
                           <div className="font-semibold text-foreground">
                             {pesos(loan.balanceCents)}
                           </div>
@@ -419,21 +435,21 @@ export function LoansSection() {
                               {paidPercent}%
                             </span>
                           </div>
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3 text-center">
+                        <TableCell className="text-center">
                           {loan.isActive ? (
-                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                               Active
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                            <span className="inline-flex items-center rounded-full border border-slate-500/20 bg-slate-500/10 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                               Settled / Closed
                             </span>
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td className="px-4 py-3 text-right">
+                        <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <Button
                               type="button"
@@ -454,35 +470,56 @@ export function LoansSection() {
                               </Button>
                             )}
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
-              <Landmark className="size-12 text-muted-foreground/50 mb-3" />
-              <p className="font-medium text-foreground">No loans found</p>
-              <p className="text-xs mt-1">
+            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
+              <EmptyMedia variant="icon">
+                <Landmark className="size-5 text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyHeader>
+                <EmptyTitle>No loans found</EmptyTitle>
+                <EmptyDescription>
+                  {searchQuery ||
+                  statusFilter !== "ALL" ||
+                  loanTypeFilter !== "ALL"
+                    ? "Try adjusting your search criteria or resetting filters."
+                    : "Click 'Create Loan' to enroll a government loan or company cash advance."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
                 {searchQuery ||
                 statusFilter !== "ALL" ||
-                loanTypeFilter !== "ALL"
-                  ? "Try adjusting your search criteria or resetting filters."
-                  : "Click 'Create Loan' to enroll a government loan or company cash advance."}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => setIsCreateOpen(true)}
-              >
-                <Plus className="mr-2 size-4" />
-                Enroll New Loan
-              </Button>
-            </div>
+                loanTypeFilter !== "ALL" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("ALL");
+                      setLoanTypeFilter("ALL");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsCreateOpen(true)}
+                  >
+                    <Plus className="mr-1.5 size-4" />
+                    Create Loan
+                  </Button>
+                )}
+              </EmptyContent>
+            </Empty>
           )}
         </CardContent>
       </Card>

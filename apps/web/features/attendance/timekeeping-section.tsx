@@ -29,8 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Loader2 } from "lucide-react";
+import { cn } from "@workspace/ui/lib/utils";
+import { Clock, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import {
   fromManilaInput,
@@ -342,10 +350,18 @@ export function TimekeepingSection({
               Add attendance record
             </Button>
             {dtr.data.length === 0 ? (
-              <p>
-                No DTR records for the selected range. Missing dates still
-                require reconciliation.
-              </p>
+              <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
+                <EmptyMedia variant="icon">
+                  <Clock className="size-5 text-muted-foreground" />
+                </EmptyMedia>
+                <EmptyHeader>
+                  <EmptyTitle>No DTR records</EmptyTitle>
+                  <EmptyDescription>
+                    No DTR records for the selected range. Missing dates still
+                    require reconciliation.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <ul className="space-y-3">
                 {dtr.data.map((record) => (
@@ -355,10 +371,34 @@ export function TimekeepingSection({
                       role="region"
                       aria-label={`Attendance ${date(record.date)}`}
                     >
-                      <CardHeader>
-                        <CardTitle>
-                          {date(record.date)} ·{" "}
-                          {record.dayType.replaceAll("_", " ")}
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+                          <span>{date(record.date)}</span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                record.dayType === "REGULAR_WORKDAY"
+                                  ? "border-border bg-muted/80 text-foreground"
+                                  : record.dayType === "DOUBLE_HOLIDAY"
+                                    ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                                    : record.dayType.includes("HOLIDAY")
+                                      ? "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+                                      : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+                              )}
+                            >
+                              {record.dayType.replaceAll("_", " ")}
+                            </span>
+                            {record.isApproved ? (
+                              <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                Approved
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                                Pending Review
+                              </span>
+                            )}
+                          </div>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">

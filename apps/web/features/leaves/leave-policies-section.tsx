@@ -18,6 +18,14 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -25,6 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table";
 
 const ACCRUAL_FREQUENCY_ITEMS = [
   { value: "MONTHLY", label: "Monthly (Annual credits / 12 per month)" },
@@ -1106,48 +1122,60 @@ export function LeavePoliciesSection({
             Loading leave policies...
           </div>
         ) : policies.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-            <Clock className="mx-auto size-8 text-muted-foreground" />
-            <p className="text-sm font-medium">No leave policies configured.</p>
-            <p className="text-xs text-muted-foreground">
-              Define company policies like Vacation Leave, Sick Leave, or
-              statutory Service Incentive Leave (SIL) to enable automated
-              accruals and carryovers.
-            </p>
+          <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
+            <EmptyMedia variant="icon">
+              <Clock className="size-5 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyHeader>
+              <EmptyTitle>No leave policies configured</EmptyTitle>
+              <EmptyDescription>
+                Define company policies like Vacation Leave, Sick Leave, or
+                statutory Service Incentive Leave (SIL) to enable automated
+                accruals and carryovers.
+              </EmptyDescription>
+            </EmptyHeader>
             {canManage && (
-              <Button type="button" size="sm" onClick={startCreate}>
-                <Plus className="mr-1.5 size-4" />
-                Create First Policy
-              </Button>
+              <EmptyContent>
+                <Button type="button" size="sm" onClick={startCreate}>
+                  <Plus className="mr-1.5 size-4" />
+                  Create First Policy
+                </Button>
+              </EmptyContent>
             )}
-          </div>
+          </Empty>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50 text-xs font-medium text-muted-foreground">
-                  <th className="p-3">Policy Code</th>
-                  <th className="p-3">Annual Credits</th>
-                  <th className="p-3">Frequency</th>
-                  <th className="p-3">Carryover</th>
-                  <th className="p-3">Min. Tenure</th>
-                  <th className="p-3">Status</th>
-                  {canManage && <th className="p-3 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+          <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="w-[160px]">Policy Code</TableHead>
+                  <TableHead className="w-[140px]">Annual Credits</TableHead>
+                  <TableHead className="w-[140px]">Frequency</TableHead>
+                  <TableHead>Carryover</TableHead>
+                  <TableHead className="w-[120px]">Min. Tenure</TableHead>
+                  <TableHead className="w-[100px]">Status</TableHead>
+                  {canManage && (
+                    <TableHead className="w-[100px] text-right">
+                      Actions
+                    </TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {policies.map((policy) => (
-                  <tr key={policy.id} className="hover:bg-muted/30">
-                    <td className="p-3 font-semibold">{policy.leaveType}</td>
-                    <td className="p-3 font-medium">
+                  <TableRow key={policy.id} className="hover:bg-muted/30">
+                    <TableCell className="font-semibold text-foreground">
+                      {policy.leaveType}
+                    </TableCell>
+                    <TableCell className="font-medium">
                       {policy.annualCredits} days
-                    </td>
-                    <td className="p-3">
+                    </TableCell>
+                    <TableCell>
                       <span className="inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
                         {policy.accrualFrequency}
                       </span>
-                    </td>
-                    <td className="p-3 text-xs">
+                    </TableCell>
+                    <TableCell className="text-xs">
                       {policy.carryoverPolicy === "NO_CARRYOVER" ? (
                         <span className="text-muted-foreground">None</span>
                       ) : policy.carryoverPolicy === "CAPPED" ? (
@@ -1159,11 +1187,11 @@ export function LeavePoliciesSection({
                           Unlimited
                         </span>
                       )}
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
                       {policy.eligibleAfterMonths} mos
-                    </td>
-                    <td className="p-3">
+                    </TableCell>
+                    <TableCell>
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                           policy.isActive
@@ -1173,9 +1201,9 @@ export function LeavePoliciesSection({
                       >
                         {policy.isActive ? "Active" : "Inactive"}
                       </span>
-                    </td>
+                    </TableCell>
                     {canManage && (
-                      <td className="p-3 text-right">
+                      <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             type="button"
@@ -1197,12 +1225,12 @@ export function LeavePoliciesSection({
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>
-                      </td>
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>
