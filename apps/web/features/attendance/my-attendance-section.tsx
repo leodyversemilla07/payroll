@@ -8,29 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@workspace/ui/components/empty";
 import { Field, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table";
-import { cn } from "@workspace/ui/lib/utils";
-import {
   AlertCircle,
   Calendar,
-  CheckCircle,
   Clock,
   Loader2,
   Shield,
@@ -42,6 +25,7 @@ import { useState } from "react";
 import { usePortalUser } from "@/components/payroll-portal";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
+import { MyAttendanceDataTable } from "./my-attendance-data-table";
 
 function formatDate(value: Date | string) {
   return new Intl.DateTimeFormat("en-PH", {
@@ -50,16 +34,6 @@ function formatDate(value: Date | string) {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatTime(value: Date | string | null | undefined) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
   }).format(new Date(value));
 }
 
@@ -335,108 +309,8 @@ export function MyAttendanceSection() {
                 Retry
               </Button>
             </div>
-          ) : records.length === 0 ? (
-            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
-              <EmptyMedia variant="icon">
-                <Clock className="size-5 text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyHeader>
-                <EmptyTitle>No daily time records</EmptyTitle>
-                <EmptyDescription>
-                  No daily time records found for the selected date range.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead>Date</TableHead>
-                    <TableHead>Day Type</TableHead>
-                    <TableHead>Time In</TableHead>
-                    <TableHead>Time Out</TableHead>
-                    <TableHead className="text-right">Worked</TableHead>
-                    <TableHead className="text-right">Overtime</TableHead>
-                    <TableHead className="text-right">Tardy / Under</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map((r) => (
-                    <TableRow
-                      key={r.id}
-                      className="hover:bg-muted/30 transition-colors"
-                    >
-                      <TableCell className="font-medium text-foreground whitespace-nowrap">
-                        {formatDate(r.date)}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-                            r.dayType === "REGULAR_WORKDAY"
-                              ? "border-border bg-muted/80 text-foreground"
-                              : r.dayType === "DOUBLE_HOLIDAY"
-                                ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-                                : r.dayType.includes("HOLIDAY")
-                                  ? "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
-                                  : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-                          )}
-                        >
-                          {r.dayType.replaceAll("_", " ")}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {formatTime(r.timeIn)}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {formatTime(r.timeOut)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {(r.actualWorkedMinutes / 60).toFixed(1)} hrs
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {r.overtimeMinutes > 0 ? (
-                          <span className="font-semibold text-blue-600 dark:text-blue-400">
-                            +{r.overtimeMinutes}m
-                          </span>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {r.tardinessMinutes > 0 || r.undertimeMinutes > 0 ? (
-                          <span className="font-medium text-destructive">
-                            {r.tardinessMinutes > 0 &&
-                              `${r.tardinessMinutes}m late`}
-                            {r.tardinessMinutes > 0 &&
-                              r.undertimeMinutes > 0 &&
-                              " · "}
-                            {r.undertimeMinutes > 0 &&
-                              `${r.undertimeMinutes}m early`}
-                          </span>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {r.isApproved ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                            <CheckCircle className="size-3" />
-                            Approved
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-                            Regular
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <MyAttendanceDataTable data={records} />
           )}
         </CardContent>
       </Card>

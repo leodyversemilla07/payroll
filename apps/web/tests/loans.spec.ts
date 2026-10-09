@@ -297,7 +297,7 @@ test.describe("Loans & Amortization Management", () => {
 
     // Verify header
     await expect(
-      page.getByRole("heading", { name: "Loans & Advances", level: 2 }),
+      page.getByRole("heading", { name: "Loans & Advances" }),
     ).toBeVisible();
 
     // Verify KPI summary cards

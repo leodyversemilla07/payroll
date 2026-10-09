@@ -12,18 +12,12 @@ import {
 } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@workspace/ui/components/empty";
-import {
   Field,
   FieldDescription,
   FieldError,
+  FieldGroup,
   FieldLabel,
+  FieldLegend,
   FieldSet,
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
@@ -44,54 +38,19 @@ import {
 } from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table";
-import {
   CalendarDays,
   CheckCircle2,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { PageHeaderAction } from "@/components/payroll-portal";
 import { trpc } from "@/lib/trpc";
+import { HolidaysDataTable, holidayDayTypes } from "./holidays-data-table";
 
 type Holiday = inferRouterOutputs<AppRouter>["holidays"]["list"][number];
-
-const holidayDayTypes = [
-  {
-    value: "REGULAR_HOLIDAY",
-    label: "Regular Holiday (200% worked / 100% unworked)",
-    badgeColor:
-      "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30",
-  },
-  {
-    value: "SPECIAL_NON_WORKING_HOLIDAY",
-    label: "Special Non-Working Holiday (130% worked / 0% unworked)",
-    badgeColor:
-      "bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/30",
-  },
-  {
-    value: "SPECIAL_WORKING_HOLIDAY",
-    label: "Special Working Holiday (100% regular pay)",
-    badgeColor:
-      "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
-  },
-  {
-    value: "DOUBLE_HOLIDAY",
-    label: "Double Holiday (300% worked / 200% unworked)",
-    badgeColor:
-      "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30",
-  },
-] as const;
 
 function formatHolidayDate(dateValue: Date | string) {
   return new Intl.DateTimeFormat("en-PH", {
@@ -228,49 +187,50 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <Card role="region" aria-label="Holiday calendar">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle>Holiday Calendar</CardTitle>
-            <CardDescription>
-              Configure Philippine statutory regular holidays, special
-              non-working days, and company holidays. Classifications determine
-              statutory premiums during DTR processing and payroll calculation.
-            </CardDescription>
+      {canManage && (
+        <PageHeaderAction>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={populateMutation.isPending}
+              onClick={() => populateMutation.mutate({ year: selectedYear })}
+            >
+              <Sparkles className="mr-1.5 size-4 text-amber-500" />
+              {populateMutation.isPending
+                ? "Populating…"
+                : `Populate ${selectedYear} Presets`}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              aria-expanded={showCreateForm}
+              disabled={showCreateForm || !!editingHoliday}
+              onClick={() => {
+                setShowCreateForm(true);
+                setEditingHoliday(null);
+                setStatusMessage(null);
+                setFormError(null);
+              }}
+            >
+              <Plus className="mr-1.5 size-4" />
+              Add holiday
+            </Button>
           </div>
-          {canManage && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={populateMutation.isPending}
-                onClick={() => populateMutation.mutate({ year: selectedYear })}
-              >
-                <Sparkles className="mr-1.5 size-4 text-amber-500" />
-                {populateMutation.isPending
-                  ? "Populating…"
-                  : `Populate ${selectedYear} Presets`}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                aria-expanded={showCreateForm}
-                disabled={showCreateForm || !!editingHoliday}
-                onClick={() => {
-                  setShowCreateForm(true);
-                  setEditingHoliday(null);
-                  setStatusMessage(null);
-                  setFormError(null);
-                }}
-              >
-                <Plus className="mr-1.5 size-4" />
-                Add holiday
-              </Button>
-            </div>
-          )}
+        </PageHeaderAction>
+      )}
+
+      <Card role="region" aria-label="Holiday calendar">
+        <CardHeader>
+          <CardTitle>Holiday Calendar</CardTitle>
+          <CardDescription>
+            Configure Philippine statutory regular holidays, special non-working
+            days, and company holidays. Classifications determine statutory
+            premiums during DTR processing and payroll calculation.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
             <div className="flex items-center gap-2">
               <CalendarDays className="size-5 text-muted-foreground" />
@@ -335,226 +295,6 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
             </div>
           )}
 
-          {/* Add Holiday Slide-over Sheet */}
-          <Sheet
-            open={showCreateForm}
-            onOpenChange={(open) => {
-              setShowCreateForm(open);
-              if (!open) setFormError(null);
-            }}
-          >
-            <SheetContent
-              role="region"
-              aria-label="Add holiday"
-              className="overflow-y-auto sm:max-w-md"
-            >
-              <SheetHeader className="pb-4">
-                <SheetTitle>Add Holiday</SheetTitle>
-                <SheetDescription>
-                  Enter holiday details. Recurring holidays repeat every year on
-                  the same calendar date.
-                </SheetDescription>
-              </SheetHeader>
-              <form onSubmit={handleCreateSubmit} className="space-y-4">
-                <FieldSet disabled={createMutation.isPending}>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field>
-                      <FieldLabel htmlFor="create-holiday-date">
-                        Holiday date
-                      </FieldLabel>
-                      <Input
-                        id="create-holiday-date"
-                        name="date"
-                        type="date"
-                        defaultValue={`${selectedYear}-01-01`}
-                        required
-                      />
-                    </Field>
-
-                    <Field>
-                      <FieldLabel htmlFor="create-holiday-name">
-                        Holiday name
-                      </FieldLabel>
-                      <Input
-                        id="create-holiday-name"
-                        name="name"
-                        placeholder="e.g. Independence Day"
-                        minLength={2}
-                        maxLength={100}
-                        required
-                      />
-                    </Field>
-                  </div>
-
-                  <Field>
-                    <FieldLabel htmlFor="create-holiday-type">
-                      Day type classification
-                    </FieldLabel>
-                    <Select
-                      items={holidayDayTypes}
-                      name="dayType"
-                      defaultValue="REGULAR_HOLIDAY"
-                      required
-                    >
-                      <SelectTrigger
-                        id="create-holiday-type"
-                        className="w-full"
-                      >
-                        <SelectValue placeholder="Select day type classification" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {holidayDayTypes.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      Regular holidays earn 100% pay if unworked, or 200% if
-                      worked. Special non-working days earn 130% when worked.
-                    </FieldDescription>
-                  </Field>
-
-                  <Field orientation="horizontal">
-                    <Checkbox
-                      id="create-holiday-recurring"
-                      name="isRecurring"
-                    />
-                    <FieldLabel htmlFor="create-holiday-recurring">
-                      Repeats annually on this month and day (Fixed-date
-                      holiday)
-                    </FieldLabel>
-                  </Field>
-
-                  {formError && <FieldError>{formError}</FieldError>}
-
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending ? "Saving…" : "Save holiday"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={createMutation.isPending}
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setFormError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </FieldSet>
-              </form>
-            </SheetContent>
-          </Sheet>
-
-          {/* Edit Holiday Slide-over Sheet */}
-          <Sheet
-            open={!!editingHoliday}
-            onOpenChange={(open) => {
-              if (!open) {
-                setEditingHoliday(null);
-                setFormError(null);
-              }
-            }}
-          >
-            <SheetContent
-              role="region"
-              aria-label="Edit holiday"
-              className="overflow-y-auto sm:max-w-md"
-            >
-              <SheetHeader className="pb-4">
-                <SheetTitle>Edit Holiday: {editingHoliday?.name}</SheetTitle>
-                <SheetDescription>
-                  Modify the holiday classification or recurrence rule.
-                </SheetDescription>
-              </SheetHeader>
-              {editingHoliday && (
-                <form onSubmit={handleUpdateSubmit} className="space-y-4">
-                  <FieldSet disabled={updateMutation.isPending}>
-                    <Field>
-                      <FieldLabel htmlFor="edit-holiday-name">
-                        Holiday name
-                      </FieldLabel>
-                      <Input
-                        id="edit-holiday-name"
-                        name="name"
-                        defaultValue={editingHoliday.name}
-                        minLength={2}
-                        maxLength={100}
-                        required
-                      />
-                    </Field>
-
-                    <Field>
-                      <FieldLabel htmlFor="edit-holiday-type">
-                        Day type classification
-                      </FieldLabel>
-                      <Select
-                        items={holidayDayTypes}
-                        name="dayType"
-                        defaultValue={editingHoliday.dayType}
-                        required
-                      >
-                        <SelectTrigger
-                          id="edit-holiday-type"
-                          className="w-full"
-                        >
-                          <SelectValue placeholder="Select day type classification" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {holidayDayTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        id="edit-holiday-recurring"
-                        name="isRecurring"
-                        defaultChecked={editingHoliday.isRecurring}
-                      />
-                      <FieldLabel htmlFor="edit-holiday-recurring">
-                        Repeats annually on this month and day
-                      </FieldLabel>
-                    </Field>
-
-                    {formError && <FieldError>{formError}</FieldError>}
-
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <Button type="submit" disabled={updateMutation.isPending}>
-                        {updateMutation.isPending
-                          ? "Saving changes…"
-                          : "Save changes"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={updateMutation.isPending}
-                        onClick={() => {
-                          setEditingHoliday(null);
-                          setFormError(null);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </FieldSet>
-                </form>
-              )}
-            </SheetContent>
-          </Sheet>
-
           {holidaysQuery.isPending ? (
             <div role="status" className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -592,23 +332,20 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                 Retry
               </Button>
             </div>
-          ) : holidays.length === 0 ? (
-            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
-              <EmptyMedia variant="icon">
-                <CalendarDays className="size-5 text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyHeader>
-                <EmptyTitle>
-                  No holidays configured for {selectedYear}
-                </EmptyTitle>
-                <EmptyDescription>
-                  You can add individual company holidays or use the preset
-                  button to auto-populate Philippine statutory national
-                  holidays.
-                </EmptyDescription>
-              </EmptyHeader>
-              {canManage && (
-                <EmptyContent>
+          ) : (
+            <HolidaysDataTable
+              data={holidays}
+              canManage={canManage}
+              onEdit={(holiday) => {
+                setEditingHoliday(holiday);
+                setShowCreateForm(false);
+                setFormError(null);
+              }}
+              onDelete={handleDelete}
+              emptyTitle={`No holidays configured for ${selectedYear}`}
+              emptyDescription="You can add individual company holidays or use the preset button to auto-populate Philippine statutory national holidays."
+              emptyAction={
+                canManage ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -621,94 +358,286 @@ export function HolidaysSection({ canManage = true }: { canManage?: boolean }) {
                     <Sparkles className="mr-1.5 size-4 text-amber-500" />
                     Populate {selectedYear} Philippine Presets
                   </Button>
-                </EmptyContent>
-              )}
-            </Empty>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-[160px]">Date</TableHead>
-                    <TableHead>Holiday Name</TableHead>
-                    <TableHead className="w-[200px]">Type</TableHead>
-                    <TableHead className="w-[120px]">Recurrence</TableHead>
-                    {canManage && (
-                      <TableHead className="w-[100px] text-right">
-                        Actions
-                      </TableHead>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {holidays.map((holiday) => {
-                    const typeConfig = holidayDayTypes.find(
-                      (t) => t.value === holiday.dayType,
-                    );
-                    return (
-                      <TableRow key={holiday.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {formatHolidayDate(holiday.date)}
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">
-                          {holiday.name}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <span
-                            className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                              typeConfig?.badgeColor ?? "bg-muted"
-                            }`}
-                          >
-                            {holiday.dayType.replaceAll("_", " ")}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {holiday.isRecurring ? (
-                            <span className="inline-flex items-center text-foreground font-medium">
-                              Annual
-                            </span>
-                          ) : (
-                            "One-time"
-                          )}
-                        </TableCell>
-                        {canManage && (
-                          <TableCell className="text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                aria-label={`Edit ${holiday.name}`}
-                                onClick={() => {
-                                  setEditingHoliday(holiday);
-                                  setShowCreateForm(false);
-                                  setFormError(null);
-                                }}
-                              >
-                                <Pencil className="size-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                aria-label={`Delete ${holiday.name}`}
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => handleDelete(holiday)}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                ) : undefined
+              }
+            />
           )}
         </CardContent>
       </Card>
+
+      {/* Add Holiday Slide-over Sheet */}
+      <Sheet
+        open={showCreateForm}
+        onOpenChange={(open) => {
+          setShowCreateForm(open);
+          if (!open) setFormError(null);
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl p-0"
+        >
+          <section
+            id="holiday-create-form"
+            aria-label="Add holiday"
+            className="flex flex-col h-full min-h-0 bg-background"
+          >
+            <SheetHeader className="flex-none border-b bg-card/60 px-6 py-5 backdrop-blur-sm pr-12 text-left">
+              <div className="flex flex-col gap-1 text-left">
+                <SheetTitle className="font-heading text-lg font-semibold tracking-tight text-foreground">
+                  Add holiday
+                </SheetTitle>
+                <SheetDescription className="text-xs text-muted-foreground">
+                  Configure a Philippine statutory regular holiday, special
+                  non-working day, or company holiday.
+                </SheetDescription>
+              </div>
+            </SheetHeader>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              <form onSubmit={handleCreateSubmit}>
+                <FieldGroup>
+                  <FieldSet disabled={createMutation.isPending}>
+                    <FieldLegend>Holiday details</FieldLegend>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="create-holiday-date">
+                          Holiday date
+                        </FieldLabel>
+                        <Input
+                          id="create-holiday-date"
+                          name="date"
+                          type="date"
+                          defaultValue={`${selectedYear}-01-01`}
+                          required
+                        />
+                        <FieldDescription>
+                          Calendar date in Asia/Manila.
+                        </FieldDescription>
+                      </Field>
+
+                      <Field>
+                        <FieldLabel htmlFor="create-holiday-name">
+                          Holiday name
+                        </FieldLabel>
+                        <Input
+                          id="create-holiday-name"
+                          name="name"
+                          placeholder="e.g. Independence Day"
+                          minLength={2}
+                          maxLength={100}
+                          required
+                        />
+                        <FieldDescription>
+                          Official statutory proclamation name.
+                        </FieldDescription>
+                      </Field>
+                    </div>
+                  </FieldSet>
+
+                  <FieldSet disabled={createMutation.isPending}>
+                    <FieldLegend>
+                      Statutory classification & pay rules
+                    </FieldLegend>
+                    <Field>
+                      <FieldLabel htmlFor="create-holiday-type">
+                        Day type classification
+                      </FieldLabel>
+                      <Select
+                        items={holidayDayTypes}
+                        name="dayType"
+                        defaultValue="REGULAR_HOLIDAY"
+                        required
+                      >
+                        <SelectTrigger
+                          id="create-holiday-type"
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select day type classification" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {holidayDayTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        Regular holidays earn 100% pay if unworked, or 200% if
+                        worked. Special non-working days earn 130% when worked.
+                      </FieldDescription>
+                    </Field>
+
+                    <Field orientation="horizontal">
+                      <Checkbox
+                        id="create-holiday-recurring"
+                        name="isRecurring"
+                      />
+                      <FieldLabel htmlFor="create-holiday-recurring">
+                        Repeats annually on this month and day (Fixed-date
+                        holiday)
+                      </FieldLabel>
+                    </Field>
+                  </FieldSet>
+
+                  {formError && <FieldError>{formError}</FieldError>}
+
+                  <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={createMutation.isPending}
+                      onClick={() => {
+                        setShowCreateForm(false);
+                        setFormError(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending
+                        ? "Saving holiday…"
+                        : "Save holiday"}
+                    </Button>
+                  </div>
+                </FieldGroup>
+              </form>
+            </div>
+          </section>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Holiday Slide-over Sheet */}
+      <Sheet
+        open={!!editingHoliday}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingHoliday(null);
+            setFormError(null);
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl p-0"
+        >
+          {editingHoliday && (
+            <section
+              id="holiday-edit-form"
+              aria-label="Edit holiday"
+              className="flex flex-col h-full min-h-0 bg-background"
+            >
+              <SheetHeader className="flex-none border-b bg-card/60 px-6 py-5 backdrop-blur-sm pr-12 text-left">
+                <div className="flex flex-col gap-1 text-left">
+                  <SheetTitle className="font-heading text-lg font-semibold tracking-tight text-foreground truncate">
+                    Edit holiday: {editingHoliday.name}
+                  </SheetTitle>
+                  <SheetDescription className="text-xs text-muted-foreground">
+                    Modify classification or recurrence rule. Calendar date:{" "}
+                    {formatHolidayDate(editingHoliday.date)}.
+                  </SheetDescription>
+                </div>
+              </SheetHeader>
+              <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                <form onSubmit={handleUpdateSubmit}>
+                  <FieldGroup>
+                    <FieldSet disabled={updateMutation.isPending}>
+                      <FieldLegend>Holiday details</FieldLegend>
+                      <Field>
+                        <FieldLabel htmlFor="edit-holiday-name">
+                          Holiday name
+                        </FieldLabel>
+                        <Input
+                          id="edit-holiday-name"
+                          name="name"
+                          defaultValue={editingHoliday.name}
+                          minLength={2}
+                          maxLength={100}
+                          required
+                        />
+                        <FieldDescription>
+                          Official statutory title or company name.
+                        </FieldDescription>
+                      </Field>
+                    </FieldSet>
+
+                    <FieldSet disabled={updateMutation.isPending}>
+                      <FieldLegend>
+                        Statutory classification & pay rules
+                      </FieldLegend>
+                      <Field>
+                        <FieldLabel htmlFor="edit-holiday-type">
+                          Day type classification
+                        </FieldLabel>
+                        <Select
+                          items={holidayDayTypes}
+                          name="dayType"
+                          defaultValue={editingHoliday.dayType}
+                          required
+                        >
+                          <SelectTrigger
+                            id="edit-holiday-type"
+                            className="w-full"
+                          >
+                            <SelectValue placeholder="Select day type classification" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {holidayDayTypes.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <FieldDescription>
+                          Determines statutory premiums during DTR processing
+                          and payroll calculation.
+                        </FieldDescription>
+                      </Field>
+
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id="edit-holiday-recurring"
+                          name="isRecurring"
+                          defaultChecked={editingHoliday.isRecurring}
+                        />
+                        <FieldLabel htmlFor="edit-holiday-recurring">
+                          Repeats annually on this month and day
+                        </FieldLabel>
+                      </Field>
+                    </FieldSet>
+
+                    {formError && <FieldError>{formError}</FieldError>}
+
+                    <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={updateMutation.isPending}
+                        onClick={() => {
+                          setEditingHoliday(null);
+                          setFormError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={updateMutation.isPending}>
+                        {updateMutation.isPending
+                          ? "Saving changes…"
+                          : "Save changes"}
+                      </Button>
+                    </div>
+                  </FieldGroup>
+                </form>
+              </div>
+            </section>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

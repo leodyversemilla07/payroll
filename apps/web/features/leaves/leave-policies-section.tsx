@@ -19,14 +19,6 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@workspace/ui/components/empty";
-import {
   Select,
   SelectContent,
   SelectGroup,
@@ -69,16 +61,15 @@ import {
   CheckCircle2,
   Clock,
   Eye,
-  Pencil,
   Play,
   Plus,
   Repeat,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
+import { LeavePoliciesDataTable } from "./leave-policies-data-table";
 
 type Policy = inferRouterOutputs<AppRouter>["leaves"]["listPolicies"][number];
 type AccrualResult = inferRouterOutputs<AppRouter>["leaves"]["runAccrual"];
@@ -1122,117 +1113,21 @@ export function LeavePoliciesSection({
           <div className="py-8 text-center text-xs text-muted-foreground">
             Loading leave policies...
           </div>
-        ) : policies.length === 0 ? (
-          <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
-            <EmptyMedia variant="icon">
-              <Clock className="size-5 text-muted-foreground" />
-            </EmptyMedia>
-            <EmptyHeader>
-              <EmptyTitle>No leave policies configured</EmptyTitle>
-              <EmptyDescription>
-                Define company policies like Vacation Leave, Sick Leave, or
-                statutory Service Incentive Leave (SIL) to enable automated
-                accruals and carryovers.
-              </EmptyDescription>
-            </EmptyHeader>
-            {canManage && (
-              <EmptyContent>
+        ) : (
+          <LeavePoliciesDataTable
+            data={policies}
+            canManage={canManage}
+            onEdit={startEdit}
+            onDelete={handleDeletePolicy}
+            emptyAction={
+              canManage ? (
                 <Button type="button" size="sm" onClick={startCreate}>
                   <Plus className="mr-1.5 size-4" />
                   Create First Policy
                 </Button>
-              </EmptyContent>
-            )}
-          </Empty>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-[160px]">Policy Code</TableHead>
-                  <TableHead className="w-[140px]">Annual Credits</TableHead>
-                  <TableHead className="w-[140px]">Frequency</TableHead>
-                  <TableHead>Carryover</TableHead>
-                  <TableHead className="w-[120px]">Min. Tenure</TableHead>
-                  <TableHead className="w-[100px]">Status</TableHead>
-                  {canManage && (
-                    <TableHead className="w-[100px] text-right">
-                      Actions
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {policies.map((policy) => (
-                  <TableRow key={policy.id} className="hover:bg-muted/30">
-                    <TableCell className="font-semibold text-foreground">
-                      {policy.leaveType}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {policy.annualCredits} days
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
-                        {policy.accrualFrequency}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {policy.carryoverPolicy === "NO_CARRYOVER" ? (
-                        <span className="text-muted-foreground">None</span>
-                      ) : policy.carryoverPolicy === "CAPPED" ? (
-                        <span className="font-medium text-amber-700 dark:text-amber-300">
-                          Capped ({policy.maxCarryoverDays} days)
-                        </span>
-                      ) : (
-                        <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                          Unlimited
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {policy.eligibleAfterMonths} mos
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          policy.isActive
-                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {policy.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </TableCell>
-                    {canManage && (
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Edit ${policy.leaveType}`}
-                            onClick={() => startEdit(policy)}
-                          >
-                            <Pencil className="size-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Delete ${policy.leaveType}`}
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDeletePolicy(policy)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              ) : undefined
+            }
+          />
         )}
       </CardContent>
     </Card>

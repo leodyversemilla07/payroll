@@ -48,14 +48,16 @@ export const portalSections = [
     href: "/portal/holidays",
     label: "Holiday calendar",
     icon: CalendarCheck,
-    description: "Configure Philippine statutory and company holidays.",
+    description:
+      "Configure Philippine statutory regular holidays, special non-working days, and company holidays. Classifications determine statutory premiums during DTR processing and payroll calculation.",
   },
   {
     id: "loans",
     href: "/portal/loans",
-    label: "Loans & advances",
+    label: "Loans & Advances",
     icon: Landmark,
-    description: "Track employee loans, amortization, and ledger settlements.",
+    description:
+      "Manage statutory government loans (SSS, Pag-IBIG) and company advances with automated payroll amortization.",
   },
   {
     id: "process-payroll",

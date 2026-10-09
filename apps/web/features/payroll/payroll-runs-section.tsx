@@ -16,12 +16,12 @@ import {
 } from "@workspace/ui/components/empty";
 import { Separator } from "@workspace/ui/components/separator";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { cn } from "@workspace/ui/lib/utils";
 import { Archive, Download, FileText, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { downloadBase64File } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
 import { RunLifecycleActions } from "./payroll-run-actions";
+import { PayrollRunsDataTable } from "./payroll-runs-data-table";
 
 function pesos(cents: bigint | number) {
   return new Intl.NumberFormat("en-PH", {
@@ -113,62 +113,15 @@ export function PayrollRunsSection() {
                 Retry
               </Button>
             </p>
-          ) : runs.data.length === 0 ? (
-            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
-              <EmptyMedia variant="icon">
-                <FileText className="size-5 text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyHeader>
-                <EmptyTitle>No payroll runs found</EmptyTitle>
-                <EmptyDescription>
-                  No payroll runs found. Trigger a new payroll run from the
-                  Process Payroll workspace.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
           ) : (
-            <ul className="space-y-2">
-              {runs.data.map((run) => (
-                <li key={run.id}>
-                  <Button
-                    type="button"
-                    aria-pressed={selectedRun === run.id}
-                    variant={selectedRun === run.id ? "secondary" : "outline"}
-                    className="h-auto w-full flex-col items-start whitespace-normal p-3.5 text-left transition-all"
-                    onClick={() => {
-                      setSelectedRun(run.id);
-                      setSelectedSlip(null);
-                    }}
-                  >
-                    <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                      <strong className="text-sm font-semibold text-foreground">
-                        {date(run.paymentDate)}
-                      </strong>
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-                          run.status === "DISBURSED" ||
-                            run.status === "APPROVED"
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : run.status === "AUDITED"
-                              ? "border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                              : "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-                        )}
-                      >
-                        {run.status}
-                      </span>
-                    </div>
-                    <span className="mt-1 text-xs text-muted-foreground">
-                      {run.cutoffSequence.replaceAll("_", " ")} ·{" "}
-                      {run._count.payslips} payslips ·{" "}
-                      <span className="font-semibold text-foreground">
-                        {pesos(run.totalNetCents)} net
-                      </span>
-                    </span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <PayrollRunsDataTable
+              data={runs.data}
+              selectedRunId={selectedRun}
+              onSelectRun={(runId) => {
+                setSelectedRun(runId);
+                setSelectedSlip(null);
+              }}
+            />
           )}
         </CardContent>
       </Card>

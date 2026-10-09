@@ -8,16 +8,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
-import { FieldLabel } from "@workspace/ui/components/field";
-import { Input } from "@workspace/ui/components/input";
 import {
   Empty,
-  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty";
+import { FieldLabel } from "@workspace/ui/components/field";
+import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
@@ -44,12 +43,13 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  Search,
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { PageHeaderAction } from "@/components/payroll-portal";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
+import { LoansDataTable } from "./loans-data-table";
 
 export const LOAN_TYPE_LABELS: Record<string, string> = {
   SSS_SALARY_LOAN: "SSS Salary Loan",
@@ -60,41 +60,12 @@ export const LOAN_TYPE_LABELS: Record<string, string> = {
   COMPANY_EMERGENCY_LOAN: "Company Emergency Loan",
 };
 
-const STATUS_FILTER_ITEMS = [
-  { value: "ACTIVE", label: "Active Loans" },
-  { value: "PAID", label: "Paid / Settled" },
-  { value: "ALL", label: "All Loans" },
-];
-
-const LOAN_TYPE_FILTER_ITEMS = [
-  { value: "ALL", label: "All Loan Types" },
-  ...Object.entries(LOAN_TYPE_LABELS).map(([value, label]) => ({
-    value,
-    label,
-  })),
-];
-
 const LOAN_PROGRAM_ITEMS = Object.entries(LOAN_TYPE_LABELS).map(
   ([value, label]) => ({
     value,
     label,
   }),
 );
-
-const LOAN_TYPE_VARIANTS: Record<string, string> = {
-  SSS_SALARY_LOAN:
-    "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
-  SSS_CALAMITY_LOAN:
-    "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-800",
-  PAGIBIG_MULTI_PURPOSE:
-    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
-  PAGIBIG_HOUSING:
-    "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
-  COMPANY_CASH_ADVANCE:
-    "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
-  COMPANY_EMERGENCY_LOAN:
-    "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800",
-};
 
 function pesos(cents: bigint | number | null | undefined) {
   if (cents === null || cents === undefined) return "₱0.00";
@@ -115,13 +86,6 @@ function formatDate(value: Date | string | null | undefined) {
 export function LoansSection() {
   const utils = trpc.useUtils();
 
-  // Filters state
-  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "PAID" | "ALL">(
-    "ACTIVE",
-  );
-  const [loanTypeFilter, setLoanTypeFilter] = useState<string>("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
@@ -130,26 +94,14 @@ export function LoansSection() {
   // Queries
   const summaryQuery = trpc.loans.getSummary.useQuery();
   const loansQuery = trpc.loans.list.useQuery({
-    status: statusFilter,
-    loanType: loanTypeFilter === "ALL" ? undefined : (loanTypeFilter as never),
-    search: searchQuery.trim() || undefined,
+    status: "ALL",
   });
 
   const employeesQuery = trpc.employees.list.useQuery();
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            Loans & Advances
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Manage statutory government loans (SSS, Pag-IBIG) and company
-            advances with automated payroll amortization.
-          </p>
-        </div>
+      <PageHeaderAction>
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -168,7 +120,7 @@ export function LoansSection() {
             Create Loan
           </Button>
         </div>
-      </div>
+      </PageHeaderAction>
 
       {/* Summary KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -241,91 +193,7 @@ export function LoansSection() {
         </Card>
       </div>
 
-      {/* Filter and Search Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <FieldLabel htmlFor="loan-search">Search</FieldLabel>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  id="loan-search"
-                  placeholder="Employee name, ID, or reference..."
-                  className="pl-8"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <FieldLabel htmlFor="status-filter">Status</FieldLabel>
-              <Select
-                items={STATUS_FILTER_ITEMS}
-                value={statusFilter}
-                onValueChange={(val) => {
-                  if (val) setStatusFilter(val as "ACTIVE" | "PAID" | "ALL");
-                }}
-              >
-                <SelectTrigger id="status-filter" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {STATUS_FILTER_ITEMS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <FieldLabel htmlFor="type-filter">Loan Type</FieldLabel>
-              <Select
-                items={LOAN_TYPE_FILTER_ITEMS}
-                value={loanTypeFilter}
-                onValueChange={(val) => {
-                  if (val) setLoanTypeFilter(val);
-                }}
-              >
-                <SelectTrigger id="type-filter" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {LOAN_TYPE_FILTER_ITEMS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("ACTIVE");
-                  setLoanTypeFilter("ALL");
-                }}
-              >
-                Reset Filters
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Loans Table */}
+      {/* Loans Data Table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Loan Records</CardTitle>
@@ -339,187 +207,13 @@ export function LoansSection() {
               <Loader2 className="mr-2 size-5 animate-spin" />
               Loading loan accounts…
             </div>
-          ) : loansQuery.data && loansQuery.data.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Loan Details</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Amortization</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loansQuery.data.map((loan) => {
-                    const totalCents = Number(loan.totalAmountCents);
-                    const balanceCents = Number(loan.balanceCents);
-                    const paidPercent =
-                      totalCents > 0
-                        ? Math.min(
-                            100,
-                            Math.max(
-                              0,
-                              Math.round(
-                                ((totalCents - balanceCents) / totalCents) *
-                                  100,
-                              ),
-                            ),
-                          )
-                        : 100;
-
-                    return (
-                      <TableRow key={loan.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium whitespace-nowrap">
-                          <div className="font-semibold text-foreground">
-                            {loan.employee.firstName} {loan.employee.lastName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {loan.employee.employeeNumber} ·{" "}
-                            {loan.employee.department?.name ?? "General"}
-                          </div>
-                        </TableCell>
-
-                        <TableCell>
-                          <span
-                            className={`inline-block rounded-md border px-2 py-0.5 text-xs font-medium ${
-                              LOAN_TYPE_VARIANTS[loan.loanType] || "bg-muted"
-                            }`}
-                          >
-                            {LOAN_TYPE_LABELS[loan.loanType] || loan.loanType}
-                          </span>
-                          {loan.referenceNumber && (
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                              Ref: {loan.referenceNumber}
-                            </div>
-                          )}
-                          <div className="text-[11px] text-muted-foreground">
-                            Start: {formatDate(loan.startDate)}
-                            {loan.endDate
-                              ? ` · End: ${formatDate(loan.endDate)}`
-                              : ""}
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-right font-medium">
-                          {pesos(loan.principalCents)}
-                          {loan.totalAmountCents !== loan.principalCents && (
-                            <div className="text-xs text-muted-foreground">
-                              Total: {pesos(loan.totalAmountCents)}
-                            </div>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="text-right font-medium text-foreground">
-                          {pesos(loan.amortizationCents)}
-                          <div className="text-[11px] text-muted-foreground">
-                            / cutoff
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-right">
-                          <div className="font-semibold text-foreground">
-                            {pesos(loan.balanceCents)}
-                          </div>
-                          <div className="mt-1 flex items-center justify-end gap-1.5">
-                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full bg-emerald-500"
-                                style={{ width: `${paidPercent}%` }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-muted-foreground">
-                              {paidPercent}%
-                            </span>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-center">
-                          {loan.isActive ? (
-                            <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-500/20 bg-slate-500/10 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
-                              Settled / Closed
-                            </span>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedLoanId(loan.id)}
-                            >
-                              Ledger
-                            </Button>
-                            {loan.isActive && (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setPaymentLoanId(loan.id)}
-                              >
-                                Pay
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
           ) : (
-            <Empty className="my-6 rounded-2xl border border-dashed border-border/80 p-12">
-              <EmptyMedia variant="icon">
-                <Landmark className="size-5 text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyHeader>
-                <EmptyTitle>No loans found</EmptyTitle>
-                <EmptyDescription>
-                  {searchQuery ||
-                  statusFilter !== "ALL" ||
-                  loanTypeFilter !== "ALL"
-                    ? "Try adjusting your search criteria or resetting filters."
-                    : "Click 'Create Loan' to enroll a government loan or company cash advance."}
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                {searchQuery ||
-                statusFilter !== "ALL" ||
-                loanTypeFilter !== "ALL" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setStatusFilter("ALL");
-                      setLoanTypeFilter("ALL");
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setIsCreateOpen(true)}
-                  >
-                    <Plus className="mr-1.5 size-4" />
-                    Create Loan
-                  </Button>
-                )}
-              </EmptyContent>
-            </Empty>
+            <LoansDataTable
+              data={loansQuery.data ?? []}
+              onSelectLoan={(id) => setSelectedLoanId(id)}
+              onRecordPayment={(id) => setPaymentLoanId(id)}
+              selectedId={selectedLoanId}
+            />
           )}
         </CardContent>
       </Card>

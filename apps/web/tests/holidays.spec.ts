@@ -182,9 +182,7 @@ test("HR_ADMIN views holiday list, creates new holiday, and sees it in table", a
   ).toBeVisible();
 
   // Click Add holiday
-  await section
-    .getByRole("button", { name: "Add holiday", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Add holiday", exact: true }).click();
 
   const addForm = page.getByRole("region", {
     name: "Add holiday",
@@ -291,7 +289,7 @@ test("HR_ADMIN auto-populates Philippine statutory presets", async ({
   });
 
   // Since list is empty, preset button is available
-  await section
+  await page
     .getByRole("button", { name: /Populate .* Presets/i })
     .first()
     .click();
@@ -323,11 +321,11 @@ test("PAYROLL_SPECIALIST can view holidays in read-only mode without edit or add
   await expect(section.getByText("Christmas Day")).toBeVisible();
 
   // Add and action buttons should not be present
+  await expect(page.getByRole("button", { name: "Add holiday" })).toHaveCount(
+    0,
+  );
   await expect(
-    section.getByRole("button", { name: "Add holiday" }),
-  ).toHaveCount(0);
-  await expect(
-    section.getByRole("button", { name: /Populate .* Presets/i }),
+    page.getByRole("button", { name: /Populate .* Presets/i }),
   ).toHaveCount(0);
   await expect(
     section.getByRole("button", { name: "Edit Christmas Day" }),
