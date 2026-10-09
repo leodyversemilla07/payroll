@@ -1,12 +1,11 @@
-import type * as React from "react";
-import { cn } from "cn";
-
 import { Button } from "@workspace/ui/components/button";
+import { cn } from "cn";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MoreHorizontalIcon,
 } from "lucide-react";
+import type * as React from "react";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
