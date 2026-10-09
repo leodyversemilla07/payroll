@@ -13,9 +13,9 @@ jest.mock('@workspace/db', () => ({
   ...jest.requireActual('@workspace/db'),
   prisma: {
     $transaction: jest.fn(),
-    leaveRequest: { findMany: jest.fn() },
+    leaveRequest: { findMany: jest.fn(), findFirst: jest.fn() },
     department: { findFirst: jest.fn() },
-    employee: { findUnique: jest.fn() },
+    employee: { findUnique: jest.fn(), findFirst: jest.fn() },
   },
 }));
 const employeeId = '11111111-1111-4111-8111-111111111111';
@@ -140,6 +140,19 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           database,
         ),
       );
+    // Default department fixtures: the manager's department ('dept-1')
+    // contains the fixture employee/request, so same-department manager
+    // flows keep passing; cross-department tests override per-test.
+    jest
+      .mocked(prisma.department.findFirst)
+      .mockResolvedValue({ id: 'dept-1' } as never);
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockResolvedValue({ departmentId: 'dept-1' } as never);
+    jest.mocked(prisma.leaveRequest.findFirst).mockResolvedValue({
+      employeeId,
+      employee: { departmentId: 'dept-1' },
+    } as never);
     listEmployeeCreditChanges.mockResolvedValue([
       { ...creditChange, balance: { leaveType: 'SIL', year: 2026 } },
     ]);
@@ -288,6 +301,63 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
       );
     },
   );
+  describe('department manager scoping', () => {
+    const managerCaller = () =>
+      router.createCaller(context(Role.DEPARTMENT_MANAGER, employeeId));
+
+    function crossDepartmentFixtures() {
+      jest
+        .mocked(prisma.employee.findFirst)
+        .mockResolvedValue({ departmentId: 'dept-other' } as never);
+      jest.mocked(prisma.leaveRequest.findFirst).mockResolvedValue({
+        employeeId,
+        employee: { departmentId: 'dept-other' },
+      } as never);
+    }
+
+    it('denies approve outside the managed department', async () => {
+      crossDepartmentFixtures();
+      await expect(
+        managerCaller().approve({ requestId }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(approveLeaveRequest).not.toHaveBeenCalled();
+    });
+
+    it('denies reject outside the managed department', async () => {
+      crossDepartmentFixtures();
+      await expect(
+        managerCaller().reject({
+          requestId,
+          rejectionReason: 'Incorrect dates for the intended request',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(rejectLeaveRequest).not.toHaveBeenCalled();
+    });
+
+    it('denies withdrawal outside the managed department', async () => {
+      crossDepartmentFixtures();
+      await expect(
+        managerCaller().withdraw({
+          requestId,
+          reason: 'Withdrawing a request from another department',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(cancelLeaveRequest).not.toHaveBeenCalled();
+    });
+
+    it('denies filing and reading outside the managed department', async () => {
+      crossDepartmentFixtures();
+      await expect(managerCaller().request(input)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      await expect(
+        managerCaller().getBalances({ employeeId, year: 2026 }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(fileLeaveRequest).not.toHaveBeenCalled();
+      expect(getEmployeeLeaveBalances).not.toHaveBeenCalled();
+    });
+  });
+
   it('allows only a linked employee self-read/self-request, never another employee record', async () => {
     const caller = router.createCaller(context(Role.EMPLOYEE, employeeId));
     await caller.getBalances({ employeeId, year: 2026 });

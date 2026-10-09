@@ -65,6 +65,7 @@ function context(role: Role | null, employeeId?: string): Context {
 describe('employee registration tRPC workflow', () => {
   const registerEmployee = jest.fn();
   const updateEmployee = jest.fn();
+  const deleteEmployee = jest.fn();
   const getRegistrationOptions = jest.fn();
   const listEmployees = jest.fn();
   const getEmployeeById = jest.fn();
@@ -75,6 +76,7 @@ describe('employee registration tRPC workflow', () => {
     {
       registerEmployee,
       updateEmployee,
+      deleteEmployee,
       getRegistrationOptions,
       listEmployees,
       getEmployeeById,
@@ -369,6 +371,96 @@ describe('employee registration tRPC workflow', () => {
         code: 'NOT_FOUND',
         message: 'Employee record not found.',
       });
+    });
+  });
+
+  describe('employee delete tRPC workflow', () => {
+    const deleteInput = { id: '33333333-3333-4333-8333-333333333333' };
+    const deleted = {
+      id: deleteInput.id,
+      employeeNumber: 'EMP-test',
+      email: input.email,
+    };
+
+    it.each([
+      null,
+      Role.EMPLOYEE,
+      Role.DEPARTMENT_MANAGER,
+      Role.PAYROLL_SPECIALIST,
+    ])('denies deletion to %s', async (role) => {
+      const caller = router.createCaller(context(role));
+      const code = role ? 'FORBIDDEN' : 'UNAUTHORIZED';
+      await expect(caller.employees.delete(deleteInput)).rejects.toMatchObject({
+        code,
+      });
+      expect(deleteEmployee).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([Role.HR_ADMIN, Role.SUPER_ADMIN])(
+      'deletes the employee and records audit for %s',
+      async (role) => {
+        deleteEmployee.mockResolvedValue(deleted);
+        const caller = router.createCaller(context(role));
+        const result = await caller.employees.delete(deleteInput);
+        expect(deleteEmployee).toHaveBeenCalledWith(
+          'org-1',
+          deleteInput.id,
+          transaction,
+        );
+        expect(record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'DELETE',
+            entityType: 'Employee',
+            entityId: deleted.id,
+            previousValue: {
+              employeeNumber: deleted.employeeNumber,
+              email: deleted.email,
+            },
+          }),
+          transaction,
+        );
+        expect(result).toEqual(deleted);
+      },
+    );
+
+    it('maps missing records to NOT_FOUND without auditing', async () => {
+      deleteEmployee.mockRejectedValue(
+        new NotFoundException('Employee not found'),
+      );
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.delete(deleteInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(record).not.toHaveBeenCalled();
+    });
+
+    it('maps guarded records to BAD_REQUEST without auditing', async () => {
+      deleteEmployee.mockRejectedValue(
+        new BadRequestException(
+          'This employee has payroll records and cannot be deleted.',
+        ),
+      );
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.delete(deleteInput),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      expect(record).not.toHaveBeenCalled();
+    });
+
+    it('maps unexpected failures without exposing database internals', async () => {
+      deleteEmployee.mockRejectedValue(new Error('private database details'));
+      await expect(
+        router
+          .createCaller(context(Role.HR_ADMIN))
+          .employees.delete(deleteInput),
+      ).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Employee deletion failed. Please retry.',
+      });
+      expect(record).not.toHaveBeenCalled();
     });
   });
 });

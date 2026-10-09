@@ -14,7 +14,11 @@ import {
   Role,
 } from '@workspace/db';
 import { z } from 'zod';
-import { findDepartmentManagerDepartmentId } from '../../infrastructure/authorization/department-scope';
+import type { AuthenticatedUser } from '../../auth/auth.service';
+import {
+  assertManagerDepartmentScope,
+  findDepartmentManagerDepartmentId,
+} from '../../infrastructure/authorization/department-scope';
 import { serializePolicy } from '../../modules/leaves/leave-policies';
 import type { RouterContext } from '../../trpc/router-context';
 import {
@@ -95,6 +99,42 @@ async function withLeaveErrors<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+async function assertManagerEmployeeScope(
+  user: AuthenticatedUser,
+  employeeId: string,
+): Promise<void> {
+  if (user.role !== Role.DEPARTMENT_MANAGER) return;
+  const target = await prisma.employee.findFirst({
+    where: { id: employeeId, organizationId: user.organizationId },
+    select: { departmentId: true },
+  });
+  if (!target) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
+  }
+  await assertManagerDepartmentScope(user, target.departmentId);
+}
+
+async function assertManagerRequestScope(
+  user: AuthenticatedUser,
+  requestId: string,
+): Promise<void> {
+  if (user.role !== Role.DEPARTMENT_MANAGER) return;
+  const target = await prisma.leaveRequest.findFirst({
+    where: {
+      id: requestId,
+      employee: { organizationId: user.organizationId },
+    },
+    select: { employee: { select: { departmentId: true } } },
+  });
+  if (!target) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Leave request not found',
+    });
+  }
+  await assertManagerDepartmentScope(user, target.employee.departmentId);
+}
+
 export function createLeavesRouter(ctx: RouterContext) {
   const { trpc, protectedProcedure, leavesService, auditService } = ctx;
   const cancellationInput = z.object({
@@ -106,8 +146,11 @@ export function createLeavesRouter(ctx: RouterContext) {
     user: Parameters<typeof assertEmployeeAccess>[0],
     req: Parameters<typeof auditService.record>[0]['request'],
     expectedStatus: 'PENDING' | 'APPROVED',
-  ) =>
-    withLeaveErrors(async () => {
+  ) => {
+    // Department managers may only withdraw requests inside their department.
+    // (Approved reversals are hrProcedure-gated, so managers never reach them.)
+    await assertManagerRequestScope(user, input.requestId);
+    return withLeaveErrors(async () => {
       const { request } = await leavesService.cancelLeaveRequest(
         {
           ...input,
@@ -160,15 +203,17 @@ export function createLeavesRouter(ctx: RouterContext) {
       );
       return serializeRequest(request);
     });
+  };
   return trpc.router({
     getBalances: protectedProcedure
       .input(z.object({ employeeId: z.string().uuid(), year: year.optional() }))
-      .query(({ input, ctx }) => {
+      .query(async ({ input, ctx }) => {
         assertEmployeeAccess(
           ctx.user,
           input.employeeId,
           TIMEKEEPING_READ_ROLES,
         );
+        await assertManagerEmployeeScope(ctx.user, input.employeeId);
         return withLeaveErrors(async () =>
           (
             await leavesService.getEmployeeLeaveBalances(
@@ -231,12 +276,13 @@ export function createLeavesRouter(ctx: RouterContext) {
 
     listCreditChanges: protectedProcedure
       .input(z.object({ employeeId: z.string().uuid(), year }))
-      .query(({ input, ctx }) => {
+      .query(async ({ input, ctx }) => {
         assertEmployeeAccess(
           ctx.user,
           input.employeeId,
           TIMEKEEPING_READ_ROLES,
         );
+        await assertManagerEmployeeScope(ctx.user, input.employeeId);
         return withLeaveErrors(async () =>
           (
             await leavesService.listEmployeeCreditChanges(
@@ -259,12 +305,13 @@ export function createLeavesRouter(ctx: RouterContext) {
           limit: z.number().int().min(1).max(200).default(100),
         }),
       )
-      .query(({ input, ctx }) => {
+      .query(async ({ input, ctx }) => {
         assertEmployeeAccess(
           ctx.user,
           input.employeeId,
           TIMEKEEPING_READ_ROLES,
         );
+        await assertManagerEmployeeScope(ctx.user, input.employeeId);
         return withLeaveErrors(async () =>
           (
             await leavesService.listEmployeeLeaveRequests(
@@ -331,12 +378,13 @@ export function createLeavesRouter(ctx: RouterContext) {
           reason: z.string().trim().min(1).max(2000),
         }),
       )
-      .mutation(({ input, ctx }) => {
+      .mutation(async ({ input, ctx }) => {
         assertEmployeeAccess(
           ctx.user,
           input.employeeId,
           TIMEKEEPING_READ_ROLES,
         );
+        await assertManagerEmployeeScope(ctx.user, input.employeeId);
         return withLeaveErrors(() =>
           prisma.$transaction(
             async (transaction) => {
@@ -373,8 +421,9 @@ export function createLeavesRouter(ctx: RouterContext) {
     approve: trpc
       .procedureForRoles(LEAVE_APPROVAL_ROLES)
       .input(z.object({ requestId: z.string().uuid() }))
-      .mutation(({ input, ctx }) =>
-        withLeaveErrors(async () => {
+      .mutation(async ({ input, ctx }) => {
+        await assertManagerRequestScope(ctx.user, input.requestId);
+        return withLeaveErrors(async () => {
           const { request } = await leavesService.approveLeaveRequest(
             input.requestId,
             ctx.user.organizationId,
@@ -395,8 +444,8 @@ export function createLeavesRouter(ctx: RouterContext) {
             ctx.user.employeeId,
           );
           return serializeRequest(request);
-        }),
-      ),
+        });
+      }),
 
     reject: trpc
       .procedureForRoles(LEAVE_APPROVAL_ROLES)
@@ -406,8 +455,9 @@ export function createLeavesRouter(ctx: RouterContext) {
           rejectionReason: z.string().trim().min(10).max(500),
         }),
       )
-      .mutation(({ input, ctx }) =>
-        withLeaveErrors(async () => {
+      .mutation(async ({ input, ctx }) => {
+        await assertManagerRequestScope(ctx.user, input.requestId);
+        return withLeaveErrors(async () => {
           const { request } = await leavesService.rejectLeaveRequest(
             input.requestId,
             ctx.user.organizationId,
@@ -426,10 +476,11 @@ export function createLeavesRouter(ctx: RouterContext) {
                 },
                 transaction,
               ),
+            ctx.user.employeeId,
           );
           return serializeRequest(request);
-        }),
-      ),
+        });
+      }),
 
     withdraw: protectedProcedure
       .input(cancellationInput)
@@ -450,12 +501,13 @@ export function createLeavesRouter(ctx: RouterContext) {
           daysToMonetize: z.number().positive().finite().optional(),
         }),
       )
-      .query(({ input, ctx }) => {
+      .query(async ({ input, ctx }) => {
         assertEmployeeAccess(
           ctx.user,
           input.employeeId,
           TIMEKEEPING_READ_ROLES,
         );
+        await assertManagerEmployeeScope(ctx.user, input.employeeId);
         return withLeaveErrors(() =>
           leavesService.calculateSilMonetization(
             input.employeeId,

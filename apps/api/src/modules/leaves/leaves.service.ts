@@ -305,6 +305,7 @@ export class LeavesService {
     rejectedById: string,
     rejectionReason: string,
     audit?: DecisionAudit,
+    rejecterEmployeeId?: string,
   ) {
     return this.runDecision(async (transaction) => {
       const previous = await transaction.leaveRequest.findFirst({
@@ -316,6 +317,13 @@ export class LeavesService {
       if (previous.status !== 'PENDING')
         throw new ConflictException(
           'Only pending leave requests can be rejected',
+        );
+      if (
+        rejecterEmployeeId !== undefined &&
+        rejecterEmployeeId === previous.employeeId
+      )
+        throw new ForbiddenException(
+          'You cannot reject your own employee leave request',
         );
       const updated = await transaction.leaveRequest.updateMany({
         where: { id: requestId, status: 'PENDING' },

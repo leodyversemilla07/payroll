@@ -449,6 +449,54 @@ export function createEmployeesRouter(ctx: RouterContext) {
         }
       }),
 
+    delete: hrProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          return await prisma.$transaction(async (transaction) => {
+            const deleted = await employeesService.deleteEmployee(
+              ctx.user.organizationId,
+              input.id,
+              transaction,
+            );
+            await auditService.record(
+              {
+                user: ctx.user,
+                request: ctx.req,
+                action: 'DELETE',
+                entityType: 'Employee',
+                entityId: deleted.id,
+                previousValue: {
+                  employeeNumber: deleted.employeeNumber,
+                  email: deleted.email,
+                },
+              },
+              transaction,
+            );
+            return deleted;
+          });
+        } catch (error) {
+          if (
+            error instanceof BadRequestException ||
+            error instanceof NotFoundException
+          ) {
+            throw new TRPCError({
+              code:
+                error instanceof NotFoundException
+                  ? 'NOT_FOUND'
+                  : 'BAD_REQUEST',
+              message: error.message,
+              cause: error,
+            });
+          }
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Employee deletion failed. Please retry.',
+            cause: error,
+          });
+        }
+      }),
+
     calculateFinalPay: hrProcedure
       .input(finalPayPreviewSchema)
       .query(async ({ input, ctx }) => {

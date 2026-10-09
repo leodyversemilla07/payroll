@@ -505,4 +505,50 @@ export class EmployeesService {
       current,
     };
   }
+
+  async deleteEmployee(
+    organizationId: string,
+    id: string,
+    client: Prisma.TransactionClient = prisma,
+  ) {
+    const existing = await client.employee.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        user: { select: { id: true } },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    if (existing.user) {
+      throw new BadRequestException(
+        'This employee is linked to a login account. Deactivate the account before deleting the record.',
+      );
+    }
+
+    const payslipCount = await client.payslip.count({
+      where: { employeeId: id },
+    });
+    if (payslipCount > 0) {
+      throw new BadRequestException(
+        'This employee has payroll records and cannot be deleted. Update the employment status instead.',
+      );
+    }
+
+    const deleted = await client.employee.delete({ where: { id } });
+    return {
+      id: deleted.id,
+      employeeNumber: deleted.employeeNumber,
+      firstName: deleted.firstName,
+      lastName: deleted.lastName,
+      email: deleted.email,
+    };
+  }
 }

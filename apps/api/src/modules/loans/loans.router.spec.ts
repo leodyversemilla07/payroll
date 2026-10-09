@@ -138,7 +138,7 @@ describe('loans.router', () => {
       expect(result).toEqual(sampleLoan);
     });
 
-    it('denies employee from viewing another employee loan', async () => {
+    it('hides other employee loans from probing as not found', async () => {
       mockLoansService.getLoanDetails.mockResolvedValue(sampleLoan);
       const caller = router.createCaller(
         context(Role.EMPLOYEE, 'org-1', 'other-emp-id'),
@@ -147,7 +147,7 @@ describe('loans.router', () => {
       await expect(
         caller.getById({ loanId: sampleLoan.id }),
       ).rejects.toMatchObject({
-        code: 'FORBIDDEN',
+        code: 'NOT_FOUND',
       });
     });
   });

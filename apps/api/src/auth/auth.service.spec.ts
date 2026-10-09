@@ -518,5 +518,30 @@ describe('AuthService MFA', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('scopes the link conflict check to the organization without leaking emails', async () => {
+      (prisma.user.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ id: 'u-1', employeeId: null })
+        .mockResolvedValueOnce({ id: 'u-2', email: 'other@example.com' });
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 'emp-1',
+      });
+
+      await expect(
+        service.linkEmployee({
+          userId: 'u-1',
+          organizationId: 'org-1',
+          employeeId: 'emp-1',
+        }),
+      ).rejects.toThrow('Employee is already linked to another user');
+      expect(prisma.user.findFirst).toHaveBeenLastCalledWith({
+        where: {
+          employeeId: 'emp-1',
+          organizationId: 'org-1',
+          NOT: { id: 'u-1' },
+        },
+        select: { id: true },
+      });
+    });
   });
 });

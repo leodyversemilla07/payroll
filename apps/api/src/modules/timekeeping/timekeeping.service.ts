@@ -17,9 +17,18 @@ import type {
 
 @Injectable()
 export class TimekeepingService {
-  async listRecentRecords(organizationId: string, limit = 50) {
+  async listRecentRecords(
+    organizationId: string,
+    limit = 50,
+    departmentId?: string,
+  ) {
     return prisma.dailyTimeRecord.findMany({
-      where: { employee: { organizationId } },
+      where: {
+        employee: {
+          organizationId,
+          ...(departmentId ? { departmentId } : {}),
+        },
+      },
       take: limit,
       include: {
         employee: {

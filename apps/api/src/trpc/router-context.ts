@@ -96,7 +96,6 @@ export interface RouterContext extends RouterServices {
   trpc: TrpcService;
   publicProcedure: TrpcService['publicProcedure'];
   protectedProcedure: TrpcService['protectedProcedure'];
-  employeeRecordProcedure: RoleProcedure;
   timekeepingReadProcedure: RoleProcedure;
   hrProcedure: RoleProcedure;
   timekeepingWriteProcedure: RoleProcedure;
@@ -115,7 +114,6 @@ export function createRouterContext(
       services.cutoffSchedulerService ?? new CutoffSchedulerService(),
     publicProcedure: trpc.publicProcedure,
     protectedProcedure: trpc.protectedProcedure,
-    employeeRecordProcedure: trpc.procedureForRoles(EMPLOYEE_RECORD_ROLES),
     timekeepingReadProcedure: trpc.procedureForRoles(TIMEKEEPING_READ_ROLES),
     hrProcedure: trpc.procedureForRoles(HR_ROLES),
     timekeepingWriteProcedure: trpc.procedureForRoles(TIMEKEEPING_WRITE_ROLES),

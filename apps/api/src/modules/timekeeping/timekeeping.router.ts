@@ -4,8 +4,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
-import { Prisma, prisma } from '@workspace/db';
+import { Prisma, prisma, Role } from '@workspace/db';
 import { z } from 'zod';
+import type { AuthenticatedUser } from '../../auth/auth.service';
+import {
+  assertManagerDepartmentScope,
+  findDepartmentManagerDepartmentId,
+} from '../../infrastructure/authorization/department-scope';
 import type { RouterContext } from '../../trpc/router-context';
 import {
   assertEmployeeAccess,
@@ -59,6 +64,21 @@ async function withTimekeepingErrors<T>(
   }
 }
 
+async function assertManagerTimekeepingScope(
+  user: AuthenticatedUser,
+  employeeId: string,
+): Promise<void> {
+  if (user.role !== Role.DEPARTMENT_MANAGER) return;
+  const target = await prisma.employee.findFirst({
+    where: { id: employeeId, organizationId: user.organizationId },
+    select: { departmentId: true },
+  });
+  if (!target) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
+  }
+  await assertManagerDepartmentScope(user, target.departmentId);
+}
+
 export function createTimekeepingRouter(ctx: RouterContext) {
   const {
     trpc,
@@ -72,24 +92,41 @@ export function createTimekeepingRouter(ctx: RouterContext) {
   return trpc.router({
     listRecent: timekeepingReadProcedure
       .input(z.object({ limit: z.number().int().min(1).max(200).optional() }))
-      .query(({ input, ctx }) =>
-        timekeepingService.listRecentRecords(
+      .query(async ({ input, ctx }) => {
+        // Department managers see only their own department's recent records.
+        let departmentId: string | undefined;
+        if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
+          departmentId =
+            (await findDepartmentManagerDepartmentId(ctx.user)) ?? undefined;
+          if (!departmentId) {
+            return [];
+          }
+        }
+        return timekeepingService.listRecentRecords(
           ctx.user.organizationId,
           input.limit,
-        ),
-      ),
+          departmentId,
+        );
+      }),
 
-    getDTR: protectedProcedure.input(dtrRangeSchema).query(({ input, ctx }) => {
-      assertEmployeeAccess(ctx.user, input.employeeId, TIMEKEEPING_READ_ROLES);
-      return withTimekeepingErrors(() =>
-        timekeepingService.getEmployeeDTR(
+    getDTR: protectedProcedure
+      .input(dtrRangeSchema)
+      .query(async ({ input, ctx }) => {
+        assertEmployeeAccess(
+          ctx.user,
           input.employeeId,
-          ctx.user.organizationId,
-          new Date(input.startDate),
-          new Date(input.endDate),
-        ),
-      );
-    }),
+          TIMEKEEPING_READ_ROLES,
+        );
+        await assertManagerTimekeepingScope(ctx.user, input.employeeId);
+        return withTimekeepingErrors(() =>
+          timekeepingService.getEmployeeDTR(
+            input.employeeId,
+            ctx.user.organizationId,
+            new Date(input.startDate),
+            new Date(input.endDate),
+          ),
+        );
+      }),
 
     getMyDTR: protectedProcedure
       .input(
@@ -126,6 +163,7 @@ export function createTimekeepingRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
+        await assertManagerTimekeepingScope(ctx.user, input.employeeId);
         const record = await timekeepingService.recordPunch(
           input.employeeId,
           ctx.user.organizationId,
@@ -145,8 +183,9 @@ export function createTimekeepingRouter(ctx: RouterContext) {
 
     adjustAttendance: timekeepingWriteProcedure
       .input(attendanceCorrectionSchema)
-      .mutation(({ input, ctx }) =>
-        withTimekeepingErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        await assertManagerTimekeepingScope(ctx.user, input.employeeId);
+        return withTimekeepingErrors(() =>
           prisma.$transaction(
             async (transaction) => {
               const { correctionReason, ...attendance } = input;
@@ -180,13 +219,22 @@ export function createTimekeepingRouter(ctx: RouterContext) {
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
-        ),
-      ),
+        );
+      }),
 
     importBiometricsCsv: timekeepingWriteProcedure
       .input(z.object({ csvContent: z.string().min(1).max(10_000_000) }))
-      .mutation(({ input, ctx }) =>
-        withTimekeepingErrors(() =>
+      .mutation(({ input, ctx }) => {
+        // Biometric imports are organization-wide and cannot be scoped to a
+        // single department, so department managers are denied outright.
+        if (ctx.user.role === Role.DEPARTMENT_MANAGER) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message:
+              'Biometric imports are restricted to payroll staff; correct attendance per employee instead',
+          });
+        }
+        return withTimekeepingErrors(() =>
           prisma.$transaction(
             async (transaction) => {
               const result = await timekeepingService.importBiometricsCsv(
@@ -215,7 +263,7 @@ export function createTimekeepingRouter(ctx: RouterContext) {
               timeout: 60_000,
             },
           ),
-        ),
-      ),
+        );
+      }),
   });
 }

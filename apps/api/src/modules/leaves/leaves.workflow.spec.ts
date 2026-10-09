@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma, prisma } from '@workspace/db';
 import { LeavesService } from './leaves.service';
 
@@ -141,6 +141,29 @@ describe('read-only leave balances and pending rejection', () => {
       request,
       transaction: database,
     });
+  });
+  it('forbids rejecting your own employee leave request', async () => {
+    const previous = {
+      id: 'request-1',
+      status: 'PENDING',
+      employeeId: 'employee-1',
+    };
+    jest
+      .mocked(prisma.leaveRequest.findFirst)
+      .mockResolvedValue(previous as never);
+    const audit = jest.fn();
+    await expect(
+      service.rejectLeaveRequest(
+        'request-1',
+        'org-1',
+        'admin-1',
+        'Request was filed with incorrect dates',
+        audit,
+        'employee-1',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.leaveRequest.updateMany).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
   });
   it('replays a rejected decision without replacing the original actor or reason', async () => {
     const request = {

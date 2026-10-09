@@ -186,13 +186,14 @@ export class AuthService {
       const existingLink = await prisma.user.findFirst({
         where: {
           employeeId: input.employeeId,
+          organizationId: input.organizationId,
           NOT: { id: user.id },
         },
-        select: { id: true, email: true },
+        select: { id: true },
       });
       if (existingLink) {
         throw new ConflictException(
-          `Employee is already linked to user ${existingLink.email}`,
+          'Employee is already linked to another user',
         );
       }
     }

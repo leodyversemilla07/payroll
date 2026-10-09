@@ -14,7 +14,11 @@ import { createTimekeepingRouter } from './timekeeping.router';
 
 jest.mock('@workspace/db', () => ({
   ...jest.requireActual('@workspace/db'),
-  prisma: { $transaction: jest.fn() },
+  prisma: {
+    $transaction: jest.fn(),
+    employee: { findFirst: jest.fn() },
+    department: { findFirst: jest.fn() },
+  },
 }));
 const input = {
   employeeId: '11111111-1111-4111-8111-111111111111',
@@ -89,6 +93,15 @@ describe('timekeeping tRPC permissions and audit', () => {
     correctAttendanceRecord.mockResolvedValue({ previous, record: saved });
     getEmployeeDTR.mockResolvedValue([]);
     listRecentRecords.mockResolvedValue([]);
+    // Default department fixtures: the manager's department ('dept-1')
+    // contains the fixture employee, so same-department manager flows keep
+    // passing; cross-department tests override per-test.
+    jest
+      .mocked(prisma.department.findFirst)
+      .mockResolvedValue({ id: 'dept-1' } as never);
+    jest
+      .mocked(prisma.employee.findFirst)
+      .mockResolvedValue({ departmentId: 'dept-1' } as never);
   });
   it.each([null, Role.EMPLOYEE])(
     'denies attendance writes to %s',
@@ -291,6 +304,61 @@ describe('timekeeping tRPC permissions and audit', () => {
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Timekeeping request failed. Please retry.',
+    });
+  });
+
+  describe('department manager scoping', () => {
+    const managerCaller = () =>
+      router.createCaller(context(Role.DEPARTMENT_MANAGER));
+
+    function crossDepartmentFixtures() {
+      jest
+        .mocked(prisma.employee.findFirst)
+        .mockResolvedValue({ departmentId: 'dept-other' } as never);
+    }
+
+    it('scopes listRecent to the managed department', async () => {
+      await router.createCaller(context(Role.DEPARTMENT_MANAGER)).listRecent({
+        limit: 10,
+      });
+      expect(listRecentRecords).toHaveBeenCalledWith('org-1', 10, 'dept-1');
+    });
+
+    it('returns no recent records when the manager has no department', async () => {
+      jest.mocked(prisma.department.findFirst).mockResolvedValue(null);
+      jest.mocked(prisma.employee.findFirst).mockResolvedValue(null);
+      const result = await router
+        .createCaller(context(Role.DEPARTMENT_MANAGER))
+        .listRecent({});
+      expect(result).toEqual([]);
+      expect(listRecentRecords).not.toHaveBeenCalled();
+    });
+
+    it('denies punch, correction and DTR reads outside the managed department', async () => {
+      crossDepartmentFixtures();
+      const caller = managerCaller();
+      await expect(
+        caller.recordPunch({ employeeId: input.employeeId, date: input.date }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await expect(caller.adjustAttendance(input)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      await expect(
+        caller.getDTR({
+          employeeId: input.employeeId,
+          startDate: input.date,
+          endDate: input.date,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(getEmployeeDTR).not.toHaveBeenCalled();
+      expect(correctAttendanceRecord).not.toHaveBeenCalled();
+    });
+
+    it('denies biometric CSV import to department managers', async () => {
+      await expect(
+        managerCaller().importBiometricsCsv({ csvContent: 'test,csv' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(importBiometricsCsv).not.toHaveBeenCalled();
     });
   });
 

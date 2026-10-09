@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { RouterContext } from '../../trpc/router-context';
 import { assertEmployeeAccess, PAYROLL_ROLES } from '../../trpc/router-context';
@@ -56,7 +57,19 @@ export function createLoansRouter(ctx: RouterContext) {
           input.loanId,
           ctx.user.organizationId,
         );
-        assertEmployeeAccess(ctx.user, loan.employeeId, PAYROLL_ROLES);
+        try {
+          assertEmployeeAccess(ctx.user, loan.employeeId, PAYROLL_ROLES);
+        } catch (error) {
+          // Return NOT_FOUND instead of FORBIDDEN so non-owners cannot probe
+          // for the existence of other employees' loans.
+          if (error instanceof TRPCError && error.code === 'FORBIDDEN') {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Loan not found',
+            });
+          }
+          throw error;
+        }
         return loan;
       }),
 
