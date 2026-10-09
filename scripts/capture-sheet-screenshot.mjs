@@ -1,5 +1,7 @@
 import pkg from "../apps/web/node_modules/@playwright/test/index.js";
+
 const { chromium } = pkg;
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
