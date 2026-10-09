@@ -29,7 +29,7 @@ const mockEmployees = [
   },
 ];
 
-async function mockPoliciesPortal(
+async function mockPolicies(
   page: Page,
   options: {
     role?: string;
@@ -258,7 +258,7 @@ async function mockPoliciesPortal(
 test("HR_ADMIN views leave policies, creates a new VACATION policy, and sees it in table", async ({
   page,
 }) => {
-  const state = await mockPoliciesPortal(page);
+  const state = await mockPolicies(page);
 
   const section = page.getByRole("region", {
     name: "Leave policies and accrual",
@@ -314,7 +314,7 @@ test("HR_ADMIN views leave policies, creates a new VACATION policy, and sees it 
 });
 
 test("HR_ADMIN edits and deletes a leave policy", async ({ page }) => {
-  const state = await mockPoliciesPortal(page);
+  const state = await mockPolicies(page);
 
   const section = page.getByRole("region", {
     name: "Leave policies and accrual",
@@ -361,7 +361,7 @@ test("HR_ADMIN edits and deletes a leave policy", async ({ page }) => {
 test("HR_ADMIN previews accrual with dryRun and executes accrual", async ({
   page,
 }) => {
-  const state = await mockPoliciesPortal(page);
+  const state = await mockPolicies(page);
 
   const section = page.getByRole("region", {
     name: "Leave policies and accrual",
@@ -417,7 +417,7 @@ test("HR_ADMIN previews accrual with dryRun and executes accrual", async ({
 test("HR_ADMIN previews carryover with dryRun and executes carryover", async ({
   page,
 }) => {
-  const state = await mockPoliciesPortal(page);
+  const state = await mockPolicies(page);
 
   const section = page.getByRole("region", {
     name: "Leave policies and accrual",
@@ -473,7 +473,7 @@ test("HR_ADMIN previews carryover with dryRun and executes carryover", async ({
 test("PAYROLL_SPECIALIST can view policies but cannot see management buttons", async ({
   page,
 }) => {
-  await mockPoliciesPortal(page, { role: "PAYROLL_SPECIALIST" });
+  await mockPolicies(page, { role: "PAYROLL_SPECIALIST" });
 
   const section = page.getByRole("region", {
     name: "Leave policies and accrual",

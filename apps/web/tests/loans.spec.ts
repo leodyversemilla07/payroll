@@ -68,7 +68,7 @@ function apiError(code: string, message: string) {
   };
 }
 
-async function mockLoansPortal(
+async function mockLoans(
   page: Page,
   options: {
     role?: string;
@@ -290,7 +290,7 @@ async function mockLoansPortal(
 
 test.describe("Loans & Amortization Management", () => {
   test("displays KPI metrics and loans list for staff", async ({ page }) => {
-    await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
+    await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
 
     // Navigate to /loans
     await page.goto("/loans");
@@ -316,7 +316,7 @@ test.describe("Loans & Amortization Management", () => {
   test("dashboard 'Active Loans' card links directly to /loans", async ({
     page,
   }) => {
-    await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
+    await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/overview");
 
     // On overview page
@@ -331,7 +331,7 @@ test.describe("Loans & Amortization Management", () => {
   test("opens Create Loan modal, previews schedule, and cancels", async ({
     page,
   }) => {
-    await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
+    await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/loans");
 
     // Click "Create Loan"
@@ -360,7 +360,7 @@ test.describe("Loans & Amortization Management", () => {
   test("opens Loan Details & Ledger modal with payment history", async ({
     page,
   }) => {
-    await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
+    await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/loans");
 
     // Click "Ledger"
@@ -380,7 +380,7 @@ test.describe("Loans & Amortization Management", () => {
   test("records direct settlement payment outside payroll", async ({
     page,
   }) => {
-    await mockLoansPortal(page, { role: "PAYROLL_SPECIALIST" });
+    await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/loans");
 
     // Click "Pay" quick action
@@ -405,7 +405,7 @@ test.describe("Loans & Amortization Management", () => {
   test("employee sees My Loans & Cash Advances in My Profile", async ({
     page,
   }) => {
-    await mockLoansPortal(page, {
+    await mockLoans(page, {
       role: "EMPLOYEE",
       employeeId: "emp-1",
     });
@@ -431,7 +431,7 @@ test.describe("Loans & Amortization Management", () => {
   test("employee is restricted from accessing staff /loans", async ({
     page,
   }) => {
-    await mockLoansPortal(page, {
+    await mockLoans(page, {
       role: "EMPLOYEE",
       employeeId: "emp-1",
     });

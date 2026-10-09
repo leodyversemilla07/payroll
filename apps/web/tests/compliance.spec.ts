@@ -407,7 +407,7 @@ test("issue and void a 2316 certificate", async ({ page }) => {
   expect(mutations).toContain("compliance.voidBir2316Issuance");
 });
 
-async function mockReviewPortal(
+async function mockReview(
   page: Page,
   options: { own?: boolean; role?: string; freshness?: string } = {},
 ) {
@@ -499,7 +499,7 @@ async function mockReviewPortal(
 test("signed-in reviewer compares the original and proposal before publishing", async ({
   page,
 }) => {
-  await mockReviewPortal(page);
+  await mockReview(page);
   const review = page.getByRole("region", {
     name: "Tax correction review",
     exact: true,
@@ -534,7 +534,7 @@ test("signed-in reviewer compares the original and proposal before publishing", 
 test("requester cannot approve their own proposal in the UI", async ({
   page,
 }) => {
-  await mockReviewPortal(page, { own: true });
+  await mockReview(page, { own: true });
   const review = page.getByRole("region", {
     name: "Tax correction review",
     exact: true,
@@ -552,7 +552,7 @@ test("requester cannot approve their own proposal in the UI", async ({
 test("payroll specialist sees the proposal but cannot attest HR review", async ({
   page,
 }) => {
-  await mockReviewPortal(page, { role: "PAYROLL_SPECIALIST" });
+  await mockReview(page, { role: "PAYROLL_SPECIALIST" });
   const review = page.getByRole("region", {
     name: "Tax correction review",
     exact: true,
@@ -567,7 +567,7 @@ for (const freshness of ["STALE", "UNVERIFIABLE"]) {
   test(`warns about ${freshness} certificate without offering a duplicate issuance`, async ({
     page,
   }) => {
-    await mockReviewPortal(page, { freshness });
+    await mockReview(page, { freshness });
     const yearEnd = page.getByRole("region", {
       name: "Year-end tax",
       exact: true,

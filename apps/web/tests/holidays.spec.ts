@@ -18,7 +18,7 @@ function apiError(code: string, message: string) {
   };
 }
 
-async function mockHolidaysPortal(
+async function mockHolidays(
   page: Page,
   options: {
     role?: string;
@@ -169,7 +169,7 @@ async function mockHolidaysPortal(
 test("HR_ADMIN views holiday list, creates new holiday, and sees it in table", async ({
   page,
 }) => {
-  const state = await mockHolidaysPortal(page);
+  const state = await mockHolidays(page);
 
   const section = page.getByRole("region", {
     name: "Holiday calendar",
@@ -227,7 +227,7 @@ test("HR_ADMIN views holiday list, creates new holiday, and sees it in table", a
 });
 
 test("HR_ADMIN edits and deletes a holiday", async ({ page }) => {
-  const state = await mockHolidaysPortal(page);
+  const state = await mockHolidays(page);
 
   const section = page.getByRole("region", {
     name: "Holiday calendar",
@@ -285,7 +285,7 @@ test("HR_ADMIN edits and deletes a holiday", async ({ page }) => {
 test("HR_ADMIN auto-populates Philippine statutory presets", async ({
   page,
 }) => {
-  const state = await mockHolidaysPortal(page, { initialHolidays: [] });
+  const state = await mockHolidays(page, { initialHolidays: [] });
 
   const section = page.getByRole("region", {
     name: "Holiday calendar",
@@ -315,7 +315,7 @@ test("HR_ADMIN auto-populates Philippine statutory presets", async ({
 test("PAYROLL_SPECIALIST can view holidays in read-only mode without edit or add controls", async ({
   page,
 }) => {
-  await mockHolidaysPortal(page, { role: "PAYROLL_SPECIALIST" });
+  await mockHolidays(page, { role: "PAYROLL_SPECIALIST" });
 
   const section = page.getByRole("region", {
     name: "Holiday calendar",

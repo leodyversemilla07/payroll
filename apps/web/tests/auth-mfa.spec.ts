@@ -175,7 +175,7 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
     await page.fill("#mfaCode", "123456");
     await page.click('button[type="submit"]:has-text("Verify and Login")');
 
-    // 6. Successfully authenticated into portal
+    // 6. Successfully authenticated into workspace
     await expect(page).toHaveURL(/\/overview/);
   });
 

@@ -46,7 +46,7 @@ const destinations = [
   },
 ];
 
-async function portal(page: Page, role = "HR_ADMIN", login = true) {
+async function workspace(page: Page, role = "HR_ADMIN", login = true) {
   let signedIn = false;
   const requests: string[] = [];
   const mutations: string[] = [];
@@ -130,7 +130,7 @@ test("sidebar routes replace page content, share the layout and preserve history
 }) => {
   const exceptions: string[] = [];
   page.on("pageerror", (error) => exceptions.push(error.message));
-  const { mutations, requests } = await portal(page);
+  const { mutations, requests } = await workspace(page);
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
   await expect(nav).toBeVisible();
   await expect(
@@ -146,7 +146,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   await page.evaluate(() =>
     Reflect.set(
       window,
-      "testPortalSidebar",
+      "testWorkspaceSidebar",
       document.querySelector('[data-slot="sidebar-container"]'),
     ),
   );
@@ -179,7 +179,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   expect(
     await page.evaluate(
       () =>
-        Reflect.get(window, "testPortalSidebar") ===
+        Reflect.get(window, "testWorkspaceSidebar") ===
         document.querySelector('[data-slot="sidebar-container"]'),
     ),
   ).toBe(true);
@@ -287,7 +287,7 @@ test("sidebar profile dropdown navigates to account settings and signs out", asy
 }) => {
   const exceptions: string[] = [];
   page.on("pageerror", (error) => exceptions.push(error.message));
-  await portal(page);
+  await workspace(page);
 
   const accountButton = page.getByRole("button", {
     name: "Account: Sidebar Tester",
@@ -345,7 +345,7 @@ test("mobile sidebar closes on navigation, Escape and the explicit close control
   await page.setViewportSize({ width: 390, height: 844 });
   const exceptions: string[] = [];
   page.on("pageerror", (error) => exceptions.push(error.message));
-  await portal(page);
+  await workspace(page);
   const toggle = page.getByRole("button", {
     name: "Toggle navigation",
     exact: true,
@@ -386,7 +386,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   }) => {
     await page.emulateMedia({ colorScheme });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await portal(page);
+    await workspace(page);
     if (colorScheme === "dark")
       await expect(page.locator("html")).toHaveClass(/dark/);
     else await expect(page.locator("html")).not.toHaveClass(/dark/);
@@ -514,7 +514,7 @@ for (const role of ["UNASSIGNED", "ANONYMOUS"]) {
   test(`${role} cannot see staff sidebar destinations or fetch staff lists`, async ({
     page,
   }) => {
-    const { requests } = await portal(page, role);
+    const { requests } = await workspace(page, role);
     for (const { href } of destinations) {
       await page.goto(href);
       await expect(page.getByText("No staff records available")).toBeVisible();
@@ -535,7 +535,7 @@ for (const role of ["UNASSIGNED", "ANONYMOUS"]) {
 test("anonymous direct page access redirects to sign-in without staff reads", async ({
   page,
 }) => {
-  const { requests } = await portal(page, "HR_ADMIN", false);
+  const { requests } = await workspace(page, "HR_ADMIN", false);
   for (const { href } of destinations) {
     await page.goto(href);
     await expect(
@@ -557,7 +557,7 @@ for (const destination of destinations) {
   test(`direct load and reload of ${destination.href} renders only that page`, async ({
     page,
   }) => {
-    const { requests } = await portal(page);
+    const { requests } = await workspace(page);
     requests.length = 0;
     for (const reload of [false, true]) {
       if (reload) await page.reload();

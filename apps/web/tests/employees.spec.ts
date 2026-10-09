@@ -56,7 +56,7 @@ function apiError(code: string, message: string) {
   };
 }
 
-async function mockPortal(
+async function mockWorkspace(
   page: Page,
   options: {
     role?: string;
@@ -321,7 +321,10 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
   const blocked = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const state = await mockPortal(page, { empty: true, blockCreate: blocked });
+  const state = await mockWorkspace(page, {
+    empty: true,
+    blockCreate: blocked,
+  });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = page.getByRole("region", {
     name: "Create employee",
@@ -411,7 +414,7 @@ test("HR creates an employee with explicit choices and sees the saved profile", 
 test("creation conflict keeps the form entries and allows a corrected retry", async ({
   page,
 }) => {
-  const state = await mockPortal(page, { createFailures: 1 });
+  const state = await mockWorkspace(page, { createFailures: 1 });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = await fillEmployee(page);
   await form
@@ -437,7 +440,7 @@ test("creation conflict keeps the form entries and allows a corrected retry", as
 test("branch and department loading errors have a working retry", async ({
   page,
 }) => {
-  await mockPortal(page, { optionsFailures: 1 });
+  await mockWorkspace(page, { optionsFailures: 1 });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = page.getByRole("region", {
     name: "Create employee",
@@ -455,7 +458,7 @@ test("branch and department loading errors have a working retry", async ({
 test("missing organization setup blocks creation instead of guessing defaults", async ({
   page,
 }) => {
-  const state = await mockPortal(page, { noStructure: true });
+  const state = await mockWorkspace(page, { noStructure: true });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = page.getByRole("region", {
     name: "Create employee",
@@ -473,7 +476,7 @@ test("missing organization setup blocks creation instead of guessing defaults", 
 test("payroll specialists can read profiles but cannot open HR creation", async ({
   page,
 }) => {
-  const state = await mockPortal(page, {
+  const state = await mockWorkspace(page, {
     role: "PAYROLL_SPECIALIST",
     detailFailures: 1,
   });
@@ -502,7 +505,7 @@ test("payroll specialists can read profiles but cannot open HR creation", async 
 test("inaccessible employee detail is not presented as an empty payroll profile", async ({
   page,
 }) => {
-  await mockPortal(page, { missingDetails: true });
+  await mockWorkspace(page, { missingDetails: true });
   await page
     .getByRole("region", { name: "Employees", exact: true })
     .getByRole("button", { name: /Ana Santos/ })
@@ -516,7 +519,7 @@ test("employee profiles and the creation form fit a mobile viewport", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await mockPortal(page, { longReference: true });
+  await mockWorkspace(page, { longReference: true });
   await page
     .getByRole("region", { name: "Employees", exact: true })
     .getByRole("button", { name: /Ana Santos/ })
@@ -541,7 +544,7 @@ test("employee profiles and the creation form fit a mobile viewport", async ({
 test("HR edits an existing employee profile and sees updated details", async ({
   page,
 }) => {
-  const state = await mockPortal(page);
+  const state = await mockWorkspace(page);
   await page
     .getByRole("region", { name: "Employees", exact: true })
     .getByRole("button", { name: /Ana Santos/ })
@@ -582,7 +585,7 @@ test("HR edits an existing employee profile and sees updated details", async ({
 test("HR opens the edit form directly from the row actions menu", async ({
   page,
 }) => {
-  await mockPortal(page);
+  await mockWorkspace(page);
   const section = page.getByRole("region", {
     name: "Employees",
     exact: true,
@@ -604,7 +607,7 @@ test("HR opens the edit form directly from the row actions menu", async ({
 });
 
 test("HR deletes an employee from the row actions menu", async ({ page }) => {
-  const state = await mockPortal(page);
+  const state = await mockWorkspace(page);
   const section = page.getByRole("region", {
     name: "Employees",
     exact: true,
@@ -635,7 +638,7 @@ test("HR deletes an employee from the row actions menu", async ({ page }) => {
 test("HR creates a daily-paid employee and views computed rates", async ({
   page,
 }) => {
-  const state = await mockPortal(page, { empty: true });
+  const state = await mockWorkspace(page, { empty: true });
   await page.getByRole("button", { name: "Add employee" }).click();
   const form = await fillEmployee(page);
   await form.getByLabel("Pay basis", { exact: true }).click();
@@ -667,7 +670,7 @@ test("HR creates a daily-paid employee and views computed rates", async ({
 });
 
 test("HR updates an employee pay basis to HOURLY", async ({ page }) => {
-  const state = await mockPortal(page);
+  const state = await mockWorkspace(page);
   await page
     .getByRole("region", { name: "Employees", exact: true })
     .getByRole("button", { name: /Ana Santos/ })
@@ -695,7 +698,7 @@ test("HR updates an employee pay basis to HOURLY", async ({ page }) => {
 
 for (const role of ["EMPLOYEE", "DEPARTMENT_MANAGER"]) {
   test(`${role} cannot open staff employee management`, async ({ page }) => {
-    const state = await mockPortal(page, { role });
+    const state = await mockWorkspace(page, { role });
     expect(state.requests).not.toContain("employees.list");
     expect(state.requests).not.toContain("employees.getRegistrationOptions");
     await expect(

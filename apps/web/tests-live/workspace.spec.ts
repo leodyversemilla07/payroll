@@ -5,7 +5,7 @@ import { hashPassword } from "../../api/src/auth/password";
 
 // No request interception or mocked services: UI -> HTTP tRPC -> PostgreSQL.
 // Only organization setup and staff accounts are provisioned outside the UI.
-test("real portal persists onboarding, attendance, leave and maker-checker payroll", async ({
+test("real workspace persists onboarding, attendance, leave and maker-checker payroll", async ({
   page,
 }) => {
   const tag = randomUUID();
