@@ -1,8 +1,10 @@
 import pkg from "../apps/web/node_modules/@playwright/test/index.js";
+
 const { chromium } = pkg;
-import path from "node:path";
-import fs from "node:fs";
+
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
