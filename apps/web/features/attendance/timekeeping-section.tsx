@@ -4,13 +4,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card";
+import { Card, CardContent } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
   Empty,
@@ -37,6 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   Table,
@@ -567,27 +568,6 @@ export function TimekeepingSection({
                                   )}
                                 </TableCell>
                               </TableRow>
-                              {editing?.record?.id === record.id && (
-                                <TableRow key={`${record.id}-editor`}>
-                                  <TableCell colSpan={9}>
-                                    <AttendanceEditor
-                                      key={`${range.employeeId}:${editing.record?.id ?? "new"}`}
-                                      range={range}
-                                      record={editing.record}
-                                      onBusyChange={setSaving}
-                                      onCancel={() => setEditing(null)}
-                                      onReload={() => {
-                                        setEditing(null);
-                                        void dtr.refetch();
-                                      }}
-                                      onSaved={(recordDate) => {
-                                        setEditing(null);
-                                        setSavedDate(recordDate);
-                                      }}
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              )}
                             </Fragment>
                           ))}
                         </TableBody>
@@ -602,23 +582,35 @@ export function TimekeepingSection({
                   )}
                 </div>
               )}
-              {editing && !editing.record && (
-                <AttendanceEditor
-                  key={`${range.employeeId}:new`}
-                  range={range}
-                  record={editing.record}
-                  onBusyChange={setSaving}
-                  onCancel={() => setEditing(null)}
-                  onReload={() => {
-                    setEditing(null);
-                    void dtr.refetch();
-                  }}
-                  onSaved={(recordDate) => {
-                    setEditing(null);
-                    setSavedDate(recordDate);
-                  }}
-                />
-              )}
+              <Sheet
+                open={!!editing}
+                onOpenChange={(open) => {
+                  if (!open && !saving) setEditing(null);
+                }}
+              >
+                <SheetContent
+                  side="right"
+                  className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
+                >
+                  {editing && (
+                    <AttendanceEditor
+                      key={`${range.employeeId}:${editing.record?.id ?? "new"}`}
+                      range={range}
+                      record={editing.record}
+                      onBusyChange={setSaving}
+                      onCancel={() => setEditing(null)}
+                      onReload={() => {
+                        setEditing(null);
+                        void dtr.refetch();
+                      }}
+                      onSaved={(recordDate) => {
+                        setEditing(null);
+                        setSavedDate(recordDate);
+                      }}
+                    />
+                  )}
+                </SheetContent>
+              </Sheet>
             </div>
           )}
         </CardContent>
@@ -751,18 +743,21 @@ function AttendanceEditor({
   }
 
   return (
-    <Card role="region" aria-label="Attendance correction">
-      <CardHeader>
-        <CardTitle>
+    <>
+      <SheetHeader>
+        <SheetTitle>
           {original ? "Correct attendance" : "Add attendance record"}
-        </CardTitle>
-        <CardDescription>
+        </SheetTitle>
+        <SheetDescription>
           Manual, audited entry. Enter verified minute totals, not a presumed
           full shift. Blank punches clear both stored times. New entries start
           unapproved.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </SheetDescription>
+      </SheetHeader>
+      <section
+        aria-label="Attendance correction"
+        className="min-h-0 flex-1 overflow-y-auto px-6 pb-6"
+      >
         <form onSubmit={submit}>
           <FieldGroup>
             <FieldSet disabled={correct.isPending}>
@@ -933,7 +928,7 @@ function AttendanceEditor({
             </div>
           </FieldGroup>
         </form>
-      </CardContent>
-    </Card>
+      </section>
+    </>
   );
 }

@@ -259,7 +259,7 @@ test("review queue filters to attention items and clears after approval", async 
   const row = section.getByRole("row", { name: /2026-09-10/ });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: /Correct attendance/ }).click();
-  const editor = section.getByRole("region", { name: "Attendance correction" });
+  const editor = page.getByRole("region", { name: "Attendance correction" });
   await expect(editor).toBeVisible();
   await editor
     .getByLabel("Correction reason")
@@ -345,7 +345,9 @@ test("load and correct DTR using Manila punches, explicit totals and the loaded 
   await expect(
     editor.getByRole("button", { name: "Saving attendance…" }),
   ).toBeDisabled();
-  await expect(section.getByLabel("DTR employee")).toBeDisabled();
+  // The open sheet makes the background inert, so assert the filter lock
+  // by id rather than through the accessibility tree.
+  await expect(page.locator("#dtr-employee")).toBeDisabled();
   await expect(
     editor.getByRole("button", { name: "Cancel attendance correction" }),
   ).toBeDisabled();
@@ -534,9 +536,15 @@ test("background refresh errors and save errors preserve an attendance draft", a
   await page.evaluate(() =>
     window.dispatchEvent(new Event("visibilitychange")),
   );
-  await expect(
-    section.getByRole("alert").filter({ hasText: "DTR refresh failed" }),
-  ).toBeVisible();
+  // The open correction sheet inerts the background, so assert the refresh
+  // alert through the DOM rather than the accessibility tree.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.body.textContent?.includes("DTR refresh failed"),
+      ),
+    )
+    .toBe(true);
   await expect(editor.getByLabel("Correction reason")).toHaveValue(
     "Verified draft that must survive a background error",
   );
