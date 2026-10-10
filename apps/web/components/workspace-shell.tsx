@@ -124,14 +124,14 @@ export function WorkspaceShell({
                 <Breadcrumb className="min-w-0">
                   <BreadcrumbList className="flex-nowrap">
                     <BreadcrumbItem className="hidden md:inline-flex">
-                      <BreadcrumbLink render={<Link href="/overview" />}>
+                      <BreadcrumbLink render={<Link href="/dashboard" />}>
                         Payroll
                       </BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator className="hidden md:block" />
                     <BreadcrumbItem className="min-w-0">
                       <BreadcrumbPage className="truncate">
-                        {isEmployee && activeSection.id === "overview"
+                        {isEmployee && activeSection.id === "dashboard"
                           ? "Dashboard"
                           : activeSection.label}
                       </BreadcrumbPage>

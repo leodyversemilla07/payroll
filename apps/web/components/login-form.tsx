@@ -63,7 +63,7 @@ export function LoginForm() {
       queryClient.clear();
       saveEmailDraft("");
       setEmailDraft("");
-      await router.push("/overview");
+      await router.push("/dashboard");
     },
   });
 
@@ -72,7 +72,7 @@ export function LoginForm() {
       queryClient.clear();
       saveEmailDraft("");
       setEmailDraft("");
-      await router.push("/overview");
+      await router.push("/dashboard");
     },
   });
 
@@ -95,7 +95,7 @@ export function LoginForm() {
     // its UNAUTHORIZED error. Cached identity alone must not redirect back
     // into the workspace and create a sign-in/workspace navigation loop.
     if (me.isSuccess && me.data) {
-      void router.replace("/overview");
+      void router.replace("/dashboard");
     }
   }, [me.data, me.isSuccess, router]);
 

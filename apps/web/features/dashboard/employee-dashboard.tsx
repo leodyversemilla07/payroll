@@ -156,7 +156,7 @@ export function EmployeeDashboard({
     )[0];
 
   return (
-    <section className="flex flex-col gap-6" aria-label="Employee overview">
+    <section className="flex flex-col gap-6" aria-label="Employee dashboard">
       <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-primary/[0.02] to-background">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">

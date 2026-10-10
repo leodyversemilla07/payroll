@@ -18,8 +18,8 @@ import { usePathname } from "next/navigation";
 
 export const workspaceSections = [
   {
-    id: "overview",
-    href: "/overview",
+    id: "dashboard",
+    href: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
     description:
@@ -123,7 +123,7 @@ export const navigationGroups = [
   {
     label: "Workspace",
     items: [
-      sectionMap.overview,
+      sectionMap.dashboard,
       sectionMap.employees,
       sectionMap.attendance,
       sectionMap.leaves,
@@ -143,7 +143,7 @@ export const navigationGroups = [
 
 export const SECTION_PERMISSIONS: Record<WorkspaceSection, readonly string[]> =
   {
-    overview: [
+    dashboard: [
       "SUPER_ADMIN",
       "HR_ADMIN",
       "PAYROLL_SPECIALIST",
@@ -215,8 +215,8 @@ export function getNavigationGroupsForRole(role?: string) {
         label: "Self-service",
         items: [
           {
-            id: "overview" as const,
-            href: "/overview",
+            id: "dashboard" as const,
+            href: "/dashboard",
             label: "Dashboard",
             icon: LayoutDashboard,
             description:
@@ -235,7 +235,7 @@ export function getNavigationGroupsForRole(role?: string) {
         // NOTE: employees/attendance are intentionally omitted: SECTION_PERMISSIONS
         // denies DEPARTMENT_MANAGER on those sections, so linking them would
         // only land on "Access Restricted".
-        items: [sectionMap.overview, sectionMap.leaves, sectionMap.holidays],
+        items: [sectionMap.dashboard, sectionMap.leaves, sectionMap.holidays],
       },
     ];
   }

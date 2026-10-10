@@ -27,7 +27,7 @@ export function SectionHeader({ sectionId }: { sectionId: WorkspaceSection }) {
     workspaceSections[0];
   const title = section.label;
   const description =
-    isEmployee && sectionId === "overview"
+    isEmployee && sectionId === "dashboard"
       ? EMPLOYEE_OVERVIEW_DESCRIPTION
       : section.description;
 
@@ -78,7 +78,7 @@ export function SectionGate({
           administrator or HR department.
         </p>
         <Link
-          href="/overview"
+          href="/dashboard"
           className={buttonVariants({ variant: "default" })}
         >
           Return to Dashboard

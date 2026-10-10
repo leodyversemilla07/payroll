@@ -276,7 +276,7 @@ test("removed demo returns 404 and sign-in has no demo link", async ({
   await expect(page.locator('a[href="/demo"]')).toHaveCount(0);
 });
 
-test("overview page displays error banner when dashboard metrics fail to load and recovers on retry", async ({
+test("dashboard page displays error banner when dashboard metrics fail to load and recovers on retry", async ({
   page,
 }) => {
   let failDashboard = true;
@@ -348,7 +348,7 @@ test("overview page displays error banner when dashboard metrics fail to load an
     0,
   );
 
-  // Retry loading overview
+  // Retry loading dashboard
   failDashboard = false;
   await page.getByRole("button", { name: "Retry" }).click();
 
@@ -360,4 +360,43 @@ test("overview page displays error banner when dashboard metrics fail to load an
     page.getByRole("region", { name: "Needs attention" }),
   ).toBeVisible();
   await expect(page.getByText("1 run awaiting approval")).toBeVisible();
+});
+
+test("legacy /overview URL redirects to /dashboard", async ({ page }) => {
+  let signedIn = false;
+  await page.route("**/trpc/**", async (route) => {
+    const paths = (
+      new URL(route.request().url()).pathname.split("/trpc/")[1] ?? ""
+    ).split(",");
+    const results = paths.map((path) => {
+      if (path === "auth.login") {
+        signedIn = true;
+        return { result: { data: { json: { user } } } };
+      }
+      if (path === "auth.me") {
+        return { result: { data: { json: signedIn ? user : null } } };
+      }
+      if (path === "dashboard.getOverview") {
+        return { result: { data: { json: overviewData } } };
+      }
+      return { result: { data: { json: null } } };
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(paths.length === 1 ? results[0] : results),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("staff@example.com");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await page.goto("/overview");
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
+  ).toBeVisible();
 });

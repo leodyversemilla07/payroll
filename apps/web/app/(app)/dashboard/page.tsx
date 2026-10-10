@@ -6,8 +6,8 @@ import { DashboardSection } from "@/features/dashboard/dashboard-section";
 export default function DashboardPage() {
   return (
     <>
-      <SectionHeader sectionId="overview" />
-      <SectionGate sectionId="overview">
+      <SectionHeader sectionId="dashboard" />
+      <SectionGate sectionId="dashboard">
         <DashboardSection />
       </SectionGate>
     </>

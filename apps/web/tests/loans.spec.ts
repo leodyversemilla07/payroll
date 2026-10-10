@@ -317,9 +317,9 @@ test.describe("Loans & Amortization Management", () => {
     page,
   }) => {
     await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
-    await page.goto("/overview");
+    await page.goto("/dashboard");
 
-    // On overview page
+    // On dashboard page
     const loansCardLink = page.getByRole("link", {
       name: /Manage loans & advances/i,
     });

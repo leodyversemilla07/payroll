@@ -652,7 +652,7 @@ test("employee role shows self-service navigation, not admin sections", async ({
 }) => {
   await setupAndLogin(page, employeeUser);
 
-  // Employee overview should render (not the full dashboard)
+  // Employee dashboard should render (not the full dashboard)
   await expect(page.getByText("Welcome, Maria Santos!")).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });

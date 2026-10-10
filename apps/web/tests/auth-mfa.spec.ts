@@ -176,7 +176,7 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
     await page.click('button[type="submit"]:has-text("Verify and Login")');
 
     // 6. Successfully authenticated into workspace
-    await expect(page).toHaveURL(/\/overview/);
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 
   test("allows setup of MFA and generates backup codes in My Profile", async ({
@@ -298,7 +298,7 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
     await page.fill("#email", "maria@example.com");
     await page.fill("#password", "Password123456!");
     await page.click('button[type="submit"]:has-text("Login")');
-    await expect(page).toHaveURL(/\/overview/);
+    await expect(page).toHaveURL(/\/dashboard/);
 
     // Navigate to Security
     await page.goto("/security");

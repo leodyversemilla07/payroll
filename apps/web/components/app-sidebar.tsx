@@ -47,7 +47,7 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center justify-between">
             <SidebarMenuButton
-              render={<Link href="/overview" />}
+              render={<Link href="/dashboard" />}
               size="lg"
               tooltip="Payroll workspace"
               aria-label="Payroll workspace"

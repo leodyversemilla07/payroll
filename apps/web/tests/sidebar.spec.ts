@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 const destinations = [
-  { label: "Dashboard", href: "/overview", region: null, query: null },
+  { label: "Dashboard", href: "/dashboard", region: null, query: null },
   {
     label: "Employees",
     href: "/employees",
