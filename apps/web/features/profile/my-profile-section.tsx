@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@workspace/ui/components/badge";
-import { Button, buttonVariants } from "@workspace/ui/components/button";
+import { Button } from "@workspace/ui/components/button";
 import {
   Card,
   CardContent,
@@ -44,16 +44,13 @@ import {
   EyeOff,
   FileText,
   Landmark,
-  LayoutDashboard,
   Link as LinkIcon,
   Loader2,
   Shield,
   ShieldAlert,
   User,
-  Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { useWorkspaceUser } from "@/components/user-context";
 import { LOAN_TYPE_LABELS } from "@/features/loans/loans-section";
@@ -379,39 +376,6 @@ export function MyProfileSection() {
                   payslips are only generated for staff enrolled as employees in
                   the payroll system.
                 </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Link
-                  href="/employees"
-                  className={buttonVariants({
-                    variant: "default",
-                    size: "sm",
-                  })}
-                >
-                  <Users className="mr-2 size-4" />
-                  Employee Directory
-                </Link>
-                <Link
-                  href="/payroll-runs"
-                  className={buttonVariants({
-                    variant: "outline",
-                    size: "sm",
-                  })}
-                >
-                  <Banknote className="mr-2 size-4" />
-                  Payroll Operations
-                </Link>
-                <Link
-                  href="/overview"
-                  className={buttonVariants({
-                    variant: "outline",
-                    size: "sm",
-                  })}
-                >
-                  <LayoutDashboard className="mr-2 size-4" />
-                  Workspace Overview
-                </Link>
               </div>
 
               {canManageEmployees &&

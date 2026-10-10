@@ -822,9 +822,16 @@ test("unlinked administrator visiting my-profile sees administrative card and MF
     page.getByRole("heading", { name: "System Administrator" }),
   ).toBeVisible();
   await expect(page.getByText("Administrative System Account")).toBeVisible();
+  // Sidebar owns navigation; the admin card carries no duplicate shortcuts.
   await expect(
     page.getByRole("link", { name: "Employee Directory" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Payroll Operations" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Workspace Overview" }),
+  ).toHaveCount(0);
 
   await page.goto("/security");
   await expect(
