@@ -109,16 +109,6 @@ export function LeavesSection({
   );
   return (
     <Card role="region" aria-label="Leave management">
-      <CardHeader>
-        <CardTitle role="heading" aria-level={2}>
-          Leave management
-        </CardTitle>
-        <CardDescription>
-          Recorded balances, requests and decisions. Reading a balance never
-          grants leave credits. Company policy and statutory eligibility still
-          require verification.
-        </CardDescription>
-      </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={load}>
           <FieldSet disabled={busy || editorOpen}>
