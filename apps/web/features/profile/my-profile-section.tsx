@@ -844,7 +844,7 @@ export function MyProfileSection() {
 
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <Field>
-                      <FieldLabel>Leave Type</FieldLabel>
+                      <FieldLabel htmlFor="leave-type">Leave Type</FieldLabel>
                       <Select
                         items={[
                           { value: "VACATION", label: "Vacation Leave" },
@@ -863,7 +863,7 @@ export function MyProfileSection() {
                           if (val) setLeaveType(val);
                         }}
                       >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger id="leave-type" className="w-full">
                           <SelectValue placeholder="Select leave type" />
                         </SelectTrigger>
                         <SelectContent>
@@ -893,8 +893,9 @@ export function MyProfileSection() {
                     </Field>
 
                     <Field>
-                      <FieldLabel>Start Date</FieldLabel>
+                      <FieldLabel htmlFor="leave-start">Start Date</FieldLabel>
                       <Input
+                        id="leave-start"
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
@@ -903,8 +904,9 @@ export function MyProfileSection() {
                     </Field>
 
                     <Field>
-                      <FieldLabel>End Date</FieldLabel>
+                      <FieldLabel htmlFor="leave-end">End Date</FieldLabel>
                       <Input
+                        id="leave-end"
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
@@ -913,8 +915,11 @@ export function MyProfileSection() {
                     </Field>
 
                     <Field>
-                      <FieldLabel>Number of Days</FieldLabel>
+                      <FieldLabel htmlFor="leave-days">
+                        Number of Days
+                      </FieldLabel>
                       <Input
+                        id="leave-days"
                         type="number"
                         step="0.5"
                         min="0.5"
@@ -957,8 +962,11 @@ export function MyProfileSection() {
 
                     <div className="sm:col-span-2 lg:col-span-3">
                       <Field>
-                        <FieldLabel>Reason for Leave</FieldLabel>
+                        <FieldLabel htmlFor="leave-reason">
+                          Reason for Leave
+                        </FieldLabel>
                         <Input
+                          id="leave-reason"
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
                           placeholder="Brief explanation of your leave request…"
