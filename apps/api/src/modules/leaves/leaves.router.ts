@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -99,6 +100,21 @@ async function withLeaveErrors<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+const notificationsLogger = new Logger('LeaveNotifications');
+
+async function notifySafely(operation: () => Promise<unknown>): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    // Notifications are best-effort: the leave decision already committed,
+    // so a fan-out failure must never fail the mutation itself.
+    notificationsLogger.error(
+      'Leave notification fan-out failed',
+      error instanceof Error ? error.stack : String(error),
+    );
+  }
+}
+
 async function assertManagerEmployeeScope(
   user: AuthenticatedUser,
   employeeId: string,
@@ -136,7 +152,13 @@ async function assertManagerRequestScope(
 }
 
 export function createLeavesRouter(ctx: RouterContext) {
-  const { trpc, protectedProcedure, leavesService, auditService } = ctx;
+  const {
+    trpc,
+    protectedProcedure,
+    leavesService,
+    auditService,
+    notificationService,
+  } = ctx;
   const cancellationInput = z.object({
     requestId: z.string().uuid(),
     reason: z.string().trim().min(10).max(500),
@@ -385,7 +407,7 @@ export function createLeavesRouter(ctx: RouterContext) {
           TIMEKEEPING_READ_ROLES,
         );
         await assertManagerEmployeeScope(ctx.user, input.employeeId);
-        return withLeaveErrors(() =>
+        const created = await withLeaveErrors(() =>
           prisma.$transaction(
             async (transaction) => {
               const request = await leavesService.fileLeaveRequest(
@@ -411,11 +433,22 @@ export function createLeavesRouter(ctx: RouterContext) {
                 },
                 transaction,
               );
-              return serializeRequest(request);
+              return request;
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
         );
+        await notifySafely(() =>
+          notificationService.notifyLeaveFiled(ctx.user.organizationId, {
+            id: created.id,
+            employeeId: created.employeeId,
+            leaveType: created.leaveType,
+            startDate: created.startDate,
+            endDate: created.endDate,
+            daysCount: Number(created.daysCount),
+          }),
+        );
+        return serializeRequest(created);
       }),
 
     approve: trpc
@@ -423,28 +456,46 @@ export function createLeavesRouter(ctx: RouterContext) {
       .input(z.object({ requestId: z.string().uuid() }))
       .mutation(async ({ input, ctx }) => {
         await assertManagerRequestScope(ctx.user, input.requestId);
-        return withLeaveErrors(async () => {
-          const { request } = await leavesService.approveLeaveRequest(
-            input.requestId,
-            ctx.user.organizationId,
-            ctx.user.id,
-            async ({ previous, request, transaction }) =>
-              auditService.record(
-                {
-                  user: ctx.user,
-                  request: ctx.req,
-                  action: 'APPROVE',
-                  entityType: 'LeaveRequest',
-                  entityId: request.id,
-                  previousValue: previous,
-                  newValue: request,
-                },
-                transaction,
-              ),
-            ctx.user.employeeId,
-          );
-          return serializeRequest(request);
+        const decided = await withLeaveErrors(async () => {
+          const { request, newlyApproved } =
+            await leavesService.approveLeaveRequest(
+              input.requestId,
+              ctx.user.organizationId,
+              ctx.user.id,
+              async ({ previous, request, transaction }) =>
+                auditService.record(
+                  {
+                    user: ctx.user,
+                    request: ctx.req,
+                    action: 'APPROVE',
+                    entityType: 'LeaveRequest',
+                    entityId: request.id,
+                    previousValue: previous,
+                    newValue: request,
+                  },
+                  transaction,
+                ),
+              ctx.user.employeeId,
+            );
+          return { request, newlyApproved };
         });
+        if (decided.newlyApproved) {
+          await notifySafely(() =>
+            notificationService.notifyLeaveDecided(
+              ctx.user.organizationId,
+              {
+                id: decided.request.id,
+                employeeId: decided.request.employeeId,
+                leaveType: decided.request.leaveType,
+                startDate: decided.request.startDate,
+                endDate: decided.request.endDate,
+                daysCount: Number(decided.request.daysCount),
+              },
+              'APPROVED',
+            ),
+          );
+        }
+        return serializeRequest(decided.request);
       }),
 
     reject: trpc
@@ -457,29 +508,47 @@ export function createLeavesRouter(ctx: RouterContext) {
       )
       .mutation(async ({ input, ctx }) => {
         await assertManagerRequestScope(ctx.user, input.requestId);
-        return withLeaveErrors(async () => {
-          const { request } = await leavesService.rejectLeaveRequest(
-            input.requestId,
-            ctx.user.organizationId,
-            ctx.user.id,
-            input.rejectionReason,
-            async ({ previous, request, transaction }) =>
-              auditService.record(
-                {
-                  user: ctx.user,
-                  request: ctx.req,
-                  action: 'UPDATE',
-                  entityType: 'LeaveRequest',
-                  entityId: request.id,
-                  previousValue: previous,
-                  newValue: request,
-                },
-                transaction,
-              ),
-            ctx.user.employeeId,
-          );
-          return serializeRequest(request);
+        const decided = await withLeaveErrors(async () => {
+          const { request, newlyRejected } =
+            await leavesService.rejectLeaveRequest(
+              input.requestId,
+              ctx.user.organizationId,
+              ctx.user.id,
+              input.rejectionReason,
+              async ({ previous, request, transaction }) =>
+                auditService.record(
+                  {
+                    user: ctx.user,
+                    request: ctx.req,
+                    action: 'UPDATE',
+                    entityType: 'LeaveRequest',
+                    entityId: request.id,
+                    previousValue: previous,
+                    newValue: request,
+                  },
+                  transaction,
+                ),
+              ctx.user.employeeId,
+            );
+          return { request, newlyRejected };
         });
+        if (decided.newlyRejected) {
+          await notifySafely(() =>
+            notificationService.notifyLeaveDecided(
+              ctx.user.organizationId,
+              {
+                id: decided.request.id,
+                employeeId: decided.request.employeeId,
+                leaveType: decided.request.leaveType,
+                startDate: decided.request.startDate,
+                endDate: decided.request.endDate,
+                daysCount: Number(decided.request.daysCount),
+              },
+              'REJECTED',
+            ),
+          );
+        }
+        return serializeRequest(decided.request);
       }),
 
     withdraw: protectedProcedure

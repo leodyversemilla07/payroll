@@ -8,6 +8,7 @@ import { EmployeesService } from '../modules/employees/employees.service';
 import { HolidaysService } from '../modules/holidays/holidays.service';
 import { LeavesService } from '../modules/leaves/leaves.service';
 import { LoansService } from '../modules/loans/loans.service';
+import { NotificationService } from '../modules/notifications/notifications.service';
 import { CutoffSchedulerService } from '../modules/payroll/cutoff-scheduler.service';
 import { PayrollService } from '../modules/payroll/payroll.service';
 import { TimekeepingService } from '../modules/timekeeping/timekeeping.service';
@@ -86,6 +87,7 @@ export interface RouterServices {
   leavesService: LeavesService;
   dashboardService: DashboardService;
   holidaysService: HolidaysService;
+  notificationService: NotificationService;
   cutoffSchedulerService?: CutoffSchedulerService;
 }
 

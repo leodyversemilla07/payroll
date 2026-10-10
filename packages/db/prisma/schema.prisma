@@ -42,6 +42,16 @@ enum Role {
   EMPLOYEE
 }
 
+enum NotificationType {
+  LEAVE_FILED
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  RUN_TRIGGERED
+  RUN_APPROVED
+  RUN_DISBURSED
+  RUN_CANCELLED
+}
+
 model Organization {
   id                String       @id @default(uuid())
   name              String
@@ -65,6 +75,7 @@ model Organization {
   taxEvidenceCorrections TaxEvidenceCorrection[]
   holidayCalendars  HolidayCalendar[]
   leavePolicies     LeavePolicy[]
+  notifications     Notification[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -185,6 +196,7 @@ model User {
   mfaBackupCodes    String[]     @default([])
   sessions          AuthSession[]
   mfaTickets        MfaTicket[]
+  notifications     Notification[]
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -827,4 +839,22 @@ model AuditLog {
   createdAt       DateTime     @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           NotificationType
+  title          String
+  body           String           @default("")
+  entityType     String?
+  entityId       String?
+  isRead         Boolean          @default(false)
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, userId, isRead, createdAt])
 }

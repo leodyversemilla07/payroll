@@ -10,6 +10,7 @@ import { EmployeesService } from './modules/employees/employees.service';
 import { HolidaysService } from './modules/holidays/holidays.service';
 import { LeavesService } from './modules/leaves/leaves.service';
 import { LoansService } from './modules/loans/loans.service';
+import { NotificationService } from './modules/notifications/notifications.service';
 import { CutoffSchedulerService } from './modules/payroll/cutoff-scheduler.service';
 import { PayrollService } from './modules/payroll/payroll.service';
 import { PayslipPdfService } from './modules/payroll/payslip-pdf.service';
@@ -32,6 +33,7 @@ import { TrpcModule } from './trpc/trpc.module';
     LeavesService,
     DashboardService,
     HolidaysService,
+    NotificationService,
     StorageService,
     PayslipPdfService,
   ],
@@ -47,6 +49,7 @@ import { TrpcModule } from './trpc/trpc.module';
     LeavesService,
     DashboardService,
     HolidaysService,
+    NotificationService,
     StorageService,
     PayslipPdfService,
   ],

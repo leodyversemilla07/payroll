@@ -21,7 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@workspace/ui/components/sidebar";
-import { ChevronsUpDown, LogOut, User } from "lucide-react";
+import { Bell, ChevronsUpDown, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
@@ -47,6 +47,12 @@ export function NavUser({ user }: NavUserProps) {
       void router.replace("/");
     },
   });
+
+  const unreadCount = trpc.notifications.unreadCount.useQuery(undefined, {
+    retry: false,
+    refetchInterval: 60_000,
+  });
+  const unread = unreadCount.data ?? 0;
 
   const initials =
     user.name
@@ -125,6 +131,24 @@ export function NavUser({ user }: NavUserProps) {
               >
                 <User className="size-4" />
                 <span>Account</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                render={<Link href="/notifications" />}
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false);
+                }}
+              >
+                <Bell className="size-4" />
+                <span>Notifications</span>
+                {unread > 0 && (
+                  <span
+                    role="status"
+                    aria-label={`${unread} unread notifications`}
+                    className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground"
+                  >
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

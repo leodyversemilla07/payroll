@@ -71,6 +71,10 @@ const EXPECTED_PROCEDURES = [
   'loans.create',
   'loans.recordPayment',
   'loans.deactivate',
+  'notifications.list',
+  'notifications.unreadCount',
+  'notifications.markRead',
+  'notifications.markAllRead',
   'compliance.getTaxEvidence',
   'compliance.listTaxCorrections',
   'compliance.reviewTaxCorrection',
@@ -187,6 +191,10 @@ const EXPECTED_PROCEDURE_TYPES: Record<string, 'query' | 'mutation'> = {
   'holidays.create': 'mutation',
   'holidays.update': 'mutation',
   'holidays.delete': 'mutation',
+  'notifications.list': 'query',
+  'notifications.unreadCount': 'query',
+  'notifications.markRead': 'mutation',
+  'notifications.markAllRead': 'mutation',
   'holidays.populatePresets': 'mutation',
 };
 

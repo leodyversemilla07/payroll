@@ -2,6 +2,7 @@
 
 import {
   Banknote,
+  Bell,
   CalendarCheck,
   CalendarDays,
   ClipboardList,
@@ -102,6 +103,13 @@ export const workspaceSections = [
     icon: ShieldCheck,
     description: "Manage two-factor authentication and account security.",
   },
+  {
+    id: "notifications",
+    href: "/notifications",
+    label: "Notifications",
+    icon: Bell,
+    description: "Leave decisions and payroll updates addressed to you.",
+  },
 ] as const;
 
 export type WorkspaceSection = (typeof workspaceSections)[number]["id"];
@@ -175,6 +183,13 @@ export const SECTION_PERMISSIONS: Record<WorkspaceSection, readonly string[]> =
       "EMPLOYEE",
     ],
     security: [
+      "SUPER_ADMIN",
+      "HR_ADMIN",
+      "PAYROLL_SPECIALIST",
+      "DEPARTMENT_MANAGER",
+      "EMPLOYEE",
+    ],
+    notifications: [
       "SUPER_ADMIN",
       "HR_ADMIN",
       "PAYROLL_SPECIALIST",

@@ -59,6 +59,8 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
   const setEmployeeLeaveCredits = jest.fn();
   const listEmployeeCreditChanges = jest.fn();
   const cancelLeaveRequest = jest.fn();
+  const notifyLeaveFiled = jest.fn();
+  const notifyLeaveDecided = jest.fn();
   const listLeavePolicies = jest.fn();
   const getLeavePolicyById = jest.fn();
   const createLeavePolicy = jest.fn();
@@ -88,6 +90,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         runLeaveCarryover,
       },
       auditService: { record },
+      notificationService: { notifyLeaveFiled, notifyLeaveDecided },
     } as unknown as RouterServices),
   );
   const saved = {
@@ -301,6 +304,33 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
       );
     },
   );
+  it('fans out a filed notification when HR files a request', async () => {
+    const caller = router.createCaller(context(Role.HR_ADMIN));
+    await caller.request(input);
+    expect(notifyLeaveFiled).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ id: requestId, employeeId }),
+    );
+    expect(notifyLeaveDecided).not.toHaveBeenCalled();
+  });
+  it('fans out decision notifications on approval and rejection', async () => {
+    const caller = router.createCaller(context(Role.HR_ADMIN));
+    await caller.approve({ requestId });
+    expect(notifyLeaveDecided).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ id: requestId, employeeId }),
+      'APPROVED',
+    );
+    await caller.reject({
+      requestId,
+      rejectionReason: 'Incorrect dates for the intended request',
+    });
+    expect(notifyLeaveDecided).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ id: requestId, employeeId }),
+      'REJECTED',
+    );
+  });
   describe('department manager scoping', () => {
     const managerCaller = () =>
       router.createCaller(context(Role.DEPARTMENT_MANAGER, employeeId));

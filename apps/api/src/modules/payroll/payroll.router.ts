@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -50,7 +51,24 @@ export function createPayrollRouter(ctx: RouterContext) {
     payrollService,
     auditService,
     cutoffSchedulerService,
+    notificationService,
   } = ctx;
+  const notificationsLogger = new Logger('PayrollNotifications');
+
+  async function notifySafely(
+    operation: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await operation();
+    } catch (error) {
+      // Notifications are best-effort: the payroll transition already
+      // committed, so a fan-out failure must never fail the mutation itself.
+      notificationsLogger.error(
+        'Payroll notification fan-out failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
   const payrollTriggerProcedure = trpc.procedureForRoles(PAYROLL_TRIGGER_ROLES);
   const auditRun =
     (
@@ -152,8 +170,8 @@ export function createPayrollRouter(ctx: RouterContext) {
           cutoffSequence: z.enum(['FIRST_CUTOFF', 'SECOND_CUTOFF']),
         }),
       )
-      .mutation(({ input, ctx }) =>
-        withPayrollErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        const run = await withPayrollErrors(() =>
           payrollService.executePayrollRun(
             {
               organizationId: ctx.user.organizationId,
@@ -165,8 +183,18 @@ export function createPayrollRouter(ctx: RouterContext) {
             },
             auditRun(ctx, 'CREATE'),
           ),
-        ),
-      ),
+        );
+        // Idempotent replays return the existing run; the duplicate
+        // "ready for review" row links the same run and is harmless.
+        await notifySafely(() =>
+          notificationService.notifyPayrollRun(
+            ctx.user.organizationId,
+            run,
+            'TRIGGERED',
+          ),
+        );
+        return run;
+      }),
 
     triggerThirteenthMonthRun: payrollTriggerProcedure
       .input(
@@ -176,8 +204,8 @@ export function createPayrollRouter(ctx: RouterContext) {
           paymentDate: z.string().date(),
         }),
       )
-      .mutation(({ input, ctx }) =>
-        withPayrollErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        const run = await withPayrollErrors(() =>
           payrollService.executeThirteenthMonthRun(
             {
               organizationId: ctx.user.organizationId,
@@ -188,14 +216,22 @@ export function createPayrollRouter(ctx: RouterContext) {
             },
             auditRun(ctx, 'CREATE'),
           ),
-        ),
-      ),
+        );
+        await notifySafely(() =>
+          notificationService.notifyPayrollRun(
+            ctx.user.organizationId,
+            run,
+            'TRIGGERED',
+          ),
+        );
+        return run;
+      }),
 
     approveRun: trpc
       .procedureForRoles(PAYROLL_APPROVAL_ROLES)
       .input(z.object({ runId: z.string().uuid() }))
-      .mutation(({ input, ctx }) =>
-        withPayrollErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        const run = await withPayrollErrors(() =>
           payrollService.approvePayrollRun(
             {
               runId: input.runId,
@@ -204,13 +240,21 @@ export function createPayrollRouter(ctx: RouterContext) {
             },
             auditRun(ctx, 'APPROVE'),
           ),
-        ),
-      ),
+        );
+        await notifySafely(() =>
+          notificationService.notifyPayrollRun(
+            ctx.user.organizationId,
+            run,
+            'APPROVED',
+          ),
+        );
+        return run;
+      }),
 
     disburseRun: payrollProcedure
       .input(z.object({ runId: z.string().uuid() }))
-      .mutation(({ input, ctx }) =>
-        withPayrollErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        const run = await withPayrollErrors(() =>
           payrollService.disbursePayrollRun(
             {
               runId: input.runId,
@@ -218,13 +262,26 @@ export function createPayrollRouter(ctx: RouterContext) {
             },
             auditRun(ctx, 'UPDATE'),
           ),
-        ),
-      ),
+        );
+        await notifySafely(() =>
+          notificationService.notifyPayrollRun(
+            ctx.user.organizationId,
+            run,
+            'DISBURSED',
+          ),
+        );
+        return run;
+      }),
 
     cancelRun: payrollProcedure
       .input(z.object({ runId: z.string().uuid() }))
-      .mutation(({ input, ctx }) =>
-        withPayrollErrors(() =>
+      .mutation(async ({ input, ctx }) => {
+        // Cancellation removes the run row, so snapshot the summary first.
+        const before = await payrollService.getPayrollRunDetails(
+          input.runId,
+          ctx.user.organizationId,
+        );
+        const result = await withPayrollErrors(() =>
           payrollService.cancelPayrollRun(
             {
               runId: input.runId,
@@ -232,8 +289,18 @@ export function createPayrollRouter(ctx: RouterContext) {
             },
             auditRun(ctx, 'UPDATE'),
           ),
-        ),
-      ),
+        );
+        if (before) {
+          await notifySafely(() =>
+            notificationService.notifyPayrollRun(
+              ctx.user.organizationId,
+              before,
+              'CANCELLED',
+            ),
+          );
+        }
+        return result;
+      }),
 
     generatePayslipPdf: payrollProcedure
       .input(z.object({ payslipId: z.string().uuid() }))

@@ -14,6 +14,8 @@ import { createLeavesRouter } from '../modules/leaves/leaves.router';
 import { LeavesService } from '../modules/leaves/leaves.service';
 import { createLoansRouter } from '../modules/loans/loans.router';
 import { LoansService } from '../modules/loans/loans.service';
+import { createNotificationsRouter } from '../modules/notifications/notifications.router';
+import { NotificationService } from '../modules/notifications/notifications.service';
 import { createPayrollRouter } from '../modules/payroll/payroll.router';
 import { PayrollService } from '../modules/payroll/payroll.service';
 import { createTimekeepingRouter } from '../modules/timekeeping/timekeeping.router';
@@ -45,6 +47,7 @@ export function createApiRouter(
   auditService: AuditService,
   dashboardService: DashboardService = new DashboardService(),
   holidaysService: HolidaysService = new HolidaysService(),
+  notificationService: NotificationService = new NotificationService(),
 ) {
   const publicProcedure = trpc.publicProcedure;
   const routerContext = createRouterContext(trpc, {
@@ -58,6 +61,7 @@ export function createApiRouter(
     leavesService,
     dashboardService,
     holidaysService,
+    notificationService,
   });
 
   return trpc.router({
@@ -76,6 +80,7 @@ export function createApiRouter(
     leaves: createLeavesRouter(routerContext),
     dashboard: createDashboardRouter(routerContext),
     holidays: createHolidaysRouter(routerContext),
+    notifications: createNotificationsRouter(routerContext),
   });
 }
 

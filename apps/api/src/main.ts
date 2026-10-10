@@ -11,6 +11,7 @@ import { EmployeesService } from './modules/employees/employees.service';
 import { HolidaysService } from './modules/holidays/holidays.service';
 import { LeavesService } from './modules/leaves/leaves.service';
 import { LoansService } from './modules/loans/loans.service';
+import { NotificationService } from './modules/notifications/notifications.service';
 import { PayrollService } from './modules/payroll/payroll.service';
 import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
 import { createApiRouter } from './trpc/app.router';
@@ -36,6 +37,7 @@ async function bootstrap() {
   const leavesService = app.get(LeavesService);
   const dashboardService = app.get(DashboardService);
   const holidaysService = app.get(HolidaysService);
+  const notificationService = app.get(NotificationService);
 
   const appRouter = createApiRouter(
     trpcService,
@@ -49,6 +51,7 @@ async function bootstrap() {
     auditService,
     dashboardService,
     holidaysService,
+    notificationService,
   );
 
   app.use(
