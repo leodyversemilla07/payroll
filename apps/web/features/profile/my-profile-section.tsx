@@ -402,7 +402,7 @@ export function MyProfileSection() {
                             value: e.id,
                             label: `${e.employeeNumber} — ${e.firstName} ${e.lastName}`,
                           }))}
-                          value={selectedEmployeeToLink || undefined}
+                          value={selectedEmployeeToLink}
                           onValueChange={(val) =>
                             setSelectedEmployeeToLink(val ?? "")
                           }

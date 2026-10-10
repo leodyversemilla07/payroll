@@ -130,7 +130,7 @@ export function LeavesSection({
                   value: employee.id,
                   label: `${employee.firstName} ${employee.lastName} · ${employee.employeeNumber}`,
                 }))}
-                value={employeeId || undefined}
+                value={employeeId}
                 onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
               >
@@ -790,7 +790,7 @@ function LeaveRequestForm({
                     { value: "PAID", label: "Paid leave" },
                     { value: "UNPAID", label: "Unpaid leave" },
                   ]}
-                  value={payTreatment || undefined}
+                  value={payTreatment}
                   onValueChange={(val) => setPayTreatment(val ?? "")}
                   required
                 >
