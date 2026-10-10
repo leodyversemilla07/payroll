@@ -46,6 +46,44 @@ export function monthPresets(todayIso: string): DateRangePreset[] {
   ];
 }
 
+/** Semi-monthly payroll cutoff presets (1–15 / 16–month end). */
+export function cutoffPresets(todayIso: string): DateRangePreset[] {
+  const year = Number(todayIso.slice(0, 4));
+  const month = Number(todayIso.slice(5, 7));
+  const day = Number(todayIso.slice(8, 10));
+  const mm = todayIso.slice(5, 7);
+  const lastDay = new Date(year, month, 0).getDate();
+  const thisCutoff: DateRangePreset =
+    day <= 15
+      ? {
+          label: "This cutoff",
+          from: `${year}-${mm}-01`,
+          to: `${year}-${mm}-15`,
+        }
+      : {
+          label: "This cutoff",
+          from: `${year}-${mm}-16`,
+          to: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+        };
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMm = String(prevMonth).padStart(2, "0");
+  const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+  const lastCutoff: DateRangePreset =
+    day <= 15
+      ? {
+          label: "Last cutoff",
+          from: `${prevYear}-${prevMm}-16`,
+          to: `${prevYear}-${prevMm}-${String(prevLastDay).padStart(2, "0")}`,
+        }
+      : {
+          label: "Last cutoff",
+          from: `${year}-${mm}-01`,
+          to: `${year}-${mm}-15`,
+        };
+  return [thisCutoff, lastCutoff];
+}
+
 function IsoTextInput({
   id,
   value,

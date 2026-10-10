@@ -216,8 +216,8 @@ async function loadDtr(page: Page) {
 }
 async function editDtr(page: Page) {
   await page
-    .getByRole("region", { name: "Attendance 2026-09-10", exact: true })
-    .getByRole("button", { name: "Correct attendance", exact: true })
+    .getByRole("row", { name: /2026-09-10/ })
+    .getByRole("button", { name: /Correct attendance/ })
     .click();
   return page.getByRole("region", {
     name: "Attendance correction",
@@ -245,6 +245,32 @@ test("date range presets fill typed inputs and load DTR", async ({ page }) => {
   await expect(
     section.getByText(`${monthStart} to ${manilaToday}`),
   ).toBeVisible();
+});
+
+test("review queue filters to attention items and clears after approval", async ({
+  page,
+}) => {
+  await mockDtr(page);
+  const section = await loadDtr(page);
+  await expect(
+    section.getByRole("button", { name: /Needs review \(1\)/ }),
+  ).toBeVisible();
+  await section.getByRole("button", { name: /Needs review \(1\)/ }).click();
+  const row = section.getByRole("row", { name: /2026-09-10/ });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: /Correct attendance/ }).click();
+  const editor = section.getByRole("region", { name: "Attendance correction" });
+  await expect(editor).toBeVisible();
+  await editor
+    .getByLabel("Correction reason")
+    .fill("Verified against the signed attendance sheet");
+  await editor.getByRole("checkbox", { name: "Approve for payroll" }).check();
+  await editor
+    .getByRole("button", { name: "Save attendance", exact: true })
+    .click();
+  await expect(section.getByText("No records need review.")).toBeVisible();
+  await section.getByRole("button", { name: /All \(1\)/ }).click();
+  await expect(section.getByRole("row", { name: /2026-09-10/ })).toBeVisible();
 });
 
 test("deep-linked employee arrives preselected on the attendance page", async ({
@@ -295,10 +321,7 @@ test("load and correct DTR using Manila punches, explicit totals and the loaded 
     blockSave: blocked,
   });
   const section = await loadDtr(page);
-  const row = page.getByRole("region", {
-    name: "Attendance 2026-09-10",
-    exact: true,
-  });
+  const row = page.getByRole("row", { name: /2026-09-10/ });
   await expect(row).toContainText("8:00 AM");
   const editor = await editDtr(page);
   await expect(editor.getByLabel("Time in (Asia/Manila)")).toHaveValue(
@@ -496,9 +519,7 @@ test("DTR query errors retry without showing fake empty attendance", async ({
   );
   await expect(section.getByText(/No DTR records/)).toHaveCount(0);
   await section.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(
-    section.getByRole("region", { name: "Attendance 2026-09-10", exact: true }),
-  ).toBeVisible();
+  await expect(section.getByRole("row", { name: /2026-09-10/ })).toBeVisible();
 });
 
 test("background refresh errors and save errors preserve an attendance draft", async ({
@@ -539,13 +560,12 @@ test("double-holiday rows are read-only and attendance fits a mobile viewport", 
   await page.setViewportSize({ width: 375, height: 812 });
   await mockDtr(page, { premium: true });
   const section = await loadDtr(page);
-  const row = section.getByRole("region", {
-    name: "Attendance 2026-09-10",
-    exact: true,
-  });
-  await expect(row).toContainText(
-    "Double holidays and legacy premium breakdowns require manual reconciliation",
-  );
+  const row = section.getByRole("row", { name: /2026-09-10/ });
+  await expect(
+    section.getByText(
+      "Double holidays and legacy premium breakdowns require manual reconciliation",
+    ),
+  ).toBeVisible();
   await expect(
     row.getByRole("button", { name: "Correct attendance", exact: true }),
   ).toHaveCount(0);
@@ -571,7 +591,7 @@ test("imports biometric CSV with preview, uploads punch logs, shows metrics and 
   });
   await expect(section).toBeVisible();
 
-  await section
+  await page
     .getByRole("button", { name: "Import biometrics", exact: true })
     .click();
 
@@ -660,11 +680,7 @@ test("displays anomalies table when imported CSV has missing punches", async ({
     },
   });
 
-  const section = page.getByRole("region", {
-    name: "Attendance and DTR",
-    exact: true,
-  });
-  await section.getByRole("button", { name: "Import biometrics" }).click();
+  await page.getByRole("button", { name: "Import biometrics" }).click();
 
   const importPanel = page.getByRole("region", {
     name: "Biometric CSV import",
@@ -699,11 +715,7 @@ test("rejects invalid file type and displays server import errors", async ({
     },
   });
 
-  const section = page.getByRole("region", {
-    name: "Attendance and DTR",
-    exact: true,
-  });
-  await section.getByRole("button", { name: "Import biometrics" }).click();
+  await page.getByRole("button", { name: "Import biometrics" }).click();
 
   const importPanel = page.getByRole("region", {
     name: "Biometric CSV import",
