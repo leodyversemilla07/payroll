@@ -1,11 +1,12 @@
 /**
  * Bulk demo data for the local development organization.
  *
- * Adds ~60 clearly-marked DEV- employees with compensation, allowances,
- * 2026 leave balances, two months of weekday DTR, pending/historical
- * leaves, and active loans. Additive and idempotent: re-runs are a
- * no-op once DEV- records exist. Never modifies existing rows and never
- * creates payroll runs (trigger those through the UI).
+ * Adds ~60 clearly-marked DEV- law-firm employees with compensation,
+ * allowances, 2026 leave balances, two months of weekday DTR,
+ * pending/historical leaves, and active loans. Re-runs wipe and rebuild
+ * the DEV- dataset (existing non-DEV rows are never touched) and ensure
+ * the law-firm organization structure. Never creates payroll runs
+ * (trigger those through the UI).
  *
  * Guards: local payroll_db only. Refuses browser/test/remote databases.
  *
@@ -112,6 +113,66 @@ async function main() {
   }
 
   const org = await prisma.organization.findFirstOrThrow();
+
+  // The firm.
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: {
+      name: "Santiago Reyes & Torres Law Offices",
+      registeredAddress:
+        "27/F Philamlife Tower, 8767 Paseo de Roxas, Makati City, Philippines",
+    },
+  });
+
+  // Law-firm structure: rename the seeded tech departments/branches, add
+  // practice areas missing from a fresh tech seed.
+  const deptRenames = [
+    ["Software Engineering", "Litigation & Dispute Resolution", "LIT"],
+    ["Product & Design", "Corporate & Commercial Law", "COR"],
+    ["Operations & Logistics", "Admin & Finance", "ADM"],
+  ];
+  for (const [from, to, code] of deptRenames) {
+    await prisma.department.updateMany({
+      where: { organizationId: org.id, name: from },
+      data: { name: to, code },
+    });
+  }
+  for (const [name, code] of [
+    ["Labor & Employment Law", "LAB"],
+    ["Taxation Law", "TAX"],
+  ]) {
+    await prisma.department.upsert({
+      where: { id: `${org.id}-${code}` },
+      update: {},
+      create: {
+        id: `${org.id}-${code}`,
+        organizationId: org.id,
+        name,
+        code,
+      },
+    });
+  }
+  const branchRenames = [
+    [
+      "Makati Headquarters",
+      "Makati Head Office",
+      "MKT",
+      "Ayala Avenue, Makati City",
+    ],
+    [
+      "BGC Innovation Hub",
+      "Cebu Branch Office",
+      "CEB",
+      "Cebu Business Park, Cebu City",
+    ],
+  ];
+  for (const [from, to, code, address] of branchRenames) {
+    await prisma.branch.updateMany({
+      where: { organizationId: org.id, name: from },
+      data: { name: to, code, address },
+    });
+  }
+
   const branches = await prisma.branch.findMany({
     where: { organizationId: org.id },
   });
@@ -124,13 +185,11 @@ async function main() {
     );
   }
 
-  const existing = await prisma.employee.count({
+  // Rebuild the DEV- dataset from scratch; cascades clear DTR, balances,
+  // requests, loans, allowances, and compensation. Nothing else is touched.
+  await prisma.employee.deleteMany({
     where: { organizationId: org.id, employeeNumber: { startsWith: PREFIX } },
   });
-  if (existing > 0) {
-    console.log(`DEV- records already present (${existing}). Nothing to do.`);
-    return;
-  }
 
   const holidays = new Set(
     (
@@ -143,6 +202,10 @@ async function main() {
 
   const rand = mulberry32(20261010);
   const COUNT = 60;
+  const byCode = Object.fromEntries(departments.map((d) => [d.code, d]));
+  const practiceIds = ["LIT", "COR", "LAB", "TAX"]
+    .map((code) => byCode[code]?.id)
+    .filter(Boolean);
   const employees = [];
   const compensations = [];
   const allowances = [];
@@ -152,16 +215,25 @@ async function main() {
     const n = pad(i + 1, 4);
     const firstName = pick(rand, FIRST);
     const lastName = `${pick(rand, LAST)} ${n}`;
-    const monthlyPesos = 25000 + Math.floor(rand() * 54) * 1000 + (i % 2) * 500;
+    // Indices 0-2 are equity partners (managerial under PD 851, excluded
+    // from 13th-month coverage); the rest are associates and staff.
+    const isPartner = i < 3;
+    const monthlyPesos = isPartner
+      ? 150000 + i * 10000
+      : 40000 + Math.floor(rand() * 56) * 1000;
     const basis =
       i % 12 === 11 ? "DAILY" : i % 12 === 10 ? "HOURLY" : "MONTHLY";
     const hireYear = 2023 + Math.floor(rand() * 3);
     const hireMonth = 1 + Math.floor(rand() * 12);
     const hireDay = 1 + Math.floor(rand() * 28);
+    const departmentId = isPartner
+      ? (practiceIds[i % Math.max(practiceIds.length, 1)] ??
+        departments[i % departments.length].id)
+      : departments[i % departments.length].id;
     employees.push({
       organizationId: org.id,
       branchId: branches[i % branches.length].id,
-      departmentId: departments[i % departments.length].id,
+      departmentId,
       employeeNumber: `${PREFIX}${n}`,
       firstName,
       lastName,
@@ -179,6 +251,7 @@ async function main() {
       employmentType: "REGULAR",
       employmentStatus: i % 20 === 19 ? "ON_LEAVE" : "ACTIVE",
       payBasis: basis,
+      isManagerial: isPartner,
       bankName: ["BDO Unibank", "BPI", "UnionBank", "Metrobank"][i % 4],
       bankAccountNumber: `100000${n}01`,
       bankAccountName: `${firstName} ${lastName}`,

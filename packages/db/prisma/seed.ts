@@ -24,7 +24,7 @@ async function main() {
   // 2. Create Organization
   const org = await prisma.organization.create({
     data: {
-      name: "Acme Philippines Technologies Inc.",
+      name: "Santiago Reyes & Torres Law Offices",
       tin: "123-456-789-000",
       sssNumber: "03-9876543-2",
       philhealthNumber: "12-345678901-2",
@@ -41,7 +41,7 @@ async function main() {
   const makatiBranch = await prisma.branch.create({
     data: {
       organizationId: org.id,
-      name: "Makati Headquarters",
+      name: "Makati Head Office",
       code: "MKT",
       address: "Ayala Avenue, Makati City",
     },
@@ -50,9 +50,9 @@ async function main() {
   const bgcBranch = await prisma.branch.create({
     data: {
       organizationId: org.id,
-      name: "BGC Innovation Hub",
-      code: "BGC",
-      address: "High Street, Bonifacio Global City, Taguig",
+      name: "Cebu Branch Office",
+      code: "CEB",
+      address: "Cebu Business Park, Cebu City",
     },
   });
 
@@ -60,24 +60,40 @@ async function main() {
   const engDept = await prisma.department.create({
     data: {
       organizationId: org.id,
-      name: "Software Engineering",
-      code: "ENG",
+      name: "Litigation & Dispute Resolution",
+      code: "LIT",
     },
   });
 
   const designDept = await prisma.department.create({
     data: {
       organizationId: org.id,
-      name: "Product & Design",
-      code: "PRD",
+      name: "Corporate & Commercial Law",
+      code: "COR",
     },
   });
 
   const opsDept = await prisma.department.create({
     data: {
       organizationId: org.id,
-      name: "Operations & Logistics",
-      code: "OPS",
+      name: "Admin & Finance",
+      code: "ADM",
+    },
+  });
+
+  await prisma.department.create({
+    data: {
+      organizationId: org.id,
+      name: "Labor & Employment Law",
+      code: "LAB",
+    },
+  });
+
+  await prisma.department.create({
+    data: {
+      organizationId: org.id,
+      name: "Taxation Law",
+      code: "TAX",
     },
   });
 
