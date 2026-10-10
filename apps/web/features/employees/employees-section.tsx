@@ -52,6 +52,7 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { cn } from "@workspace/ui/lib/utils";
 import { Loader2, Plus, Users } from "lucide-react";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { DatePicker } from "@/components/date-picker";
 import { PageHeaderAction } from "@/components/page-header-action";
@@ -921,16 +922,24 @@ function EmployeeDetails({
             </div>
           </div>
 
-          {canEdit && details.data && !isEditing && (
+          {details.data && !isEditing && (
             <div className="flex items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
+              <Link
+                href={`/attendance?employee=${details.data.id}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                Edit employee
-              </Button>
+                View DTR
+              </Link>
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                >
+                  Edit employee
+                </Button>
+              )}
             </div>
           )}
         </div>

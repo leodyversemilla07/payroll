@@ -582,6 +582,25 @@ test("HR edits an existing employee profile and sees updated details", async ({
   });
 });
 
+test("employee details sheet deep-links to DTR with the employee preselected", async ({
+  page,
+}) => {
+  await mockWorkspace(page);
+  await page
+    .getByRole("region", { name: "Employees", exact: true })
+    .getByRole("button", { name: /Ana Santos/ })
+    .click();
+  const details = page.getByRole("region", {
+    name: "Employee details",
+    exact: true,
+  });
+  await expect(details).toContainText("Ana Santos");
+  await expect(details.getByRole("link", { name: "View DTR" })).toHaveAttribute(
+    "href",
+    `/attendance?employee=${employee.id}`,
+  );
+});
+
 test("HR opens the edit form directly from the row actions menu", async ({
   page,
 }) => {
