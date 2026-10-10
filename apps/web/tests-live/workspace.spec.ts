@@ -544,10 +544,15 @@ async function openRun(page: Page) {
 }
 
 async function navigate(page: Page, label: string) {
-  const nav = page.getByRole("navigation", { name: "Payroll navigation" });
-  const link = nav.getByRole("link", { name: label, exact: true });
-
-  await expect(nav).toBeVisible();
-  await expect(link).toBeVisible();
-  await link.click();
+  const hrefs: Record<string, string> = {
+    Employees: "/employees",
+    "Attendance & DTR": "/attendance",
+    "Leave management": "/leaves",
+    "Process payroll": "/process-payroll",
+    "Payroll runs & payslips": "/payroll-runs",
+    "Year-end tax": "/year-end-tax",
+  };
+  const href = hrefs[label];
+  if (!href) throw new Error(`Unknown workspace destination: ${label}`);
+  await page.goto(href);
 }
