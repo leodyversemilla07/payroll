@@ -4,6 +4,16 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@workspace/api";
 import { Button } from "@workspace/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
 import { useMemo } from "react";
 import { DataTable, DataTableColumnHeader } from "@/components/data-table";
 import { LOAN_TYPE_LABELS } from "./loans-section";
@@ -237,37 +247,51 @@ export function LoansDataTable({
       },
       {
         id: "actions",
-        header: () => <div className="text-right">Actions</div>,
-        enableSorting: false,
         enableHiding: false,
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => {
           const loan = row.original;
           return (
-            <div className="flex items-center justify-end gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectLoan(loan.id);
-                }}
-              >
-                Ledger
-              </Button>
-              {loan.isActive && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRecordPayment(loan.id);
-                  }}
+            <div className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  }
                 >
-                  Pay
-                </Button>
-              )}
+                  <span className="sr-only">Open menu</span>
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectLoan(loan.id);
+                      }}
+                    >
+                      View ledger
+                    </DropdownMenuItem>
+                    {loan.isActive && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRecordPayment(loan.id);
+                        }}
+                      >
+                        Record payment
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         },

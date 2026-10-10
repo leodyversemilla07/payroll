@@ -9,6 +9,13 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -25,6 +32,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet";
 import {
   Table,
   TableBody,
@@ -43,9 +57,9 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  X,
 } from "lucide-react";
 import { useState } from "react";
+import { DatePicker } from "@/components/date-picker";
 import { PageHeaderAction } from "@/components/page-header-action";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
@@ -364,89 +378,52 @@ function CreateLoanModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-loan-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-lg border bg-background p-6 shadow-xl">
-        <div className="flex items-center justify-between pb-3 border-b">
-          <div>
-            <h3 id="create-loan-title" className="text-lg font-semibold">
-              Enroll New Employee Loan
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Configure loan deduction terms for automated semi-monthly payroll
-              runs.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+      <SheetContent side="right" className="data-[side=right]:sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>Enroll New Employee Loan</SheetTitle>
+          <SheetDescription>
+            Configure loan deduction terms for automated semi-monthly payroll
+            runs.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          {errorMessage && (
+            <div className="mt-4 flex items-center gap-2 rounded-md bg-destructive/15 p-3 text-xs text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
-        {errorMessage && (
-          <div className="mt-4 flex items-center gap-2 rounded-md bg-destructive/15 p-3 text-xs text-destructive">
-            <AlertCircle className="size-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="space-y-1">
-            <FieldLabel htmlFor="create-loan-employee">Employee</FieldLabel>
-            <Select
-              items={employees.map((emp) => ({
-                value: emp.id,
-                label: `${emp.firstName} ${emp.lastName} (${emp.employeeNumber})${emp.department?.name ? ` · ${emp.department.name}` : ""}`,
-              }))}
-              value={employeeId}
-              onValueChange={(val) => {
-                if (val) setEmployeeId(val);
-              }}
-            >
-              <SelectTrigger id="create-loan-employee" className="w-full">
-                <SelectValue placeholder="Select an employee" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.employeeNumber})
-                      {emp.department?.name ? ` · ${emp.department.name}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div className="space-y-1">
-              <FieldLabel htmlFor="create-loan-type">
-                Loan Program / Type
-              </FieldLabel>
+              <FieldLabel htmlFor="create-loan-employee">Employee</FieldLabel>
               <Select
-                items={LOAN_PROGRAM_ITEMS}
-                value={loanType}
+                items={employees.map((emp) => ({
+                  value: emp.id,
+                  label: `${emp.firstName} ${emp.lastName} (${emp.employeeNumber})${emp.department?.name ? ` · ${emp.department.name}` : ""}`,
+                }))}
+                value={employeeId}
                 onValueChange={(val) => {
-                  if (val) setLoanType(val);
+                  if (val) setEmployeeId(val);
                 }}
               >
-                <SelectTrigger id="create-loan-type" className="w-full">
-                  <SelectValue placeholder="Select loan program / type" />
+                <SelectTrigger id="create-loan-employee" className="w-full">
+                  <SelectValue placeholder="Select an employee" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {LOAN_PROGRAM_ITEMS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName} ({emp.employeeNumber})
+                        {emp.department?.name
+                          ? ` · ${emp.department.name}`
+                          : ""}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -454,139 +431,169 @@ function CreateLoanModal({
               </Select>
             </div>
 
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-loan-ref">
-                Reference / PN Number
-              </FieldLabel>
-              <Input
-                id="create-loan-ref"
-                placeholder="e.g. SSS-2026-09876"
-                value={referenceNumber}
-                onChange={(e) => setReferenceNumber(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-principal">Principal (₱)</FieldLabel>
-              <Input
-                id="create-principal"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="30000"
-                value={principalPesos}
-                onChange={(e) =>
-                  handlePrincipalChange(
-                    e.target.value === "" ? "" : Number(e.target.value),
-                  )
-                }
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-total">Total to Repay (₱)</FieldLabel>
-              <Input
-                id="create-total"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="30000"
-                value={totalAmountPesos}
-                onChange={(e) =>
-                  setTotalAmountPesos(
-                    e.target.value === "" ? "" : Number(e.target.value),
-                  )
-                }
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-amortization">
-                Amortization / Cutoff (₱)
-              </FieldLabel>
-              <Input
-                id="create-amortization"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="1250"
-                value={amortizationPesos}
-                onChange={(e) =>
-                  setAmortizationPesos(
-                    e.target.value === "" ? "" : Number(e.target.value),
-                  )
-                }
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-start-date">
-                First Deduction Date
-              </FieldLabel>
-              <Input
-                id="create-start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <FieldLabel htmlFor="create-end-date">
-                Maturity / End Date (Optional)
-              </FieldLabel>
-              <Input
-                id="create-end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Real-time payoff preview */}
-          {amortization > 0 && total > 0 && (
-            <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
-              <div className="font-semibold text-foreground flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-600" />
-                Amortization Schedule Preview
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-loan-type">
+                  Loan Program / Type
+                </FieldLabel>
+                <Select
+                  items={LOAN_PROGRAM_ITEMS}
+                  value={loanType}
+                  onValueChange={(val) => {
+                    if (val) setLoanType(val);
+                  }}
+                >
+                  <SelectTrigger id="create-loan-type" className="w-full">
+                    <SelectValue placeholder="Select loan program / type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {LOAN_PROGRAM_ITEMS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
-              <p className="text-muted-foreground">
-                At{" "}
-                <strong className="text-foreground">
-                  ₱{amortization.toLocaleString()}
-                </strong>{" "}
-                per semi-monthly cutoff, this loan will take approximately{" "}
-                <strong className="text-foreground">
-                  {cutoffsToPayoff} cutoffs
-                </strong>{" "}
-                (~{estimatedMonths} months) to fully settle.
-              </p>
-            </div>
-          )}
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending && (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              )}
-              Enroll Loan
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-loan-ref">
+                  Reference / PN Number
+                </FieldLabel>
+                <Input
+                  id="create-loan-ref"
+                  placeholder="e.g. SSS-2026-09876"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-principal">
+                  Principal (₱)
+                </FieldLabel>
+                <Input
+                  id="create-principal"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="30000"
+                  value={principalPesos}
+                  onChange={(e) =>
+                    handlePrincipalChange(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
+                  }
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-total">
+                  Total to Repay (₱)
+                </FieldLabel>
+                <Input
+                  id="create-total"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="30000"
+                  value={totalAmountPesos}
+                  onChange={(e) =>
+                    setTotalAmountPesos(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
+                  }
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-amortization">
+                  Amortization / Cutoff (₱)
+                </FieldLabel>
+                <Input
+                  id="create-amortization"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="1250"
+                  value={amortizationPesos}
+                  onChange={(e) =>
+                    setAmortizationPesos(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-start-date">
+                  First Deduction Date
+                </FieldLabel>
+                <DatePicker
+                  id="create-start-date"
+                  value={startDate}
+                  onChange={(next) => setStartDate(next)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <FieldLabel htmlFor="create-end-date">
+                  Maturity / End Date (Optional)
+                </FieldLabel>
+                <DatePicker
+                  id="create-end-date"
+                  value={endDate}
+                  onChange={(next) => setEndDate(next)}
+                />
+              </div>
+            </div>
+
+            {/* Real-time payoff preview */}
+            {amortization > 0 && total > 0 && (
+              <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  Amortization Schedule Preview
+                </div>
+                <p className="text-muted-foreground">
+                  At{" "}
+                  <strong className="text-foreground">
+                    ₱{amortization.toLocaleString()}
+                  </strong>{" "}
+                  per semi-monthly cutoff, this loan will take approximately{" "}
+                  <strong className="text-foreground">
+                    {cutoffsToPayoff} cutoffs
+                  </strong>{" "}
+                  (~{estimatedMonths} months) to fully settle.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending && (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                )}
+                Enroll Loan
+              </Button>
+            </div>
+          </form>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -617,244 +624,239 @@ function LoanLedgerModal({
   const loan = loanQuery.data;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="loan-ledger-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border bg-background p-6 shadow-xl">
-        <div className="flex items-center justify-between pb-3 border-b">
-          <div>
-            <h3 id="loan-ledger-title" className="text-lg font-semibold">
-              Loan Details & Payment Ledger
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Detailed deduction history and amortization ledger.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        {loanQuery.isPending ? (
-          <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 size-5 animate-spin" />
-            Loading loan ledger…
-          </div>
-        ) : !loan ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            Loan record not found.
-          </div>
-        ) : (
-          <div className="mt-4 space-y-6">
-            {/* Loan Card Summary */}
-            <div className="grid gap-4 sm:grid-cols-2 rounded-lg border bg-muted/20 p-4 text-xs">
-              <div>
-                <span className="text-muted-foreground block">Employee</span>
-                <span className="font-semibold text-sm text-foreground">
-                  {loan.employee.firstName} {loan.employee.lastName}
-                </span>
-                <span className="text-muted-foreground block">
-                  {loan.employee.employeeNumber} ·{" "}
-                  {loan.employee.department?.name ?? "General"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-muted-foreground block">
-                  Loan Program
-                </span>
-                <span className="font-semibold text-sm text-foreground">
-                  {LOAN_TYPE_LABELS[loan.loanType] || loan.loanType}
-                </span>
-                {loan.referenceNumber && (
+      <SheetContent
+        side="right"
+        className="data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-3xl"
+      >
+        <SheetHeader>
+          <SheetTitle>Loan Details & Payment Ledger</SheetTitle>
+          <SheetDescription>
+            Detailed deduction history and amortization ledger.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          {loanQuery.isPending ? (
+            <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 size-5 animate-spin" />
+              Loading loan ledger…
+            </div>
+          ) : !loan ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Loan record not found.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-6">
+              {/* Loan Card Summary */}
+              <div className="grid gap-4 sm:grid-cols-2 rounded-lg border bg-muted/20 p-4 text-xs">
+                <div>
+                  <span className="text-muted-foreground block">Employee</span>
+                  <span className="font-semibold text-sm text-foreground">
+                    {loan.employee.firstName} {loan.employee.lastName}
+                  </span>
                   <span className="text-muted-foreground block">
-                    Ref: {loan.referenceNumber}
+                    {loan.employee.employeeNumber} ·{" "}
+                    {loan.employee.department?.name ?? "General"}
                   </span>
-                )}
-              </div>
+                </div>
 
-              <div>
-                <span className="text-muted-foreground block">
-                  Total Amount
-                </span>
-                <span className="font-semibold text-foreground">
-                  {pesos(loan.totalAmountCents)}
-                </span>
-                <span className="text-muted-foreground block">
-                  Principal: {pesos(loan.principalCents)}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-muted-foreground block">
-                  Remaining Balance
-                </span>
-                <span className="font-bold text-base text-amber-600 dark:text-amber-400">
-                  {pesos(loan.balanceCents)}
-                </span>
-                <span className="text-muted-foreground block">
-                  Amortization: {pesos(loan.amortizationCents)} / cutoff
-                </span>
-              </div>
-            </div>
-
-            {/* Repayment Progress */}
-            {(() => {
-              const total = Number(loan.totalAmountCents);
-              const balance = Number(loan.balanceCents);
-              const paid = total - balance;
-              const percent =
-                total > 0
-                  ? Math.min(100, Math.max(0, Math.round((paid / total) * 100)))
-                  : 100;
-
-              return (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Repayment Progress</span>
-                    <span className="font-semibold text-foreground">
-                      {pesos(paid)} paid ({percent}%)
+                <div>
+                  <span className="text-muted-foreground block">
+                    Loan Program
+                  </span>
+                  <span className="font-semibold text-sm text-foreground">
+                    {LOAN_TYPE_LABELS[loan.loanType] || loan.loanType}
+                  </span>
+                  {loan.referenceNumber && (
+                    <span className="text-muted-foreground block">
+                      Ref: {loan.referenceNumber}
                     </span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full bg-emerald-500 transition-all"
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
+                  )}
                 </div>
-              );
-            })()}
 
-            {/* Payment Ledger Table */}
-            <div>
-              <div className="flex items-center justify-between pb-2">
-                <h4 className="font-semibold text-sm">
-                  Payment History ({loan.payments.length})
-                </h4>
-                {loan.isActive && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onRecordPaymentRequested}
-                  >
-                    <Plus className="mr-1.5 size-3.5" />
-                    Record Settlement
-                  </Button>
-                )}
-              </div>
-
-              {loan.payments.length > 0 ? (
-                <div className="overflow-x-auto rounded-md border">
-                  <Table className="text-xs">
-                    <TableHeader>
-                      <TableRow className="uppercase text-[10px]">
-                        <TableHead className="px-3 py-2">Date</TableHead>
-                        <TableHead className="px-3 py-2">
-                          Source / Cutoff
-                        </TableHead>
-                        <TableHead className="px-3 py-2 text-right">
-                          Amount Paid
-                        </TableHead>
-                        <TableHead className="px-3 py-2 text-right">
-                          Remaining Balance
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loan.payments.map((p) => {
-                        const payrollRun = p.payslip?.payrollRun;
-                        return (
-                          <TableRow key={p.id}>
-                            <TableCell className="px-3 py-2 font-medium">
-                              {formatDate(p.paymentDate)}
-                            </TableCell>
-                            <TableCell className="px-3 py-2 text-muted-foreground">
-                              {payrollRun ? (
-                                <span>
-                                  Payroll Run (
-                                  {formatDate(payrollRun.cutoffStartDate)} –{" "}
-                                  {formatDate(payrollRun.cutoffEndDate)})
-                                </span>
-                              ) : (
-                                <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                                  Manual / Direct Payment
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                              {pesos(p.amountPaidCents)}
-                            </TableCell>
-                            <TableCell className="px-3 py-2 text-right font-medium">
-                              {pesos(p.balanceAfterCents)}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <Empty className="py-6 border rounded-md">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <CreditCard className="size-6 text-muted-foreground" />
-                    </EmptyMedia>
-                    <EmptyTitle>No payments recorded yet</EmptyTitle>
-                    <EmptyDescription>
-                      Amortization will automatically deduct on the next payroll
-                      run.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-            </div>
-
-            {/* Footer Actions */}
-            <div className="flex items-center justify-between pt-4 border-t">
-              <div>
-                {loan.isActive ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    disabled={deactivateMutation.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Are you sure you want to deactivate this loan? Automated deductions will stop.",
-                        )
-                      ) {
-                        deactivateMutation.mutate({ loanId: loan.id });
-                      }
-                    }}
-                  >
-                    Deactivate Loan
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    This loan account is closed.
+                <div>
+                  <span className="text-muted-foreground block">
+                    Total Amount
                   </span>
+                  <span className="font-semibold text-foreground">
+                    {pesos(loan.totalAmountCents)}
+                  </span>
+                  <span className="text-muted-foreground block">
+                    Principal: {pesos(loan.principalCents)}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground block">
+                    Remaining Balance
+                  </span>
+                  <span className="font-bold text-base text-amber-600 dark:text-amber-400">
+                    {pesos(loan.balanceCents)}
+                  </span>
+                  <span className="text-muted-foreground block">
+                    Amortization: {pesos(loan.amortizationCents)} / cutoff
+                  </span>
+                </div>
+              </div>
+
+              {/* Repayment Progress */}
+              {(() => {
+                const total = Number(loan.totalAmountCents);
+                const balance = Number(loan.balanceCents);
+                const paid = total - balance;
+                const percent =
+                  total > 0
+                    ? Math.min(
+                        100,
+                        Math.max(0, Math.round((paid / total) * 100)),
+                      )
+                    : 100;
+
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Repayment Progress</span>
+                      <span className="font-semibold text-foreground">
+                        {pesos(paid)} paid ({percent}%)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Payment Ledger Table */}
+              <div>
+                <div className="flex items-center justify-between pb-2">
+                  <h4 className="font-semibold text-sm">
+                    Payment History ({loan.payments.length})
+                  </h4>
+                  {loan.isActive && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={onRecordPaymentRequested}
+                    >
+                      <Plus className="mr-1.5 size-3.5" />
+                      Record Settlement
+                    </Button>
+                  )}
+                </div>
+
+                {loan.payments.length > 0 ? (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table className="text-xs">
+                      <TableHeader>
+                        <TableRow className="uppercase text-[10px]">
+                          <TableHead className="px-3 py-2">Date</TableHead>
+                          <TableHead className="px-3 py-2">
+                            Source / Cutoff
+                          </TableHead>
+                          <TableHead className="px-3 py-2 text-right">
+                            Amount Paid
+                          </TableHead>
+                          <TableHead className="px-3 py-2 text-right">
+                            Remaining Balance
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loan.payments.map((p) => {
+                          const payrollRun = p.payslip?.payrollRun;
+                          return (
+                            <TableRow key={p.id}>
+                              <TableCell className="px-3 py-2 font-medium">
+                                {formatDate(p.paymentDate)}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
+                                {payrollRun ? (
+                                  <span>
+                                    Payroll Run (
+                                    {formatDate(payrollRun.cutoffStartDate)} –{" "}
+                                    {formatDate(payrollRun.cutoffEndDate)})
+                                  </span>
+                                ) : (
+                                  <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                                    Manual / Direct Payment
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                                {pesos(p.amountPaidCents)}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-right font-medium">
+                                {pesos(p.balanceAfterCents)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <Empty className="py-6 border rounded-md">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <CreditCard className="size-6 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>No payments recorded yet</EmptyTitle>
+                      <EmptyDescription>
+                        Amortization will automatically deduct on the next
+                        payroll run.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )}
               </div>
 
-              <Button type="button" variant="outline" onClick={onClose}>
-                Close
-              </Button>
+              {/* Footer Actions */}
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div>
+                  {loan.isActive ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={deactivateMutation.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Are you sure you want to deactivate this loan? Automated deductions will stop.",
+                          )
+                        ) {
+                          deactivateMutation.mutate({ loanId: loan.id });
+                        }
+                      }}
+                    >
+                      Deactivate Loan
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      This loan account is closed.
+                    </span>
+                  )}
+                </div>
+
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -914,31 +916,19 @@ function RecordPaymentModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="record-payment-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="relative w-full max-w-md rounded-lg border bg-background p-6 shadow-xl">
-        <div className="flex items-center justify-between pb-3 border-b">
-          <div>
-            <h3 id="record-payment-title" className="text-lg font-semibold">
-              Record Direct Payment
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Record an over-the-counter or cash settlement outside payroll.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Record Direct Payment</DialogTitle>
+          <DialogDescription>
+            Record an over-the-counter or cash settlement outside payroll.
+          </DialogDescription>
+        </DialogHeader>
 
         {errorMessage && (
           <div className="mt-4 flex items-center gap-2 rounded-md bg-destructive/15 p-3 text-xs text-destructive">
@@ -1042,7 +1032,7 @@ function RecordPaymentModal({
             </div>
           </form>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

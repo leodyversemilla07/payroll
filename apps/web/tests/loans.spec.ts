@@ -363,8 +363,9 @@ test.describe("Loans & Amortization Management", () => {
     await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/loans");
 
-    // Click "Ledger"
-    await page.getByRole("button", { name: "Ledger" }).first().click();
+    // Open the row menu and view the ledger
+    await page.getByRole("button", { name: "Open menu" }).first().click();
+    await page.getByRole("menuitem", { name: "View ledger" }).click();
 
     // Verify modal
     await expect(
@@ -374,7 +375,7 @@ test.describe("Loans & Amortization Management", () => {
     await expect(page.getByText(/Payroll Run/i).first()).toBeVisible();
 
     // Close ledger modal
-    await page.getByLabel("Close").click();
+    await page.getByRole("button", { name: "Cancel" }).click();
   });
 
   test("records direct settlement payment outside payroll", async ({
@@ -383,8 +384,9 @@ test.describe("Loans & Amortization Management", () => {
     await mockLoans(page, { role: "PAYROLL_SPECIALIST" });
     await page.goto("/loans");
 
-    // Click "Pay" quick action
-    await page.getByRole("button", { name: "Pay" }).first().click();
+    // Open the row menu and record a payment
+    await page.getByRole("button", { name: "Open menu" }).first().click();
+    await page.getByRole("menuitem", { name: "Record payment" }).click();
 
     // Verify Record Direct Payment modal
     await expect(
