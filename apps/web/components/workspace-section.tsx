@@ -25,8 +25,7 @@ export function SectionHeader({ sectionId }: { sectionId: WorkspaceSection }) {
   const section =
     workspaceSections.find((entry) => entry.id === sectionId) ??
     workspaceSections[0];
-  const title =
-    isEmployee && sectionId === "overview" ? "Dashboard" : section.label;
+  const title = section.label;
   const description =
     isEmployee && sectionId === "overview"
       ? EMPLOYEE_OVERVIEW_DESCRIPTION
@@ -82,7 +81,7 @@ export function SectionGate({
           href="/overview"
           className={buttonVariants({ variant: "default" })}
         >
-          Return to Overview
+          Return to Dashboard
         </Link>
       </CardContent>
     </Card>

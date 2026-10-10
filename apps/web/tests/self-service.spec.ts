@@ -697,7 +697,7 @@ test("department manager sidebar shows workspace and self-service navigation", a
   // Manager should see workspace items (employees/attendance are intentionally
   // omitted: the role is denied on those sections, so links would dead-end)
   await expect(
-    nav.getByRole("link", { name: "Overview", exact: true }),
+    nav.getByRole("link", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await expect(nav.getByText("Employees", { exact: true })).toHaveCount(0);
   await expect(nav.getByText("Attendance & DTR")).toHaveCount(0);
@@ -728,7 +728,7 @@ test("HR admin sidebar shows full workspace including payroll operations", async
 
   // HR should see all workspace items
   await expect(
-    nav.getByRole("link", { name: "Overview", exact: true }),
+    nav.getByRole("link", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await expect(
     nav.getByRole("link", { name: "Employees", exact: true }),
@@ -771,7 +771,7 @@ test("employee directly accessing unauthorized payroll routes sees Access Restri
   await expect(restrictedCard).toBeVisible();
   await expect(restrictedCard.getByText("Access Restricted")).toBeVisible();
   await expect(
-    restrictedCard.getByRole("link", { name: "Return to Overview" }),
+    restrictedCard.getByRole("link", { name: "Return to Dashboard" }),
   ).toBeVisible();
 
   await page.goto("/payroll-runs");

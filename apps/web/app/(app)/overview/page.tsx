@@ -1,14 +1,14 @@
 "use client";
 
 import { SectionGate, SectionHeader } from "@/components/workspace-section";
-import { OverviewSection } from "@/features/dashboard/overview-section";
+import { DashboardSection } from "@/features/dashboard/dashboard-section";
 
-export default function OverviewPage() {
+export default function DashboardPage() {
   return (
     <>
       <SectionHeader sectionId="overview" />
       <SectionGate sectionId="overview">
-        <OverviewSection />
+        <DashboardSection />
       </SectionGate>
     </>
   );

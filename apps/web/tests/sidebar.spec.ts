@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 const destinations = [
-  { label: "Overview", href: "/overview", region: null, query: null },
+  { label: "Dashboard", href: "/overview", region: null, query: null },
   {
     label: "Employees",
     href: "/employees",
@@ -134,7 +134,7 @@ test("sidebar routes replace page content, share the layout and preserve history
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
   await expect(nav).toBeVisible();
   await expect(
-    nav.getByRole("link", { name: "Overview", exact: true }),
+    nav.getByRole("link", { name: "Dashboard", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   expect(requests).not.toContain("employees.list");
   expect(requests).not.toContain("payroll.listRuns");

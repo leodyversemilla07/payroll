@@ -310,7 +310,7 @@ export function MyProfileSection() {
 
   return (
     <section className="space-y-6" aria-label="My Profile">
-      {/* 1. User Account Overview (Always displayed) */}
+      {/* 1. User account (Always displayed) */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">

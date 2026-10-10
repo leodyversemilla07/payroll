@@ -20,9 +20,10 @@ export const workspaceSections = [
   {
     id: "overview",
     href: "/overview",
-    label: "Overview",
+    label: "Dashboard",
     icon: LayoutDashboard,
-    description: "Choose a workspace or payroll operation.",
+    description:
+      "Monitor workforce, payroll, leave and loan metrics at a glance.",
   },
   {
     id: "employees",

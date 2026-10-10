@@ -101,7 +101,24 @@ const overviewData = {
     activeCount: 1,
     totalOutstandingCents: 500000,
   },
-  audit: [],
+  audit: [
+    {
+      id: "audit-1",
+      action: "APPROVE",
+      entityType: "PayrollRun",
+      entityId: runId,
+      userEmail: "hr@example.com",
+      createdAt: "2026-09-30T00:00:00.000Z",
+    },
+    {
+      id: "audit-2",
+      action: "CREATE",
+      entityType: "LeaveRequest",
+      entityId: "lr-1",
+      userEmail: "hr@example.com",
+      createdAt: "2026-09-29T00:00:00.000Z",
+    },
+  ],
 };
 
 // Exercise the real browser UI, tRPC batch transport and auth transitions without a database.
@@ -191,13 +208,32 @@ test("sign in, read API-backed lists and payslip, then sign out", async ({
   await expect(passwordInput).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Dashboard metrics" }),
   ).toBeVisible();
   await expect(page.getByText("8 / 10 total")).toBeVisible();
   await expect(page.getByText("Recent Payroll Runs")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Needs attention" }),
+  ).toBeVisible();
+  await expect(page.getByText("1 run awaiting approval")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Net pay trend" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Recent activity" }),
+  ).toBeVisible();
+  const activity = page.getByRole("region", { name: "Recent activity" });
+  await expect(
+    activity.getByRole("columnheader", { name: "Action" }),
+  ).toBeVisible();
+  await expect(
+    activity.getByRole("columnheader", { name: "Performed by" }),
+  ).toBeVisible();
+  await expect(activity.getByText("Payroll Run")).toBeVisible();
+  await expect(activity.getByText("hr@example.com")).toHaveCount(2);
   await expect(page.getByText("Signed in as")).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
   await nav.getByRole("link", { name: "Employees", exact: true }).click();
@@ -243,7 +279,7 @@ test("removed demo returns 404 and sign-in has no demo link", async ({
 test("overview page displays error banner when dashboard metrics fail to load and recovers on retry", async ({
   page,
 }) => {
-  let failOverview = true;
+  let failDashboard = true;
   let signedIn = false;
   await page.route("**/trpc/**", async (route) => {
     const paths = (
@@ -273,7 +309,7 @@ test("overview page displays error banner when dashboard metrics fail to load an
         return { result: { data: { json: user } } };
       }
       if (path === "dashboard.getOverview") {
-        if (failOverview) {
+        if (failDashboard) {
           return {
             error: {
               json: {
@@ -300,24 +336,28 @@ test("overview page displays error banner when dashboard metrics fail to load an
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
 
   await expect(
     page.getByText("Dashboard statistics unavailable"),
   ).toBeVisible();
 
-  // Navigation cards are still accessible even when stats fail
-  await expect(
-    page.getByRole("link", { name: "Open Employees" }),
-  ).toBeVisible();
+  // The sidebar owns navigation; the dashboard shows no launcher grid.
+  await expect(page.getByRole("link", { name: "Open Employees" })).toHaveCount(
+    0,
+  );
 
   // Retry loading overview
-  failOverview = false;
+  failDashboard = false;
   await page.getByRole("button", { name: "Retry" }).click();
 
   await expect(
     page.getByRole("region", { name: "Dashboard metrics" }),
   ).toBeVisible();
   await expect(page.getByText("8 / 10 total")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Needs attention" }),
+  ).toBeVisible();
+  await expect(page.getByText("1 run awaiting approval")).toBeVisible();
 });
