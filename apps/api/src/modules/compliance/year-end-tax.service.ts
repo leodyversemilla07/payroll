@@ -8,822 +8,28 @@ import { type Prisma, prisma } from '@workspace/db';
 import type {
   Bir1604CSchedule71Employee,
   Bir1604CSchedule72Employee,
-  ThirteenthMonthBatchResult,
-  ThirteenthMonthEmployeeResult,
 } from '@workspace/payroll-engine';
 import { Bir2316PdfService } from './bir-2316-pdf.service';
 import { resolvePriorEmployerTotals } from './prior-employment.inputs';
+import {
+  assertCorrectionReason,
+  assertCorrectionReviewer,
+  assertEmployeeInTenant,
+  assertSupportedTaxYear,
+  createEvidence,
+} from './tax-evidence-guards';
 import { sourceFingerprint, TAX_SOURCE_FORMAT } from './tax-source-fingerprint';
 
-export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
-
-function csvField(value: string): string {
-  if (/^[\s]*[=+@-]/.test(value) || /[\r\n]/.test(value)) {
-    throw new UnprocessableEntityException(
-      'Bank transmittal contains an unsafe CSV field',
-    );
-  }
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
-export interface DoleReportDetails {
-  natureOfBusiness: string;
-  contactPerson: string;
-  contactNumber: string;
-  contactTitle: string;
-}
-
-export interface BankTransmittalItem {
-  employeeNumber: string;
-  accountName: string;
-  accountNumber: string;
-  bankName: string;
-  amountPesos: number;
-  remarks: string;
-}
-
-export interface Bir1601CSummary {
-  taxablePeriod: string;
-  totalEmployees: number;
-  minimumWageEarnersCount: number;
-  grossCompensationPesos: number;
-  nonTaxableCompensationPesos: number; // Statutory EE share + De Minimis
-  taxableCompensationPesos: number;
-  totalTaxWithheldPesos: number;
-  // BIR remittance deadline: 10th day of the following month, or January 15
-  // for the December return. eFPS filers follow their staggered eFPS schedule.
-  remittanceDeadline: string; // YYYY-MM-DD
-}
-
 @Injectable()
-export class ComplianceService {
+export class YearEndTaxService {
   private database: Prisma.TransactionClient = prisma;
   private readonly bir2316PdfService = new Bir2316PdfService();
 
   /** A fresh transaction-scoped instance; never mutate the singleton service. */
-  withDatabase(database: Prisma.TransactionClient): ComplianceService {
-    const service = new ComplianceService();
+  withDatabase(database: Prisma.TransactionClient): YearEndTaxService {
+    const service = new YearEndTaxService();
     service.database = database;
     return service;
-  }
-  /**
-   * Generates a structured bank transmittal CSV string for the specified payroll run and bank.
-   */
-  async generateBankTransmittalCsv(
-    payrollRunId: string,
-    bankFormat: BankFormat,
-    organizationId: string,
-  ): Promise<string> {
-    const run = await this.database.payrollRun.findFirst({
-      where: { id: payrollRunId, organizationId },
-      select: { status: true },
-    });
-    if (!run) throw new NotFoundException('Payroll run not found');
-    if (run.status !== 'APPROVED' && run.status !== 'DISBURSED') {
-      throw new UnprocessableEntityException(
-        'Bank transmittals require an approved payroll run',
-      );
-    }
-
-    const payslips = await this.database.payslip.findMany({
-      where: {
-        payrollRunId,
-        payrollRun: {
-          organizationId,
-          status: { in: ['APPROVED', 'DISBURSED'] },
-        },
-      },
-      include: {
-        employee: true,
-      },
-    });
-
-    // A bank file includes only that bank's accounts. Never silently export
-    // placeholder account numbers or an empty file as a payment instruction.
-    const bankPayslips = payslips.filter((ps) =>
-      ps.employee.bankName.toUpperCase().includes(bankFormat),
-    );
-    if (bankPayslips.length === 0) {
-      throw new UnprocessableEntityException(
-        `No ${bankFormat} payslips exist in this payroll run`,
-      );
-    }
-    if (
-      bankPayslips.some(
-        (ps) =>
-          !ps.employee.bankAccountNumber.trim() ||
-          /^0+$/.test(ps.employee.bankAccountNumber.trim()),
-      )
-    ) {
-      throw new UnprocessableEntityException(
-        'Bank transmittal contains a missing or placeholder account number',
-      );
-    }
-
-    const items: BankTransmittalItem[] = bankPayslips.map((ps) => {
-      const netPesos = Number(ps.netPayCents) / 100;
-      return {
-        employeeNumber: ps.employee.employeeNumber,
-        accountName:
-          ps.employee.bankAccountName ||
-          `${ps.employee.firstName} ${ps.employee.lastName}`,
-        accountNumber: ps.employee.bankAccountNumber || 'N/A',
-        bankName: ps.employee.bankName || bankFormat,
-        amountPesos: netPesos,
-        remarks: `PAYROLL-${ps.id.slice(0, 8)}`,
-      };
-    });
-
-    return this.formatTransmittal(bankFormat, items);
-  }
-
-  private formatTransmittal(
-    format: BankFormat,
-    items: BankTransmittalItem[],
-  ): string {
-    switch (format) {
-      case 'BDO': {
-        // BDO Auto-Credit Format: Account No, Amount, Beneficiary Name, Reference
-        const headers =
-          'Account_Number,Amount,Beneficiary_Name,Employee_ID,Reference';
-        const rows = items.map(
-          (i) =>
-            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.employeeNumber)},${csvField(i.remarks)}`,
-        );
-        return [headers, ...rows].join('\r\n');
-      }
-      case 'BPI': {
-        // BPI ExpressLink / BizLink Format: BPI Account No, Amount, Payee Name, Ref
-        const headers = 'BPI_Account_Number,Payee_Name,Amount,Remarks';
-        const rows = items.map(
-          (i) =>
-            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},${csvField(i.remarks)}`,
-        );
-        return [headers, ...rows].join('\r\n');
-      }
-      case 'UNIONBANK': {
-        // UnionBank The Portal Corporate Format: Account Number, Account Name, Amount, Currency, Remarks
-        const headers =
-          'Recipient_Account,Recipient_Name,Amount,Currency,Remarks,Employee_ID';
-        const rows = items.map(
-          (i) =>
-            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},"PHP",${csvField(i.remarks)},${csvField(i.employeeNumber)}`,
-        );
-        return [headers, ...rows].join('\r\n');
-      }
-      case 'METROBANK': {
-        // Metrobank Direct Corporate Banking format
-        const headers = 'Metrobank_Account,Amount,Customer_Name,Description';
-        const rows = items.map(
-          (i) =>
-            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.remarks)}`,
-        );
-        return [headers, ...rows].join('\r\n');
-      }
-    }
-  }
-
-  /**
-   * Computes BIR 1601-C (Monthly Remittance Return of Income Taxes Withheld on Compensation) summary.
-   */
-  async getBir1601CSummary(
-    month: number,
-    year: number,
-    organizationId: string,
-  ): Promise<Bir1601CSummary> {
-    const payslips = await this.database.payslip.findMany({
-      where: {
-        payrollRun: {
-          organizationId,
-          status: 'DISBURSED',
-          paymentDate: {
-            gte: new Date(Date.UTC(year, month - 1, 1)),
-            lt: new Date(Date.UTC(year, month, 1)),
-          },
-        },
-      },
-      include: {
-        employee: { include: { compensation: true } },
-      },
-    });
-
-    if (payslips.length === 0) {
-      throw new UnprocessableEntityException(
-        `No disbursed payslips exist for ${year}-${String(month).padStart(2, '0')}`,
-      );
-    }
-
-    let grossCents = 0n;
-    let nonTaxableCents = 0n;
-    let taxableCents = 0n;
-    let taxWithheldCents = 0n;
-    const employeeIds = new Set<string>();
-    const mweIds = new Set<string>();
-
-    for (const ps of payslips) {
-      grossCents += ps.grossPayCents;
-      nonTaxableCents +=
-        ps.nonTaxableAllowancesCents +
-        ps.sssEmployeeCents +
-        ps.philhealthEmployeeCents +
-        ps.pagibigEmployeeCents;
-      // Taxable income is gross pay minus non-taxable allowances and statutory contributions
-      const taxable =
-        ps.grossPayCents >
-        ps.nonTaxableAllowancesCents +
-          ps.sssEmployeeCents +
-          ps.philhealthEmployeeCents +
-          ps.pagibigEmployeeCents
-          ? ps.grossPayCents -
-            (ps.nonTaxableAllowancesCents +
-              ps.sssEmployeeCents +
-              ps.philhealthEmployeeCents +
-              ps.pagibigEmployeeCents)
-          : 0n;
-      taxableCents += taxable;
-      taxWithheldCents += ps.withholdingTaxCents;
-      employeeIds.add(ps.employeeId);
-      if (ps.employee.compensation?.isTaxExempt) {
-        mweIds.add(ps.employeeId);
-      }
-    }
-
-    const deadlineYear = month === 12 ? year + 1 : year;
-    const deadlineMonth = month === 12 ? 1 : month + 1;
-    const deadlineDay = month === 12 ? 15 : 10;
-
-    return {
-      taxablePeriod: `${year}-${String(month).padStart(2, '0')}`,
-      totalEmployees: employeeIds.size,
-      minimumWageEarnersCount: mweIds.size,
-      grossCompensationPesos: Number(grossCents) / 100,
-      nonTaxableCompensationPesos: Number(nonTaxableCents) / 100,
-      taxableCompensationPesos: Number(taxableCents) / 100,
-      totalTaxWithheldPesos: Number(taxWithheldCents) / 100,
-      remittanceDeadline: `${deadlineYear}-${String(deadlineMonth).padStart(2, '0')}-${String(deadlineDay).padStart(2, '0')}`,
-    };
-  }
-
-  private async assertEmployeeInTenant(
-    employeeId: string,
-    organizationId: string,
-  ) {
-    const employee = await this.database.employee.findFirst({
-      where: { id: employeeId, organizationId },
-      select: { id: true },
-    });
-    if (!employee) throw new NotFoundException('Employee not found');
-  }
-
-  private async createEvidence<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'Tax evidence for this key already exists; use the correction procedure with a reviewer to supersede it',
-        );
-      }
-      throw error;
-    }
-  }
-
-  private assertCorrectionReason(reason: string): string {
-    const trimmed = reason.trim();
-    if (trimmed.length < 10 || trimmed.length > 500) {
-      throw new UnprocessableEntityException(
-        'Correction requires a reason of 10–500 characters',
-      );
-    }
-    return trimmed;
-  }
-
-  private async assertCorrectionReviewer(input: {
-    organizationId: string;
-    recorderId: string;
-    reviewerId: string;
-  }): Promise<void> {
-    if (input.reviewerId === input.recorderId) {
-      throw new UnprocessableEntityException(
-        'Correction reviewer must differ from the recorder (four-eyes)',
-      );
-    }
-    const reviewer = await this.database.user.findFirst({
-      where: {
-        id: input.reviewerId,
-        organizationId: input.organizationId,
-        isActive: true,
-        role: { in: ['SUPER_ADMIN', 'HR_ADMIN'] },
-      },
-      select: { id: true },
-    });
-    if (!reviewer) {
-      throw new UnprocessableEntityException(
-        'Correction reviewer must be an active HR/admin in this organization',
-      );
-    }
-  }
-
-  async recordPriorEmployerDeclaration(input: {
-    employeeId: string;
-    organizationId: string;
-    taxYear: number;
-    hasPriorEmployer: boolean;
-    sourceReference: string;
-    recordedById: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const existing = await this.database.priorEmployerDeclaration.findFirst({
-      where: {
-        employeeId: input.employeeId,
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new ConflictException(
-        'A declaration already exists for this employee-year; use the correction procedure with a reviewer to supersede it',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.priorEmployerDeclaration.create({
-        data: input,
-        select: {
-          id: true,
-          employeeId: true,
-          taxYear: true,
-          hasPriorEmployer: true,
-          sourceReference: true,
-          recordedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  /**
-   * Appends a higher-version declaration that replaces the current one. The
-   * replaced row is never mutated; readers use the highest version.
-   */
-  async supersedePriorEmployerDeclaration(input: {
-    employeeId: string;
-    organizationId: string;
-    taxYear: number;
-    hasPriorEmployer: boolean;
-    sourceReference: string;
-    correctionReason: string;
-    recordedById: string;
-    reviewerId: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const correctionReason = this.assertCorrectionReason(
-      input.correctionReason,
-    );
-    await this.assertCorrectionReviewer({
-      organizationId: input.organizationId,
-      recorderId: input.recordedById,
-      reviewerId: input.reviewerId,
-    });
-    const current = await this.database.priorEmployerDeclaration.findFirst({
-      where: {
-        employeeId: input.employeeId,
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-      },
-      orderBy: { version: 'desc' },
-    });
-    if (!current) {
-      throw new NotFoundException(
-        'No prior-employer declaration exists to correct',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.priorEmployerDeclaration.create({
-        data: {
-          employeeId: input.employeeId,
-          organizationId: input.organizationId,
-          taxYear: input.taxYear,
-          hasPriorEmployer: input.hasPriorEmployer,
-          sourceReference: input.sourceReference,
-          recordedById: input.recordedById,
-          version: current.version + 1,
-          supersedesId: current.id,
-          correctionReason,
-          reviewedById: input.reviewerId,
-        },
-        select: {
-          id: true,
-          employeeId: true,
-          taxYear: true,
-          hasPriorEmployer: true,
-          sourceReference: true,
-          recordedById: true,
-          version: true,
-          supersedesId: true,
-          correctionReason: true,
-          reviewedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  async recordPreviousEmployerIncome(input: {
-    employeeId: string;
-    organizationId: string;
-    taxYear: number;
-    employerName: string;
-    employerTin: string;
-    periodStart: Date;
-    periodEnd: Date;
-    grossCompensationCents: bigint;
-    taxableCompensationCents: bigint;
-    taxWithheldCents: bigint;
-    documentReference: string;
-    recordedById: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const declaration = await this.database.priorEmployerDeclaration.findFirst({
-      where: {
-        employeeId: input.employeeId,
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-      },
-      orderBy: { version: 'desc' },
-    });
-    if (!declaration?.hasPriorEmployer) {
-      throw new UnprocessableEntityException(
-        'Declare prior employment before recording its tax documents',
-      );
-    }
-    if (
-      input.periodStart > input.periodEnd ||
-      input.periodStart.getUTCFullYear() !== input.taxYear ||
-      input.periodEnd.getUTCFullYear() !== input.taxYear ||
-      input.taxableCompensationCents > input.grossCompensationCents ||
-      input.grossCompensationCents < 0n ||
-      input.taxableCompensationCents < 0n ||
-      input.taxWithheldCents < 0n
-    ) {
-      throw new UnprocessableEntityException(
-        'Invalid previous-employer period or compensation totals',
-      );
-    }
-    const existingDocument =
-      await this.database.previousEmployerIncome.findFirst({
-        where: {
-          employeeId: input.employeeId,
-          organizationId: input.organizationId,
-          taxYear: input.taxYear,
-          employerTin: input.employerTin,
-          periodStart: input.periodStart,
-          periodEnd: input.periodEnd,
-        },
-        select: { id: true },
-      });
-    if (existingDocument) {
-      throw new ConflictException(
-        'This previous-employer document already exists; use the correction procedure with a reviewer to supersede it',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.previousEmployerIncome.create({
-        data: input,
-        select: {
-          id: true,
-          employeeId: true,
-          taxYear: true,
-          employerName: true,
-          employerTin: true,
-          periodStart: true,
-          periodEnd: true,
-          grossCompensationCents: true,
-          taxableCompensationCents: true,
-          taxWithheldCents: true,
-          documentReference: true,
-          recordedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  /**
-   * Appends a higher-version transcription that replaces one
-   * previous-employer document. The document key (TIN + period) is immutable;
-   * only figures, names and the reference change.
-   */
-  async supersedePreviousEmployerIncome(input: {
-    employeeId: string;
-    organizationId: string;
-    taxYear: number;
-    employerName: string;
-    employerTin: string;
-    periodStart: Date;
-    periodEnd: Date;
-    grossCompensationCents: bigint;
-    taxableCompensationCents: bigint;
-    taxWithheldCents: bigint;
-    documentReference: string;
-    correctionReason: string;
-    recordedById: string;
-    reviewerId: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const correctionReason = this.assertCorrectionReason(
-      input.correctionReason,
-    );
-    await this.assertCorrectionReviewer({
-      organizationId: input.organizationId,
-      recorderId: input.recordedById,
-      reviewerId: input.reviewerId,
-    });
-    if (
-      input.taxableCompensationCents > input.grossCompensationCents ||
-      input.grossCompensationCents < 0n ||
-      input.taxableCompensationCents < 0n ||
-      input.taxWithheldCents < 0n
-    ) {
-      throw new UnprocessableEntityException(
-        'Invalid previous-employer compensation totals',
-      );
-    }
-    const current = await this.database.previousEmployerIncome.findFirst({
-      where: {
-        employeeId: input.employeeId,
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-        employerTin: input.employerTin,
-        periodStart: input.periodStart,
-        periodEnd: input.periodEnd,
-      },
-      orderBy: { version: 'desc' },
-    });
-    if (!current) {
-      throw new NotFoundException(
-        'No previous-employer document exists to correct',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.previousEmployerIncome.create({
-        data: {
-          employeeId: input.employeeId,
-          organizationId: input.organizationId,
-          taxYear: input.taxYear,
-          employerName: input.employerName,
-          employerTin: input.employerTin,
-          periodStart: input.periodStart,
-          periodEnd: input.periodEnd,
-          grossCompensationCents: input.grossCompensationCents,
-          taxableCompensationCents: input.taxableCompensationCents,
-          taxWithheldCents: input.taxWithheldCents,
-          documentReference: input.documentReference,
-          recordedById: input.recordedById,
-          version: current.version + 1,
-          supersedesId: current.id,
-          correctionReason,
-          reviewedById: input.reviewerId,
-        },
-        select: {
-          id: true,
-          employeeId: true,
-          taxYear: true,
-          employerName: true,
-          employerTin: true,
-          periodStart: true,
-          periodEnd: true,
-          grossCompensationCents: true,
-          taxableCompensationCents: true,
-          taxWithheldCents: true,
-          documentReference: true,
-          recordedById: true,
-          version: true,
-          supersedesId: true,
-          correctionReason: true,
-          reviewedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  async recordMonthlyTaxRemittance(input: {
-    organizationId: string;
-    taxYear: number;
-    month: number;
-    remittedCents: bigint;
-    documentReference: string;
-    recordedById: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    if (
-      !Number.isInteger(input.month) ||
-      input.month < 1 ||
-      input.month > 12 ||
-      input.remittedCents < 0n
-    ) {
-      throw new UnprocessableEntityException(
-        'Invalid remittance month or amount',
-      );
-    }
-    const existingRemittance =
-      await this.database.monthlyTaxRemittanceEvidence.findFirst({
-        where: {
-          organizationId: input.organizationId,
-          taxYear: input.taxYear,
-          month: input.month,
-        },
-        select: { id: true },
-      });
-    if (existingRemittance) {
-      throw new ConflictException(
-        'A remittance reference already exists for this month; use the correction procedure with a reviewer to supersede it',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.monthlyTaxRemittanceEvidence.create({
-        data: input,
-        select: {
-          id: true,
-          taxYear: true,
-          month: true,
-          remittedCents: true,
-          documentReference: true,
-          recordedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  /**
-   * Appends a higher-version monthly remittance reference that replaces the
-   * current one. The replaced row is never mutated.
-   */
-  async supersedeMonthlyTaxRemittance(input: {
-    organizationId: string;
-    taxYear: number;
-    month: number;
-    remittedCents: bigint;
-    documentReference: string;
-    correctionReason: string;
-    recordedById: string;
-    reviewerId: string;
-  }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    if (
-      !Number.isInteger(input.month) ||
-      input.month < 1 ||
-      input.month > 12 ||
-      input.remittedCents < 0n
-    ) {
-      throw new UnprocessableEntityException(
-        'Invalid remittance month or amount',
-      );
-    }
-    const correctionReason = this.assertCorrectionReason(
-      input.correctionReason,
-    );
-    await this.assertCorrectionReviewer({
-      organizationId: input.organizationId,
-      recorderId: input.recordedById,
-      reviewerId: input.reviewerId,
-    });
-    const current = await this.database.monthlyTaxRemittanceEvidence.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        taxYear: input.taxYear,
-        month: input.month,
-      },
-      orderBy: { version: 'desc' },
-    });
-    if (!current) {
-      throw new NotFoundException(
-        'No monthly remittance reference exists to correct',
-      );
-    }
-    return this.createEvidence(() =>
-      this.database.monthlyTaxRemittanceEvidence.create({
-        data: {
-          organizationId: input.organizationId,
-          taxYear: input.taxYear,
-          month: input.month,
-          remittedCents: input.remittedCents,
-          documentReference: input.documentReference,
-          recordedById: input.recordedById,
-          version: current.version + 1,
-          supersedesId: current.id,
-          correctionReason,
-          reviewedById: input.reviewerId,
-        },
-        select: {
-          id: true,
-          taxYear: true,
-          month: true,
-          remittedCents: true,
-          documentReference: true,
-          recordedById: true,
-          version: true,
-          supersedesId: true,
-          correctionReason: true,
-          reviewedById: true,
-          createdAt: true,
-        },
-      }),
-    );
-  }
-
-  async getTaxEvidence(
-    employeeId: string,
-    organizationId: string,
-    taxYear: number,
-  ) {
-    this.assertSupportedTaxYear(taxYear);
-    await this.assertEmployeeInTenant(employeeId, organizationId);
-    const [
-      declarationVersions,
-      previousVersions,
-      remittanceVersions,
-      settlementVersions,
-    ] = await Promise.all([
-      this.database.priorEmployerDeclaration.findMany({
-        where: { employeeId, organizationId, taxYear },
-        orderBy: { version: 'desc' },
-      }),
-      this.database.previousEmployerIncome.findMany({
-        where: { employeeId, organizationId, taxYear },
-        orderBy: [{ version: 'desc' }, { periodStart: 'asc' }],
-      }),
-      this.database.monthlyTaxRemittanceEvidence.findMany({
-        where: { organizationId, taxYear },
-        orderBy: [{ month: 'asc' }, { version: 'desc' }],
-      }),
-      this.database.yearEndTaxSettlement.findMany({
-        where: { employeeId, organizationId, taxYear },
-        orderBy: { version: 'desc' },
-      }),
-    ]);
-    // Readers use the highest version per key; every replaced row stays in
-    // history for audit.
-    const declaration = declarationVersions[0] ?? null;
-    const currentPreviousByKey = new Map<
-      string,
-      (typeof previousVersions)[number]
-    >();
-    for (const record of previousVersions) {
-      const key = `${record.employerTin}|${record.periodStart.toISOString()}|${record.periodEnd.toISOString()}`;
-      if (!currentPreviousByKey.has(key)) {
-        currentPreviousByKey.set(key, record);
-      }
-    }
-    const currentPreviousIds = new Set(
-      [...currentPreviousByKey.values()].map((record) => record.id),
-    );
-    const previousEmployers = [...currentPreviousByKey.values()];
-    const currentRemittanceByMonth = new Map<
-      number,
-      (typeof remittanceVersions)[number]
-    >();
-    for (const record of remittanceVersions) {
-      if (!currentRemittanceByMonth.has(record.month)) {
-        currentRemittanceByMonth.set(record.month, record);
-      }
-    }
-    const currentRemittanceIds = new Set(
-      [...currentRemittanceByMonth.values()].map((record) => record.id),
-    );
-    const monthlyRemittances = [...currentRemittanceByMonth.values()].sort(
-      (a, b) => a.month - b.month,
-    );
-    const settlement = settlementVersions[0] ?? null;
-    return {
-      taxYear,
-      selfReportedUnverified: true as const,
-      declaration,
-      previousEmployers,
-      monthlyRemittances,
-      settlement,
-      supersededHistory: {
-        declarations: declarationVersions.slice(1),
-        previousEmployers: previousVersions.filter(
-          (record) => !currentPreviousIds.has(record.id),
-        ),
-        monthlyRemittances: remittanceVersions.filter(
-          (record) => !currentRemittanceIds.has(record.id),
-        ),
-        settlements: settlementVersions.slice(1),
-      },
-    };
   }
 
   async getYearEndSettlement(
@@ -831,8 +37,8 @@ export class ComplianceService {
     organizationId: string,
     taxYear: number,
   ) {
-    this.assertSupportedTaxYear(taxYear);
-    await this.assertEmployeeInTenant(employeeId, organizationId);
+    assertSupportedTaxYear(taxYear);
+    await assertEmployeeInTenant(this.database, employeeId, organizationId);
     return this.database.yearEndTaxSettlement.findFirst({
       where: { employeeId, organizationId, taxYear },
       orderBy: { version: 'desc' },
@@ -844,8 +50,8 @@ export class ComplianceService {
     organizationId: string,
     taxYear: number,
   ) {
-    this.assertSupportedTaxYear(taxYear);
-    await this.assertEmployeeInTenant(employeeId, organizationId);
+    assertSupportedTaxYear(taxYear);
+    await assertEmployeeInTenant(this.database, employeeId, organizationId);
     const issuance = await this.database.bir2316Issuance.findFirst({
       where: { employeeId, organizationId, taxYear },
       orderBy: { version: 'desc' },
@@ -987,8 +193,12 @@ export class ComplianceService {
     taxYear: number;
     issuedById: string;
   }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
+    assertSupportedTaxYear(input.taxYear);
+    await assertEmployeeInTenant(
+      this.database,
+      input.employeeId,
+      input.organizationId,
+    );
     const current = await this.database.bir2316Issuance.findFirst({
       where: {
         employeeId: input.employeeId,
@@ -1039,7 +249,7 @@ export class ComplianceService {
       input.taxYear,
     );
     const cents = (value: bigint) => value.toString();
-    return this.createEvidence(() =>
+    return createEvidence(() =>
       this.database.bir2316Issuance.create({
         data: {
           employeeId: input.employeeId,
@@ -1101,9 +311,13 @@ export class ComplianceService {
     voidReason: string;
     voidedById: string;
   }) {
-    this.assertSupportedTaxYear(input.taxYear);
-    await this.assertEmployeeInTenant(input.employeeId, input.organizationId);
-    const voidReason = this.assertCorrectionReason(input.voidReason);
+    assertSupportedTaxYear(input.taxYear);
+    await assertEmployeeInTenant(
+      this.database,
+      input.employeeId,
+      input.organizationId,
+    );
+    const voidReason = assertCorrectionReason(input.voidReason);
     const current = await this.database.bir2316Issuance.findFirst({
       where: {
         employeeId: input.employeeId,
@@ -1162,7 +376,7 @@ export class ComplianceService {
       );
     }
     const posting = await this.prepareSettlementPosting(input);
-    return this.createEvidence(() =>
+    return createEvidence(() =>
       this.database.yearEndTaxSettlement.create({
         data: {
           employeeId: input.employeeId,
@@ -1207,10 +421,8 @@ export class ComplianceService {
     recordedById: string;
     reviewerId: string;
   }) {
-    const correctionReason = this.assertCorrectionReason(
-      input.correctionReason,
-    );
-    await this.assertCorrectionReviewer({
+    const correctionReason = assertCorrectionReason(input.correctionReason);
+    await assertCorrectionReviewer(this.database, {
       organizationId: input.organizationId,
       recorderId: input.recordedById,
       reviewerId: input.reviewerId,
@@ -1239,7 +451,7 @@ export class ComplianceService {
         'Recomputed difference already matches the posted settlement; nothing to correct',
       );
     }
-    return this.createEvidence(() =>
+    return createEvidence(() =>
       this.database.yearEndTaxSettlement.create({
         data: {
           employeeId: input.employeeId,
@@ -1289,7 +501,7 @@ export class ComplianceService {
     settlementType: string;
     settledCents: bigint;
   }> {
-    this.assertSupportedTaxYear(input.taxYear);
+    assertSupportedTaxYear(input.taxYear);
     const documentReference = input.documentReference.trim();
     if (!documentReference || documentReference.length > 160) {
       throw new UnprocessableEntityException(
@@ -1401,7 +613,7 @@ export class ComplianceService {
    * These totals are NOT remittances or paid refunds.
    */
   async listYearEndReconciliations(organizationId: string, taxYear: number) {
-    this.assertSupportedTaxYear(taxYear);
+    assertSupportedTaxYear(taxYear);
     const paymentDate = {
       gte: new Date(Date.UTC(taxYear, 0, 1)),
       lt: new Date(Date.UTC(taxYear + 1, 0, 1)),
@@ -1722,7 +934,7 @@ export class ComplianceService {
     organizationId: string,
     taxYear = new Date().getFullYear(),
   ) {
-    this.assertSupportedTaxYear(taxYear);
+    assertSupportedTaxYear(taxYear);
     const {
       generateBir2316Certificate,
       formatBir2316TextDocument,
@@ -1986,7 +1198,7 @@ export class ComplianceService {
     taxYear = new Date().getFullYear(),
     isPreview = false,
   ) {
-    this.assertSupportedTaxYear(taxYear);
+    assertSupportedTaxYear(taxYear);
     const preview = await this.generateBir2316(
       employeeId,
       organizationId,
@@ -2086,180 +1298,11 @@ export class ComplianceService {
     };
   }
 
-  private assertSupportedTaxYear(taxYear: number): void {
-    if (!Number.isInteger(taxYear) || taxYear < 2023 || taxYear > 2100) {
-      throw new UnprocessableEntityException(
-        'BIR tax reconciliation supports 2023–2100 only; earlier years require a different annual tax table',
-      );
-    }
-  }
-
-  /**
-   * Generates official DOLE 13th Month Pay Annual Compliance Report under PD 851.
-   */
-  async generateDole13thMonthReport(
-    organizationId: string,
-    details: DoleReportDetails,
-    taxYear = new Date().getFullYear(),
-  ) {
-    const { calculateMonthsWorkedInYear, formatDole13thMonthComplianceReport } =
-      await import('@workspace/payroll-engine');
-    const yearStart = new Date(Date.UTC(taxYear, 0, 1));
-    const yearEnd = new Date(Date.UTC(taxYear + 1, 0, 1));
-
-    // PD 851 covers rank-and-file employees only; Labor Code managerial
-    // employees are counted separately for report transparency.
-    const employees = await this.database.employee.findMany({
-      where: {
-        organizationId,
-        isManagerial: false,
-        hireDate: { lt: yearEnd },
-      },
-      include: {
-        compensation: true,
-        payslips: {
-          where: {
-            payrollRun: {
-              organizationId,
-              cutoffSequence: {
-                in: ['FIRST_CUTOFF', 'SECOND_CUTOFF', 'SPECIAL_RUN'],
-              },
-              status: 'DISBURSED',
-              paymentDate: { gte: yearStart, lt: yearEnd },
-            },
-          },
-        },
-      },
-    });
-    const excludedManagerialCount = await this.database.employee.count({
-      where: {
-        organizationId,
-        hireDate: { lt: yearEnd },
-        isManagerial: true,
-      },
-    });
-
-    const organization = await this.database.organization.findUnique({
-      where: { id: organizationId },
-    });
-    if (!organization) throw new NotFoundException('Organization not found');
-
-    const employeeResults: ThirteenthMonthEmployeeResult[] = [];
-    for (const employee of employees) {
-      const specials = employee.payslips.filter((p) => p.bonusPaidCents > 0n);
-      if (
-        employee.employmentStatus === 'ACTIVE' &&
-        employee.hireDate < yearEnd &&
-        specials.length === 0
-      ) {
-        throw new UnprocessableEntityException(
-          `Employee ${employee.employeeNumber} has no disbursed 13th-month payout for ${taxYear}`,
-        );
-      }
-      if (specials.length === 0) continue;
-      if (!employee.compensation) {
-        throw new UnprocessableEntityException(
-          `Employee ${employee.employeeNumber} has no compensation profile`,
-        );
-      }
-
-      const totalBasicEarnedCents = employee.payslips.reduce((sum, p) => {
-        if (p.bonusPaidCents > 0n) return sum;
-        const deductions =
-          p.tardinessDeductionCents +
-          p.undertimeDeductionCents +
-          p.absenceDeductionCents;
-        return (
-          sum +
-          (p.basicPayCents > deductions ? p.basicPayCents - deductions : 0n)
-        );
-      }, 0n);
-      const thirteenthMonthPayCents = specials.reduce(
-        (sum, p) => sum + p.bonusPaidCents,
-        0n,
-      );
-      const taxExemptPortionCents = specials.reduce(
-        (sum, p) => sum + p.nonTaxableAllowancesCents,
-        0n,
-      );
-      const taxableExcessCents = specials.reduce(
-        (sum, p) => sum + p.taxableAllowancesCents,
-        0n,
-      );
-      if (
-        taxExemptPortionCents + taxableExcessCents !==
-        thirteenthMonthPayCents
-      ) {
-        throw new UnprocessableEntityException(
-          `Employee ${employee.employeeNumber} has an inconsistent 13th-month payslip`,
-        );
-      }
-      const monthsWorked = calculateMonthsWorkedInYear(
-        employee.hireDate,
-        taxYear,
-      );
-      employeeResults.push({
-        employeeId: employee.id,
-        employeeNumber: employee.employeeNumber,
-        fullName: `${employee.firstName} ${employee.lastName}`,
-        totalBasicEarnedCents,
-        thirteenthMonthPayCents,
-        taxExemptPortionCents,
-        taxableExcessCents,
-        isProrated:
-          monthsWorked < 12 ||
-          totalBasicEarnedCents <
-            employee.compensation.basicRateMonthlyCents * 12n,
-        monthsWorked,
-      });
-    }
-
-    if (employeeResults.length === 0) {
-      throw new UnprocessableEntityException(
-        `No disbursed 13th-month payouts exist for ${taxYear}`,
-      );
-    }
-    const batchResult: ThirteenthMonthBatchResult = {
-      taxYear,
-      totalBenefitedEmployees: employeeResults.length,
-      totalThirteenthMonthPayCents: employeeResults.reduce(
-        (sum, result) => sum + result.thirteenthMonthPayCents,
-        0n,
-      ),
-      totalTaxExemptCents: employeeResults.reduce(
-        (sum, result) => sum + result.taxExemptPortionCents,
-        0n,
-      ),
-      totalTaxableExcessCents: employeeResults.reduce(
-        (sum, result) => sum + result.taxableExcessCents,
-        0n,
-      ),
-      employeeResults,
-    };
-
-    const reportText = formatDole13thMonthComplianceReport({
-      taxYear,
-      establishmentName: organization.name,
-      registeredAddress: organization.registeredAddress,
-      ...details,
-      batchResult,
-      excludedManagerialCount,
-    });
-
-    return {
-      taxYear,
-      batchResult,
-      excludedManagerialCount,
-      reportText,
-      filename: `DOLE_13th_Month_Compliance_Report_${taxYear}.txt`,
-    };
-  }
-
   async generateBir1604CAlphalist(
     organizationId: string,
     taxYear = new Date().getFullYear(),
   ) {
-    this.assertSupportedTaxYear(taxYear);
+    assertSupportedTaxYear(taxYear);
     const {
       formatBir1604CAlphalistDat,
       formatBir1604CAlphalistCsv,

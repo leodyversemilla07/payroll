@@ -3,7 +3,6 @@ import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import { AuthService } from '../src/auth/auth.service';
 import { AuditService } from '../src/infrastructure/audit/audit.service';
-import { ComplianceService } from '../src/modules/compliance/compliance.service';
 import { EmployeesService } from '../src/modules/employees/employees.service';
 import { LeavesService } from '../src/modules/leaves/leaves.service';
 import { LoansService } from '../src/modules/loans/loans.service';
@@ -13,7 +12,6 @@ import { createApiRouter } from '../src/trpc/app.router';
 import { type Context, TrpcService } from '../src/trpc/trpc.service';
 
 const audit = new AuditService();
-const compliance = new ComplianceService();
 const timekeeping = new TimekeepingService();
 const router = createApiRouter(
   new TrpcService(),
@@ -21,7 +19,6 @@ const router = createApiRouter(
   timekeeping,
   new PayrollService(timekeeping),
   new LoansService(),
-  compliance,
   new LeavesService(),
   new AuthService(),
   audit,

@@ -3,7 +3,6 @@ import { Prisma, prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import type { AuthService } from '../../auth/auth.service';
 import type { AuditService } from '../../infrastructure/audit/audit.service';
-import type { ComplianceService } from '../../modules/compliance/compliance.service';
 import type { EmployeesService } from '../../modules/employees/employees.service';
 import type { LeavesService } from '../../modules/leaves/leaves.service';
 import type { LoansService } from '../../modules/loans/loans.service';
@@ -84,7 +83,6 @@ describe('employee registration tRPC workflow', () => {
     {} as TimekeepingService,
     {} as PayrollService,
     {} as LoansService,
-    {} as ComplianceService,
     {} as LeavesService,
     {} as AuthService,
     { record } as unknown as AuditService,

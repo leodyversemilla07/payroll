@@ -2,7 +2,9 @@ import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import type { AuthService } from '../auth/auth.service';
 import type { AuditService } from '../infrastructure/audit/audit.service';
-import type { ComplianceService } from '../modules/compliance/compliance.service';
+import type { MonthlyRemittanceService } from '../modules/compliance/monthly-remittance.service';
+import type { PriorEmploymentService } from '../modules/compliance/prior-employment.service';
+import type { YearEndTaxService } from '../modules/compliance/year-end-tax.service';
 import type { EmployeesService } from '../modules/employees/employees.service';
 import type { LeavesService } from '../modules/leaves/leaves.service';
 import type { LoansService } from '../modules/loans/loans.service';
@@ -59,13 +61,19 @@ describe('tRPC authorization', () => {
   const recordMonthlyTaxRemittance = jest.fn();
   const getBir2316Issuance = jest.fn();
   const generateBir2316Pdf = jest.fn();
-  const complianceService = {
-    withDatabase: () => complianceService,
+  const priorEmploymentService = {
+    withDatabase: () => priorEmploymentService,
     recordPriorEmployerDeclaration,
+  } as unknown as PriorEmploymentService;
+  const monthlyRemittanceService = {
+    withDatabase: () => monthlyRemittanceService,
     recordMonthlyTaxRemittance,
+  } as unknown as MonthlyRemittanceService;
+  const yearEndTaxService = {
+    withDatabase: () => yearEndTaxService,
     getBir2316Issuance,
     generateBir2316Pdf,
-  } as unknown as ComplianceService;
+  } as unknown as YearEndTaxService;
   const leavesService = {} as LeavesService;
   const authService = {} as AuthService;
   const auditService = { record: jest.fn() } as unknown as AuditService;
@@ -76,10 +84,17 @@ describe('tRPC authorization', () => {
     timekeepingService,
     payrollService,
     loansService,
-    complianceService,
     leavesService,
     authService,
     auditService,
+    undefined,
+    undefined,
+    undefined,
+    priorEmploymentService,
+    monthlyRemittanceService,
+    undefined,
+    yearEndTaxService,
+    undefined,
   );
 
   beforeEach(() => {

@@ -57,7 +57,11 @@ export function createComplianceRouter(ctx: RouterContext) {
     payrollProcedure,
     hrProcedure,
     protectedProcedure,
-    complianceService,
+    priorEmploymentService,
+    monthlyRemittanceService,
+    withholdingExportsService,
+    yearEndTaxService,
+    doleReportService,
     auditService,
   } = ctx;
 
@@ -107,7 +111,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           prisma.$transaction(
             async (transaction) => {
               const record = await withEvidenceErrors(() =>
-                complianceService
+                priorEmploymentService
                   .withDatabase(transaction)
                   .recordPriorEmployerDeclaration({
                     ...input,
@@ -160,7 +164,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           prisma.$transaction(
             async (transaction) => {
               const record = await withEvidenceErrors(() =>
-                complianceService
+                priorEmploymentService
                   .withDatabase(transaction)
                   .recordPreviousEmployerIncome({
                     ...input,
@@ -205,7 +209,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           prisma.$transaction(
             async (transaction) => {
               const record = await withEvidenceErrors(() =>
-                complianceService
+                monthlyRemittanceService
                   .withDatabase(transaction)
                   .recordMonthlyTaxRemittance({
                     ...input,
@@ -319,11 +323,12 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const csvContent = await complianceService.generateBankTransmittalCsv(
-          input.payrollRunId,
-          input.bankFormat,
-          ctx.user.organizationId,
-        );
+        const csvContent =
+          await withholdingExportsService.generateBankTransmittalCsv(
+            input.payrollRunId,
+            input.bankFormat,
+            ctx.user.organizationId,
+          );
         await auditService.record({
           user: ctx.user,
           request: ctx.req,
@@ -345,7 +350,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const result = await complianceService.getBir1601CSummary(
+        const result = await withholdingExportsService.getBir1601CSummary(
           input.month,
           input.year,
           ctx.user.organizationId,
@@ -369,7 +374,7 @@ export function createComplianceRouter(ctx: RouterContext) {
       )
       .query(({ input, ctx }) =>
         withEvidenceErrors(() =>
-          complianceService.getTaxEvidence(
+          monthlyRemittanceService.getTaxEvidence(
             input.employeeId,
             ctx.user.organizationId,
             input.taxYear,
@@ -382,7 +387,7 @@ export function createComplianceRouter(ctx: RouterContext) {
       .query(({ input, ctx }) =>
         prisma.$transaction(
           (transaction) =>
-            complianceService
+            yearEndTaxService
               .withDatabase(transaction)
               .listYearEndReconciliations(
                 ctx.user.organizationId,
@@ -403,7 +408,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const result = await complianceService.generateBir2316(
+        const result = await yearEndTaxService.generateBir2316(
           input.employeeId,
           ctx.user.organizationId,
           input.taxYear,
@@ -433,7 +438,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           prisma.$transaction(
             async (transaction) => {
               const record = await withEvidenceErrors(() =>
-                complianceService
+                yearEndTaxService
                   .withDatabase(transaction)
                   .recordYearEndSettlement({
                     employeeId: input.employeeId,
@@ -502,7 +507,7 @@ export function createComplianceRouter(ctx: RouterContext) {
                   'Resolve pending tax evidence corrections before issuing a certificate',
                 );
               const record = await withEvidenceErrors(() =>
-                complianceService.withDatabase(transaction).issueBir2316({
+                yearEndTaxService.withDatabase(transaction).issueBir2316({
                   employeeId: input.employeeId,
                   organizationId: ctx.user.organizationId,
                   taxYear: input.taxYear,
@@ -546,7 +551,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           prisma.$transaction(
             async (transaction) => {
               const record = await withEvidenceErrors(() =>
-                complianceService
+                yearEndTaxService
                   .withDatabase(transaction)
                   .voidBir2316Issuance({
                     employeeId: input.employeeId,
@@ -601,7 +606,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         return withEvidenceErrors(() =>
           prisma.$transaction(
             (transaction) =>
-              complianceService
+              yearEndTaxService
                 .withDatabase(transaction)
                 .getBir2316Issuance(
                   input.employeeId,
@@ -624,7 +629,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const result = await complianceService.generateDole13thMonthReport(
+        const result = await doleReportService.generateDole13thMonthReport(
           ctx.user.organizationId,
           {
             natureOfBusiness: input.natureOfBusiness,
@@ -651,7 +656,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         }),
       )
       .mutation(async ({ input, ctx }) => {
-        const result = await complianceService.generateBir1604CAlphalist(
+        const result = await yearEndTaxService.generateBir1604CAlphalist(
           ctx.user.organizationId,
           input.taxYear,
         );
@@ -694,7 +699,7 @@ export function createComplianceRouter(ctx: RouterContext) {
         const taxYear = input.taxYear ?? new Date().getFullYear();
 
         if (!isStaff) {
-          const issuance = await complianceService.getBir2316Issuance(
+          const issuance = await yearEndTaxService.getBir2316Issuance(
             input.employeeId,
             ctx.user.organizationId,
             taxYear,
@@ -708,7 +713,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           }
         }
 
-        const result = await complianceService.generateBir2316Pdf(
+        const result = await yearEndTaxService.generateBir2316Pdf(
           input.employeeId,
           ctx.user.organizationId,
           taxYear,

@@ -4,7 +4,8 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { Prisma } from '@workspace/db';
-import { ComplianceService } from './compliance.service';
+import { MonthlyRemittanceService } from './monthly-remittance.service';
+import { PriorEmploymentService } from './prior-employment.service';
 import {
   type CorrectionKind,
   type CorrectionPayload,
@@ -15,6 +16,7 @@ import {
   settlementCorrection,
 } from './tax-correction.validation';
 import { sourceFingerprint } from './tax-source-fingerprint';
+import { YearEndTaxService } from './year-end-tax.service';
 
 /** All writes use the API's serializable transaction, including its audit. */
 export class TaxCorrectionService {
@@ -101,7 +103,7 @@ export class TaxCorrectionService {
       target,
       settlementSources:
         kind === 'SETTLEMENT'
-          ? await new ComplianceService()
+          ? await new YearEndTaxService()
               .withDatabase(this.database)
               .getTaxSourceFingerprint(
                 'employeeId' in payload ? payload.employeeId : '',
@@ -161,7 +163,7 @@ export class TaxCorrectionService {
         if (request.kind !== 'SETTLEMENT' || !request.employeeId)
           return { ...request, settlementPreview: null };
         try {
-          const preview = await new ComplianceService()
+          const preview = await new YearEndTaxService()
             .withDatabase(this.database)
             .generateBir2316(request.employeeId, organizationId, taxYear);
           return {
@@ -239,7 +241,13 @@ export class TaxCorrectionService {
         throw new ConflictException(
           'Evidence changed since this correction was requested; reject it and submit a fresh proposal',
         );
-      const service = new ComplianceService().withDatabase(this.database);
+      const priorEmployment = new PriorEmploymentService().withDatabase(
+        this.database,
+      );
+      const monthlyRemittance = new MonthlyRemittanceService().withDatabase(
+        this.database,
+      );
+      const yearEndTax = new YearEndTaxService().withDatabase(this.database);
       const actors = {
         organizationId,
         recordedById: pending.requestedById,
@@ -248,7 +256,7 @@ export class TaxCorrectionService {
       switch (kind) {
         case 'DECLARATION':
           publishedRecordId = (
-            await service.supersedePriorEmployerDeclaration({
+            await priorEmployment.supersedePriorEmployerDeclaration({
               ...declarationCorrection.parse(payload),
               ...actors,
             })
@@ -257,7 +265,7 @@ export class TaxCorrectionService {
         case 'PREVIOUS_INCOME': {
           const data = incomeCorrection.parse(payload);
           publishedRecordId = (
-            await service.supersedePreviousEmployerIncome({
+            await priorEmployment.supersedePreviousEmployerIncome({
               ...data,
               ...actors,
               periodStart: new Date(data.periodStart),
@@ -272,7 +280,7 @@ export class TaxCorrectionService {
         case 'REMITTANCE': {
           const data = remittanceCorrection.parse(payload);
           publishedRecordId = (
-            await service.supersedeMonthlyTaxRemittance({
+            await monthlyRemittance.supersedeMonthlyTaxRemittance({
               ...data,
               ...actors,
               remittedCents: BigInt(data.remittedCents),
@@ -283,7 +291,7 @@ export class TaxCorrectionService {
         case 'SETTLEMENT': {
           const data = settlementCorrection.parse(payload);
           publishedRecordId = (
-            await service.supersedeYearEndSettlement({
+            await yearEndTax.supersedeYearEndSettlement({
               ...data,
               ...actors,
               settlementDate: new Date(data.settlementDate),

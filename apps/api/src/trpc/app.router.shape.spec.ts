@@ -1,6 +1,5 @@
 import type { AuthService } from '../auth/auth.service';
 import type { AuditService } from '../infrastructure/audit/audit.service';
-import type { ComplianceService } from '../modules/compliance/compliance.service';
 import type { EmployeesService } from '../modules/employees/employees.service';
 import type { LeavesService } from '../modules/leaves/leaves.service';
 import type { LoansService } from '../modules/loans/loans.service';
@@ -209,7 +208,6 @@ describe('createApiRouter (shape)', () => {
     stub<TimekeepingService>(),
     stub<PayrollService>(),
     stub<LoansService>(),
-    stub<ComplianceService>(),
     stub<LeavesService>(),
     stub<AuthService>(),
     stub<AuditService>(),

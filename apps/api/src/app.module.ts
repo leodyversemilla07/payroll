@@ -4,7 +4,11 @@ import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { AuditService } from './infrastructure/audit/audit.service';
 import { StorageService } from './infrastructure/storage/storage.service';
-import { ComplianceService } from './modules/compliance/compliance.service';
+import { DoleReportService } from './modules/compliance/dole-report.service';
+import { MonthlyRemittanceService } from './modules/compliance/monthly-remittance.service';
+import { PriorEmploymentService } from './modules/compliance/prior-employment.service';
+import { WithholdingExportsService } from './modules/compliance/withholding-exports.service';
+import { YearEndTaxService } from './modules/compliance/year-end-tax.service';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { EmployeesService } from './modules/employees/employees.service';
 import { HolidaysService } from './modules/holidays/holidays.service';
@@ -29,7 +33,11 @@ import { TrpcModule } from './trpc/trpc.module';
     PayrollService,
     CutoffSchedulerService,
     LoansService,
-    ComplianceService,
+    PriorEmploymentService,
+    MonthlyRemittanceService,
+    WithholdingExportsService,
+    YearEndTaxService,
+    DoleReportService,
     LeavesService,
     DashboardService,
     HolidaysService,
@@ -45,7 +53,11 @@ import { TrpcModule } from './trpc/trpc.module';
     PayrollService,
     CutoffSchedulerService,
     LoansService,
-    ComplianceService,
+    PriorEmploymentService,
+    MonthlyRemittanceService,
+    WithholdingExportsService,
+    YearEndTaxService,
+    DoleReportService,
     LeavesService,
     DashboardService,
     HolidaysService,

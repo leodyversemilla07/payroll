@@ -3,7 +3,11 @@ import { AuthService } from '../auth/auth.service';
 import { createUsersRouter } from '../auth/users.router';
 import { AuditService } from '../infrastructure/audit/audit.service';
 import { createComplianceRouter } from '../modules/compliance/compliance.router';
-import { ComplianceService } from '../modules/compliance/compliance.service';
+import { DoleReportService } from '../modules/compliance/dole-report.service';
+import { MonthlyRemittanceService } from '../modules/compliance/monthly-remittance.service';
+import { PriorEmploymentService } from '../modules/compliance/prior-employment.service';
+import { WithholdingExportsService } from '../modules/compliance/withholding-exports.service';
+import { YearEndTaxService } from '../modules/compliance/year-end-tax.service';
 import { createDashboardRouter } from '../modules/dashboard/dashboard.router';
 import { DashboardService } from '../modules/dashboard/dashboard.service';
 import { createEmployeesRouter } from '../modules/employees/employees.router';
@@ -41,13 +45,17 @@ export function createApiRouter(
   timekeepingService: TimekeepingService,
   payrollService: PayrollService,
   loansService: LoansService,
-  complianceService: ComplianceService,
   leavesService: LeavesService,
   authService: AuthService,
   auditService: AuditService,
   dashboardService: DashboardService = new DashboardService(),
   holidaysService: HolidaysService = new HolidaysService(),
   notificationService: NotificationService = new NotificationService(),
+  priorEmploymentService: PriorEmploymentService = new PriorEmploymentService(),
+  monthlyRemittanceService: MonthlyRemittanceService = new MonthlyRemittanceService(),
+  withholdingExportsService: WithholdingExportsService = new WithholdingExportsService(),
+  yearEndTaxService: YearEndTaxService = new YearEndTaxService(),
+  doleReportService: DoleReportService = new DoleReportService(),
 ) {
   const publicProcedure = trpc.publicProcedure;
   const routerContext = createRouterContext(trpc, {
@@ -57,11 +65,15 @@ export function createApiRouter(
     timekeepingService,
     payrollService,
     loansService,
-    complianceService,
     leavesService,
     dashboardService,
     holidaysService,
     notificationService,
+    priorEmploymentService,
+    monthlyRemittanceService,
+    withholdingExportsService,
+    yearEndTaxService,
+    doleReportService,
   });
 
   return trpc.router({

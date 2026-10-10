@@ -5,7 +5,11 @@ import { AppModule } from './app.module';
 import { AuthService } from './auth/auth.service';
 import { AuditService } from './infrastructure/audit/audit.service';
 import { validateEnvironment } from './infrastructure/config/environment';
-import { ComplianceService } from './modules/compliance/compliance.service';
+import { DoleReportService } from './modules/compliance/dole-report.service';
+import { MonthlyRemittanceService } from './modules/compliance/monthly-remittance.service';
+import { PriorEmploymentService } from './modules/compliance/prior-employment.service';
+import { WithholdingExportsService } from './modules/compliance/withholding-exports.service';
+import { YearEndTaxService } from './modules/compliance/year-end-tax.service';
 import { DashboardService } from './modules/dashboard/dashboard.service';
 import { EmployeesService } from './modules/employees/employees.service';
 import { HolidaysService } from './modules/holidays/holidays.service';
@@ -33,7 +37,11 @@ async function bootstrap() {
   const timekeepingService = app.get(TimekeepingService);
   const payrollService = app.get(PayrollService);
   const loansService = app.get(LoansService);
-  const complianceService = app.get(ComplianceService);
+  const priorEmploymentService = app.get(PriorEmploymentService);
+  const monthlyRemittanceService = app.get(MonthlyRemittanceService);
+  const withholdingExportsService = app.get(WithholdingExportsService);
+  const yearEndTaxService = app.get(YearEndTaxService);
+  const doleReportService = app.get(DoleReportService);
   const leavesService = app.get(LeavesService);
   const dashboardService = app.get(DashboardService);
   const holidaysService = app.get(HolidaysService);
@@ -45,13 +53,17 @@ async function bootstrap() {
     timekeepingService,
     payrollService,
     loansService,
-    complianceService,
     leavesService,
     authService,
     auditService,
     dashboardService,
     holidaysService,
     notificationService,
+    priorEmploymentService,
+    monthlyRemittanceService,
+    withholdingExportsService,
+    yearEndTaxService,
+    doleReportService,
   );
 
   app.use(
