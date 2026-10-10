@@ -163,10 +163,10 @@ test("real workspace persists onboarding, attendance, leave and maker-checker pa
       await editor.getByLabel("Attendance date").fill(date);
       await editor.getByLabel("Day type", { exact: true }).click();
       await page.getByRole("option", { name: /REGULAR WORKDAY/i }).click();
-      await editor.getByLabel("Time in (Asia/Manila)").fill(`${date}T09:00`);
+      await editor.getByLabel("Time in (Asia/Manila)").fill("09:00");
       await editor
         .getByLabel("Time out (Asia/Manila)")
-        .fill(`${date}T${halfDay ? "13:00" : "18:00"}`);
+        .fill(halfDay ? "13:00" : "18:00");
       await editor
         .getByLabel("Total worked minutes (including overtime)")
         .fill(halfDay ? "240" : "480");
