@@ -14,7 +14,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@workspace/ui/components/field";
-import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
@@ -26,6 +25,7 @@ import {
 import { Calendar, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { DatePicker } from "@/components/date-picker";
 import { useWorkspaceUser } from "@/components/user-context";
 import { trpc } from "@/lib/trpc";
 
@@ -256,11 +256,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="run-cutoff-start">
                     Regular run cutoff start
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="run-cutoff-start"
-                    type="date"
                     value={start}
-                    onChange={(event) => setStart(event.currentTarget.value)}
+                    onChange={(next) => setStart(next)}
                     required
                   />
                 </Field>
@@ -268,11 +267,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="run-cutoff-end">
                     Regular run cutoff end
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="run-cutoff-end"
-                    type="date"
                     value={end}
-                    onChange={(event) => setEnd(event.currentTarget.value)}
+                    onChange={(next) => setEnd(next)}
                     required
                   />
                 </Field>
@@ -280,11 +278,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="run-payment-date">
                     Regular run payment date
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="run-payment-date"
-                    type="date"
                     value={payment}
-                    onChange={(event) => setPayment(event.currentTarget.value)}
+                    onChange={(next) => setPayment(next)}
                     required
                   />
                 </Field>
@@ -324,13 +321,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="month-cutoff-start">
                     13th-month cutoff start
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="month-cutoff-start"
-                    type="date"
                     value={monthStart}
-                    onChange={(event) =>
-                      setMonthStart(event.currentTarget.value)
-                    }
+                    onChange={(next) => setMonthStart(next)}
                     required
                   />
                 </Field>
@@ -338,11 +332,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="month-cutoff-end">
                     13th-month cutoff end
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="month-cutoff-end"
-                    type="date"
                     value={monthEnd}
-                    onChange={(event) => setMonthEnd(event.currentTarget.value)}
+                    onChange={(next) => setMonthEnd(next)}
                     required
                   />
                 </Field>
@@ -350,13 +343,10 @@ export function TriggerRunForms() {
                   <FieldLabel htmlFor="month-payment-date">
                     13th-month payment date
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id="month-payment-date"
-                    type="date"
                     value={monthPayment}
-                    onChange={(event) =>
-                      setMonthPayment(event.currentTarget.value)
-                    }
+                    onChange={(next) => setMonthPayment(next)}
                     required
                   />
                 </Field>
