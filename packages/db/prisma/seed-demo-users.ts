@@ -97,8 +97,13 @@ async function main() {
     password: string;
   }> = [
     {
+      // Bootstrap system account, not a person: it owns global configuration
+      // and user provisioning, so it must stay unlinked from employee records.
+      // Human operators (HR, payroll, manager) below are linked employees;
+      // separation of duties is enforced in workflow (maker-checker on
+      // payroll approval), not by unlinking operator accounts.
       email: "admin@sweldoph.local",
-      name: "Local Demo Administrator",
+      name: "System Administrator",
       role: Role.SUPER_ADMIN,
       employeeId: null,
       password: "AdminPassword123!",
@@ -154,6 +159,7 @@ async function main() {
       await prisma.user.update({
         where: { id: existing.id },
         data: {
+          name: u.name,
           employeeId: u.employeeId ?? undefined,
           passwordHash,
           failedLoginAttempts: 0,
