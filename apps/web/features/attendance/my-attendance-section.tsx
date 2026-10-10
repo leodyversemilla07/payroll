@@ -8,8 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
-import { Field, FieldLabel } from "@workspace/ui/components/field";
-import { Input } from "@workspace/ui/components/input";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   AlertCircle,
@@ -22,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { DateRangePicker, monthPresets } from "@/components/date-range-picker";
 import { useWorkspaceUser } from "@/components/user-context";
 import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
@@ -159,25 +158,18 @@ export function MyAttendanceSection() {
             onSubmit={handleFilter}
             className="flex flex-wrap items-end gap-3"
           >
-            <Field className="w-40">
-              <FieldLabel className="text-xs">From Date</FieldLabel>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
-              />
-            </Field>
-
-            <Field className="w-40">
-              <FieldLabel className="text-xs">To Date</FieldLabel>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                required
-              />
-            </Field>
+            <DateRangePicker
+              fromId="my-dtr-start"
+              toId="my-dtr-end"
+              fromLabel="From Date"
+              toLabel="To Date"
+              value={{ from: startDate, to: endDate }}
+              onChange={(next) => {
+                setStartDate(next.from);
+                setEndDate(next.to);
+              }}
+              presets={monthPresets(today)}
+            />
 
             <Button type="submit" size="default" disabled={dtr.isPending}>
               {dtr.isPending ? "Loading…" : "Filter DTR"}

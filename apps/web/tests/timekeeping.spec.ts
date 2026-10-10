@@ -225,6 +225,54 @@ async function editDtr(page: Page) {
   });
 }
 
+test("date range presets fill typed inputs and load DTR", async ({ page }) => {
+  await mockDtr(page);
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await section.getByLabel("DTR employee").click();
+  await page.getByRole("option", { name: /Ana Santos/ }).click();
+  await section.getByRole("button", { name: "Pick a date range" }).click();
+  await page.getByRole("button", { name: "This month", exact: true }).click();
+  const manilaToday = new Date(Date.now() + 8 * 3_600_000)
+    .toISOString()
+    .slice(0, 10);
+  const monthStart = `${manilaToday.slice(0, 8)}01`;
+  await expect(section.getByLabel("DTR start date")).toHaveValue(monthStart);
+  await expect(section.getByLabel("DTR end date")).toHaveValue(manilaToday);
+  await section.getByRole("button", { name: "Load DTR", exact: true }).click();
+  await expect(
+    section.getByText(`${monthStart} to ${manilaToday}`),
+  ).toBeVisible();
+});
+
+test("deep-linked employee arrives preselected on the attendance page", async ({
+  page,
+}) => {
+  await mockDtr(page);
+  await page.goto(`/attendance?employee=${employee.id}`);
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await expect(section.getByLabel("DTR employee")).toContainText(/Ana Santos/);
+});
+
+test("malformed deep-linked employee falls back to a blank picker", async ({
+  page,
+}) => {
+  await mockDtr(page);
+  await page.goto("/attendance?employee=not-a-uuid");
+  const section = page.getByRole("region", {
+    name: "Attendance and DTR",
+    exact: true,
+  });
+  await expect(section.getByLabel("DTR employee")).toContainText(
+    "Select an employee",
+  );
+});
+
 test("Manila conversion preserves timestamps independently of browser timezone", () => {
   expect(toManilaInput("2026-09-09T16:01:02.123Z")).toBe(
     "2026-09-10T00:01:02.123",

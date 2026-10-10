@@ -39,7 +39,8 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { cn } from "@workspace/ui/lib/utils";
 import { Clock, Loader2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { DateRangePicker, monthPresets } from "@/components/date-range-picker";
 import {
   fromManilaInput,
   manilaToday,
@@ -101,17 +102,32 @@ export function TimekeepingSection({
   employees,
   employeeListFailed,
   canImport = false,
+  initialEmployeeId,
 }: {
   employees: EmployeeOption[];
   employeeListFailed: boolean;
   canImport?: boolean;
+  initialEmployeeId?: string;
 }) {
   const today = manilaToday();
-  const [employeeId, setEmployeeId] = useState("");
+  const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? "");
   const [startDate, setStartDate] = useState(`${today.slice(0, 8)}01`);
   const [endDate, setEndDate] = useState(today);
   const [range, setRange] = useState<Range | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
+  // A deep-linked employee id that never appears in the loaded staff list
+  // (foreign, deleted, or hand-typed) falls back to a blank picker instead
+  // of a stuck selection. Manual picks always match the list, so they are
+  // never cleared here.
+  useEffect(() => {
+    if (
+      employeeId &&
+      employees.length > 0 &&
+      !employees.some((employee) => employee.id === employeeId)
+    ) {
+      setEmployeeId("");
+    }
+  }, [employeeId, employees]);
   const [editing, setEditing] = useState<{ record: DTRRecord | null } | null>(
     null,
   );
@@ -211,7 +227,7 @@ export function TimekeepingSection({
                   value: employee.id,
                   label: `${employee.firstName} ${employee.lastName} · ${employee.employeeNumber}`,
                 }))}
-                value={employeeId || undefined}
+                value={employeeId}
                 onValueChange={(val) => setEmployeeId(val ?? "")}
                 required
               >
@@ -236,28 +252,18 @@ export function TimekeepingSection({
                 </FieldDescription>
               )}
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="dtr-start">DTR start date</FieldLabel>
-                <Input
-                  id="dtr-start"
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.currentTarget.value)}
-                  required
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="dtr-end">DTR end date</FieldLabel>
-                <Input
-                  id="dtr-end"
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.currentTarget.value)}
-                  required
-                />
-              </Field>
-            </div>
+            <DateRangePicker
+              fromId="dtr-start"
+              toId="dtr-end"
+              fromLabel="DTR start date"
+              toLabel="DTR end date"
+              value={{ from: startDate, to: endDate }}
+              onChange={(next) => {
+                setStartDate(next.from);
+                setEndDate(next.to);
+              }}
+              presets={monthPresets(today)}
+            />
             {filterError && <FieldError>{filterError}</FieldError>}
             <Button type="submit" disabled={saving || employeeListFailed}>
               Load DTR
