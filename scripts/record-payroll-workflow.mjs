@@ -89,12 +89,6 @@ async function goNav(page, name) {
   await sleep(2500);
 }
 
-async function openRunByCutoff(runsRegion, cutoffLabel) {
-  const row = runsRegion.getByRole("row", { name: cutoffLabel });
-  await row.getByRole("button", { name: "Review" }).click();
-  return true;
-}
-
 async function clickIfVisible(locator, waitMs = 2500) {
   try {
     await locator.first().waitFor({ state: "visible", timeout: waitMs });
@@ -105,7 +99,11 @@ async function clickIfVisible(locator, waitMs = 2500) {
   }
 }
 
-async function openRunByCutoffIfVisible(runsRegion, cutoffLabel, waitMs = 4000) {
+async function openRunByCutoffIfVisible(
+  runsRegion,
+  cutoffLabel,
+  waitMs = 4000,
+) {
   try {
     const row = runsRegion.getByRole("row", { name: cutoffLabel });
     await row.waitFor({ state: "visible", timeout: waitMs });
@@ -147,7 +145,13 @@ async function run() {
       await sleep(1200);
       // Later takes reuse the script: walk November weekdays until one files
       // cleanly (earlier takes may already own a date).
-      const candidates = ["2026-11-18", "2026-11-19", "2026-11-20", "2026-11-23", "2026-11-24"];
+      const candidates = [
+        "2026-11-18",
+        "2026-11-19",
+        "2026-11-20",
+        "2026-11-23",
+        "2026-11-24",
+      ];
       for (const day of candidates) {
         await page.getByLabel("Start Date").fill(day);
         await page.getByLabel("End Date").fill(day);
@@ -257,9 +261,7 @@ async function run() {
     console.log("📍 [4] Maker: cancel + re-trigger September second cutoff...");
     await goNav(page, "Payroll runs & payslips");
     const runs = page.getByRole("region", { name: "Payroll runs" });
-    if (
-      await openRunByCutoffIfVisible(runs, /Sep 16, 2026 – Sep 30, 2026/)
-    ) {
+    if (await openRunByCutoffIfVisible(runs, /Sep 16, 2026 – Sep 30, 2026/)) {
       await sleep(2500);
       const detailsCard = page.getByRole("region", { name: "Run details" });
       if (
@@ -310,9 +312,7 @@ async function run() {
     console.log("📍 [5] Checker approves the run...");
     await goNav(page, "Payroll runs & payslips");
     const runs2 = page.getByRole("region", { name: "Payroll runs" });
-    if (
-      await openRunByCutoffIfVisible(runs2, /Sep 16, 2026 – Sep 30, 2026/)
-    ) {
+    if (await openRunByCutoffIfVisible(runs2, /Sep 16, 2026 – Sep 30, 2026/)) {
       await sleep(2500);
       const detailsCard = page.getByRole("region", { name: "Run details" });
       if (
@@ -335,9 +335,7 @@ async function run() {
     console.log("📍 [6] Maker disburses + reviews payslips...");
     await goNav(page, "Payroll runs & payslips");
     const runs3 = page.getByRole("region", { name: "Payroll runs" });
-    if (
-      await openRunByCutoffIfVisible(runs3, /Sep 16, 2026 – Sep 30, 2026/)
-    ) {
+    if (await openRunByCutoffIfVisible(runs3, /Sep 16, 2026 – Sep 30, 2026/)) {
       await sleep(2500);
       const detailsCard = page.getByRole("region", { name: "Run details" });
       if (
