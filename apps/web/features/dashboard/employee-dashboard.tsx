@@ -360,7 +360,7 @@ export function EmployeeDashboard({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Self-service</CardTitle>
+            <CardTitle className="text-base">Workspace</CardTitle>
             <CardDescription>
               Access the records and actions you use most often.
             </CardDescription>

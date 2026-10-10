@@ -647,7 +647,7 @@ test("department manager sees and can approve/reject pending leave requests on l
 
 // ── Test: Role-Aware Sidebar Navigation ───────────────────────────────────────
 
-test("employee role shows self-service navigation, not admin sections", async ({
+test("employee role shows workspace navigation, not admin sections", async ({
   page,
 }) => {
   await setupAndLogin(page, employeeUser);
@@ -657,8 +657,10 @@ test("employee role shows self-service navigation, not admin sections", async ({
 
   const nav = page.getByRole("navigation", { name: "Payroll navigation" });
 
-  // Employee should see self-service links (Dashboard, Holiday Calendar).
+  // Employee should see workspace links (Dashboard, Holiday Calendar).
   // My Attendance moved to the account dropdown.
+  await expect(nav.getByText("Workspace", { exact: true })).toBeVisible();
+  await expect(nav.getByText("Self-service", { exact: true })).toHaveCount(0);
   await expect(nav.getByText("Dashboard")).toBeVisible();
   await expect(nav.getByText("Holiday Calendar")).toBeVisible();
   await expect(nav.getByText("My Attendance")).toHaveCount(0);

@@ -212,7 +212,7 @@ export function getNavigationGroupsForRole(role?: string) {
   if (role === "EMPLOYEE") {
     return [
       {
-        label: "Self-service",
+        label: "Workspace",
         items: [
           {
             id: "dashboard" as const,
