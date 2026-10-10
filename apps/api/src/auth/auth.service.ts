@@ -29,6 +29,7 @@ const DUMMY_PASSWORD_HASH =
 export interface AuthenticatedUser {
   id: string;
   organizationId: string;
+  organizationName?: string;
   employeeId?: string;
   email: string;
   name: string;
@@ -222,7 +223,9 @@ export class AuthService {
 
     const session = await prisma.authSession.findUnique({
       where: { tokenHash: this.hashToken(token) },
-      include: { user: true },
+      include: {
+        user: { include: { organization: { select: { name: true } } } },
+      },
     });
 
     if (!session) {
@@ -252,6 +255,7 @@ export class AuthService {
   ): Promise<SignInResult | null> {
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
+      include: { organization: { select: { name: true } } },
     });
 
     let passwordMatches = await verifyPassword(
@@ -370,6 +374,7 @@ export class AuthService {
 
     const user = await prisma.user.findUnique({
       where: { id: ticket.userId },
+      include: { organization: { select: { name: true } } },
     });
     if (!user?.isActive || !user.mfaSecret) {
       throw new UnauthorizedException('Authentication failed');
@@ -529,6 +534,7 @@ export class AuthService {
   private toAuthenticatedUser(user: {
     id: string;
     organizationId: string;
+    organization?: { name: string } | null;
     employeeId: string | null;
     email: string;
     name: string;
@@ -538,6 +544,7 @@ export class AuthService {
     return {
       id: user.id,
       organizationId: user.organizationId,
+      organizationName: user.organization?.name,
       employeeId: user.employeeId ?? undefined,
       email: user.email,
       name: user.name,

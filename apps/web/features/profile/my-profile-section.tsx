@@ -4,6 +4,7 @@ import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -38,6 +39,7 @@ import {
 } from "@workspace/ui/components/table";
 import {
   Banknote,
+  Building2,
   Calendar,
   Download,
   Eye,
@@ -310,44 +312,46 @@ export function MyProfileSection() {
     <section className="space-y-6" aria-label="My Profile">
       {/* 1. User Account Overview (Always displayed) */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xl">
-                {user.name.trim()[0]?.toUpperCase() || "U"}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold tracking-tight">
-                    {user.name}
-                  </h2>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                    {user.role.replaceAll("_", " ")}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
-                  <span>{user.email}</span>
-                  <span>·</span>
-                  <span className="font-mono text-xs">
-                    Org: {user.organizationId}
-                  </span>
-                </div>
-              </div>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xl">
+              {user.name.trim()[0]?.toUpperCase() || "U"}
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {user.employeeId ? (
-                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                  Linked Employee
+            <div className="grid gap-1">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight">
+                <h2 className="text-xl font-bold tracking-tight">
+                  {user.name}
+                </h2>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  {user.role.replaceAll("_", " ")}
                 </span>
-              ) : (
-                <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                  Unlinked Account
-                </span>
-              )}
+              </CardTitle>
+              <CardDescription className="flex flex-wrap items-center gap-2">
+                <span>{user.email}</span>
+                {user.organizationName && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Building2 className="size-3.5" aria-hidden="true" />
+                      {user.organizationName}
+                    </span>
+                  </>
+                )}
+              </CardDescription>
             </div>
           </div>
-        </CardContent>
+          <CardAction>
+            {user.employeeId ? (
+              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                Linked Employee
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                Unlinked Account
+              </span>
+            )}
+          </CardAction>
+        </CardHeader>
       </Card>
 
       {/* 2. Employee Profile Section or Administrative Notice */}

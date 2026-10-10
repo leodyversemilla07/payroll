@@ -32,6 +32,7 @@ const hrUser = {
 const unlinkedAdminUser = {
   id: "u-admin-1",
   organizationId: "org-1",
+  organizationName: "Acme Philippines Technologies Inc.",
   name: "System Administrator",
   email: "sysadmin@example.com",
   role: "SUPER_ADMIN",
@@ -821,6 +822,12 @@ test("unlinked administrator visiting my-profile sees administrative card and MF
   await expect(
     page.getByRole("heading", { name: "System Administrator" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("Acme Philippines Technologies Inc."),
+  ).toBeVisible();
+  // Internal identifiers stay out of the profile card.
+  await expect(page.getByText(/Org:/)).toHaveCount(0);
+  await expect(page.getByText("org-1")).toHaveCount(0);
   await expect(page.getByText("Administrative System Account")).toBeVisible();
   // Sidebar owns navigation; the admin card carries no duplicate shortcuts.
   await expect(
