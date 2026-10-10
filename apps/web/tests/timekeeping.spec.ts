@@ -324,9 +324,7 @@ test("load and correct DTR using Manila punches, explicit totals and the loaded 
   const row = page.getByRole("row", { name: /2026-09-10/ });
   await expect(row).toContainText("8:00 AM");
   const editor = await editDtr(page);
-  await expect(editor.getByLabel("Time in (Asia/Manila)")).toHaveValue(
-    "2026-09-10T08:00",
-  );
+  await expect(editor.getByLabel("Time in (Asia/Manila)")).toHaveValue("08:00");
   await expect(
     editor.getByRole("checkbox", { name: "Approve for payroll", exact: true }),
   ).not.toBeChecked();
@@ -334,7 +332,7 @@ test("load and correct DTR using Manila punches, explicit totals and the loaded 
     .getByLabel("Total worked minutes (including overtime)")
     .fill("450");
   await editor.getByLabel("Tardiness minutes").fill("30");
-  await editor.getByLabel("Time in (Asia/Manila)").fill("2026-09-10T08:30");
+  await editor.getByLabel("Time in (Asia/Manila)").fill("08:30");
   await editor
     .getByLabel("Correction reason")
     .fill("Arrival verified against the signed attendance sheet");
@@ -528,7 +526,7 @@ test("background refresh errors and save errors preserve an attendance draft", a
   page,
 }) => {
   const state = await mockDtr(page, { refreshFailure: true, saveFailures: 1 });
-  const section = await loadDtr(page);
+  await loadDtr(page);
   const editor = await editDtr(page);
   await editor
     .getByLabel("Correction reason")

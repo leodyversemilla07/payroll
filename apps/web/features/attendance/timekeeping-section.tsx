@@ -49,6 +49,7 @@ import {
 } from "@workspace/ui/components/table";
 import { Clock, Loader2 } from "lucide-react";
 import { type FormEvent, Fragment, useEffect, useState } from "react";
+import { DatePicker } from "@/components/date-picker";
 import {
   cutoffPresets,
   DateRangePicker,
@@ -107,6 +108,11 @@ function formatMediumDate(value: Date | string) {
     timeZone: "UTC",
     dateStyle: "medium",
   }).format(new Date(value));
+}
+
+function toTimeInput(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  return toManilaInput(value).slice(11, 16);
 }
 
 function hasMissingPunch(record: DTRRecord) {
@@ -681,11 +687,15 @@ function AttendanceEditor({
       );
       return;
     }
+    // Punch times attach to the locked attendance date above.
+    const day = text("date");
+    const inText = text("timeIn");
+    const outText = text("timeOut");
     let timeIn: string | null;
     let timeOut: string | null;
     try {
-      timeIn = fromManilaInput(text("timeIn"));
-      timeOut = fromManilaInput(text("timeOut"));
+      timeIn = inText ? fromManilaInput(`${day}T${inText}`) : null;
+      timeOut = outText ? fromManilaInput(`${day}T${outText}`) : null;
     } catch {
       setValidationError("Enter valid Manila punch dates and times.");
       return;
@@ -766,16 +776,15 @@ function AttendanceEditor({
                 <FieldLabel htmlFor="attendance-date">
                   Attendance date
                 </FieldLabel>
-                <Input
+                <DatePicker
                   id="attendance-date"
                   name="date"
-                  type="date"
                   defaultValue={
                     original ? date(original.date) : range.startDate
                   }
                   min={range.startDate}
                   max={range.endDate}
-                  readOnly={!!original}
+                  disabled={!!original}
                   required
                 />
               </Field>
@@ -816,9 +825,9 @@ function AttendanceEditor({
                   <Input
                     id="attendance-time-in"
                     name="timeIn"
-                    type="datetime-local"
-                    defaultValue={toManilaInput(original?.timeIn)}
-                    step="0.001"
+                    type="time"
+                    step={60}
+                    defaultValue={toTimeInput(original?.timeIn)}
                   />
                 </Field>
                 <Field>
@@ -828,9 +837,9 @@ function AttendanceEditor({
                   <Input
                     id="attendance-time-out"
                     name="timeOut"
-                    type="datetime-local"
-                    defaultValue={toManilaInput(original?.timeOut)}
-                    step="0.001"
+                    type="time"
+                    step={60}
+                    defaultValue={toTimeInput(original?.timeOut)}
                   />
                 </Field>
                 {minuteFields.map((field) => (
