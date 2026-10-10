@@ -544,8 +544,10 @@ async function openRun(page: Page) {
 }
 
 async function navigate(page: Page, label: string) {
-  await page
-    .getByRole("navigation", { name: "Payroll navigation" })
-    .getByRole("link", { name: label, exact: true })
-    .click();
+  const nav = page.getByRole("navigation", { name: "Payroll navigation" });
+  const link = nav.getByRole("link", { name: label, exact: true });
+
+  await expect(nav).toBeVisible();
+  await expect(link).toBeVisible();
+  await link.click();
 }
