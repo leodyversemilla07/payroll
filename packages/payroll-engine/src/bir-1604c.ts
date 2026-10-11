@@ -5,6 +5,8 @@
  * and Alphabetical List of Employees (Schedules 7.1 and 7.2).
  */
 
+import { formatCentavosToPesos } from "./money";
+
 export interface Bir1604CEmployerProfile {
   tin: string;
   branchCode?: string;
@@ -100,14 +102,6 @@ function cleanTin(tin: string): string {
     .replace(/[^0-9]/g, "")
     .padStart(9, "0")
     .slice(0, 12);
-}
-
-function formatCents(cents: bigint): string {
-  const sign = cents < 0n ? "-" : "";
-  const abs = cents < 0n ? -cents : cents;
-  const pesos = abs / 100n;
-  const rem = abs % 100n;
-  return `${sign}${pesos.toString()}.${rem.toString().padStart(2, "0")}`;
 }
 
 function escapeCsvField(val: string): string {
@@ -220,21 +214,21 @@ export function formatBir1604CAlphalistDat(
         emp.employmentStatus ?? "REGULAR",
         emp.periodFrom,
         emp.periodTo,
-        formatCents(emp.grossCompensationCents),
-        formatCents(emp.totalNonTaxableCents),
-        formatCents(emp.statutoryContributionsCents),
-        formatCents(emp.deMinimisCents),
-        formatCents(emp.thirteenthMonthExemptCents),
-        formatCents(emp.otherNonTaxableCents),
-        formatCents(emp.totalTaxableCents),
-        formatCents(emp.basicSalaryTaxableCents),
-        formatCents(emp.thirteenthMonthTaxableCents),
-        formatCents(emp.overtimeAndPremiumsTaxableCents),
-        formatCents(emp.taxDueAnnualCents),
-        formatCents(emp.taxWithheldPreviousEmployerCents),
-        formatCents(emp.taxWithheldPresentEmployerCents),
-        formatCents(emp.totalTaxWithheldCents),
-        formatCents(emp.adjustmentCents),
+        formatCentavosToPesos(emp.grossCompensationCents),
+        formatCentavosToPesos(emp.totalNonTaxableCents),
+        formatCentavosToPesos(emp.statutoryContributionsCents),
+        formatCentavosToPesos(emp.deMinimisCents),
+        formatCentavosToPesos(emp.thirteenthMonthExemptCents),
+        formatCentavosToPesos(emp.otherNonTaxableCents),
+        formatCentavosToPesos(emp.totalTaxableCents),
+        formatCentavosToPesos(emp.basicSalaryTaxableCents),
+        formatCentavosToPesos(emp.thirteenthMonthTaxableCents),
+        formatCentavosToPesos(emp.overtimeAndPremiumsTaxableCents),
+        formatCentavosToPesos(emp.taxDueAnnualCents),
+        formatCentavosToPesos(emp.taxWithheldPreviousEmployerCents),
+        formatCentavosToPesos(emp.taxWithheldPresentEmployerCents),
+        formatCentavosToPesos(emp.totalTaxWithheldCents),
+        formatCentavosToPesos(emp.adjustmentCents),
         emp.adjustmentType,
         emp.substitutedFiling ? "YES" : "NO",
       ].join(","),
@@ -260,22 +254,22 @@ export function formatBir1604CAlphalistDat(
         emp.region ?? "NCR",
         emp.periodFrom,
         emp.periodTo,
-        formatCents(emp.dailyRateCents ?? 0n),
-        formatCents(emp.grossCompensationCents),
-        formatCents(emp.totalNonTaxableCents),
-        formatCents(emp.basicMweCents),
-        formatCents(emp.holidayPayMweCents),
-        formatCents(emp.overtimePayMweCents),
-        formatCents(emp.nightDiffMweCents),
-        formatCents(emp.hazardPayMweCents),
-        formatCents(emp.thirteenthMonthExemptCents),
-        formatCents(emp.deMinimisCents),
-        formatCents(emp.statutoryContributionsCents),
-        formatCents(emp.otherNonTaxableCents),
-        formatCents(emp.totalTaxableCents),
-        formatCents(emp.taxDueAnnualCents),
-        formatCents(emp.totalTaxWithheldCents),
-        formatCents(emp.adjustmentCents),
+        formatCentavosToPesos(emp.dailyRateCents ?? 0n),
+        formatCentavosToPesos(emp.grossCompensationCents),
+        formatCentavosToPesos(emp.totalNonTaxableCents),
+        formatCentavosToPesos(emp.basicMweCents),
+        formatCentavosToPesos(emp.holidayPayMweCents),
+        formatCentavosToPesos(emp.overtimePayMweCents),
+        formatCentavosToPesos(emp.nightDiffMweCents),
+        formatCentavosToPesos(emp.hazardPayMweCents),
+        formatCentavosToPesos(emp.thirteenthMonthExemptCents),
+        formatCentavosToPesos(emp.deMinimisCents),
+        formatCentavosToPesos(emp.statutoryContributionsCents),
+        formatCentavosToPesos(emp.otherNonTaxableCents),
+        formatCentavosToPesos(emp.totalTaxableCents),
+        formatCentavosToPesos(emp.taxDueAnnualCents),
+        formatCentavosToPesos(emp.totalTaxWithheldCents),
+        formatCentavosToPesos(emp.adjustmentCents),
         emp.adjustmentType,
       ].join(","),
     );
@@ -289,13 +283,13 @@ export function formatBir1604CAlphalistDat(
       branchCode,
       input.taxYear.toString(),
       summary.totalEmployees.toString(),
-      formatCents(summary.totalGrossCompensationCents),
-      formatCents(summary.totalNonTaxableCents),
-      formatCents(summary.totalTaxableCents),
-      formatCents(summary.totalTaxDueCents),
-      formatCents(summary.totalTaxWithheldCents),
-      formatCents(summary.totalRefundCents),
-      formatCents(summary.totalPayableCents),
+      formatCentavosToPesos(summary.totalGrossCompensationCents),
+      formatCentavosToPesos(summary.totalNonTaxableCents),
+      formatCentavosToPesos(summary.totalTaxableCents),
+      formatCentavosToPesos(summary.totalTaxDueCents),
+      formatCentavosToPesos(summary.totalTaxWithheldCents),
+      formatCentavosToPesos(summary.totalRefundCents),
+      formatCentavosToPesos(summary.totalPayableCents),
     ].join(","),
   );
 
@@ -364,17 +358,17 @@ export function formatBir1604CAlphalistCsv(
         emp.employmentStatus ?? "REGULAR",
         emp.periodFrom,
         emp.periodTo,
-        formatCents(emp.grossCompensationCents),
-        formatCents(emp.totalNonTaxableCents),
-        formatCents(emp.statutoryContributionsCents),
-        formatCents(emp.deMinimisCents),
-        formatCents(emp.thirteenthMonthExemptCents),
-        formatCents(emp.totalTaxableCents),
-        formatCents(emp.taxDueAnnualCents),
-        formatCents(emp.taxWithheldPreviousEmployerCents),
-        formatCents(emp.taxWithheldPresentEmployerCents),
-        formatCents(emp.totalTaxWithheldCents),
-        formatCents(emp.adjustmentCents),
+        formatCentavosToPesos(emp.grossCompensationCents),
+        formatCentavosToPesos(emp.totalNonTaxableCents),
+        formatCentavosToPesos(emp.statutoryContributionsCents),
+        formatCentavosToPesos(emp.deMinimisCents),
+        formatCentavosToPesos(emp.thirteenthMonthExemptCents),
+        formatCentavosToPesos(emp.totalTaxableCents),
+        formatCentavosToPesos(emp.taxDueAnnualCents),
+        formatCentavosToPesos(emp.taxWithheldPreviousEmployerCents),
+        formatCentavosToPesos(emp.taxWithheldPresentEmployerCents),
+        formatCentavosToPesos(emp.totalTaxWithheldCents),
+        formatCentavosToPesos(emp.adjustmentCents),
         emp.adjustmentType,
         emp.substitutedFiling ? "YES" : "NO",
       ]
@@ -427,19 +421,19 @@ export function formatBir1604CAlphalistCsv(
         emp.region ?? "NCR",
         emp.periodFrom,
         emp.periodTo,
-        formatCents(emp.dailyRateCents ?? 0n),
-        formatCents(emp.grossCompensationCents),
-        formatCents(emp.basicMweCents),
-        formatCents(emp.holidayPayMweCents),
-        formatCents(emp.overtimePayMweCents),
-        formatCents(emp.nightDiffMweCents),
-        formatCents(emp.statutoryContributionsCents),
-        formatCents(emp.deMinimisCents),
-        formatCents(emp.thirteenthMonthExemptCents),
-        formatCents(emp.totalTaxableCents),
-        formatCents(emp.taxDueAnnualCents),
-        formatCents(emp.totalTaxWithheldCents),
-        formatCents(emp.adjustmentCents),
+        formatCentavosToPesos(emp.dailyRateCents ?? 0n),
+        formatCentavosToPesos(emp.grossCompensationCents),
+        formatCentavosToPesos(emp.basicMweCents),
+        formatCentavosToPesos(emp.holidayPayMweCents),
+        formatCentavosToPesos(emp.overtimePayMweCents),
+        formatCentavosToPesos(emp.nightDiffMweCents),
+        formatCentavosToPesos(emp.statutoryContributionsCents),
+        formatCentavosToPesos(emp.deMinimisCents),
+        formatCentavosToPesos(emp.thirteenthMonthExemptCents),
+        formatCentavosToPesos(emp.totalTaxableCents),
+        formatCentavosToPesos(emp.taxDueAnnualCents),
+        formatCentavosToPesos(emp.totalTaxWithheldCents),
+        formatCentavosToPesos(emp.adjustmentCents),
         emp.adjustmentType,
       ]
         .map((f) => escapeCsvField(String(f)))
@@ -451,18 +445,22 @@ export function formatBir1604CAlphalistCsv(
   rows.push("CONTROL TOTALS");
   rows.push(`Total Employees,${summary.totalEmployees}`);
   rows.push(
-    `Total Gross Compensation,${formatCents(summary.totalGrossCompensationCents)}`,
+    `Total Gross Compensation,${formatCentavosToPesos(summary.totalGrossCompensationCents)}`,
   );
   rows.push(
-    `Total Non-Taxable Compensation,${formatCents(summary.totalNonTaxableCents)}`,
+    `Total Non-Taxable Compensation,${formatCentavosToPesos(summary.totalNonTaxableCents)}`,
   );
   rows.push(
-    `Total Taxable Compensation,${formatCents(summary.totalTaxableCents)}`,
+    `Total Taxable Compensation,${formatCentavosToPesos(summary.totalTaxableCents)}`,
   );
-  rows.push(`Total Tax Due,${formatCents(summary.totalTaxDueCents)}`);
-  rows.push(`Total Tax Withheld,${formatCents(summary.totalTaxWithheldCents)}`);
-  rows.push(`Total Refund,${formatCents(summary.totalRefundCents)}`);
-  rows.push(`Total Payable,${formatCents(summary.totalPayableCents)}`);
+  rows.push(`Total Tax Due,${formatCentavosToPesos(summary.totalTaxDueCents)}`);
+  rows.push(
+    `Total Tax Withheld,${formatCentavosToPesos(summary.totalTaxWithheldCents)}`,
+  );
+  rows.push(`Total Refund,${formatCentavosToPesos(summary.totalRefundCents)}`);
+  rows.push(
+    `Total Payable,${formatCentavosToPesos(summary.totalPayableCents)}`,
+  );
 
   return rows.join("\r\n");
 }

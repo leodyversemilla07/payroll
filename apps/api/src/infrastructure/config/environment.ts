@@ -24,6 +24,15 @@ const environmentSchema = z.object({
     .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, 'Invalid cookie name')
     .default('sweldoph_session'),
   AUTH_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(8),
+  // Emergency local-login backdoor for @sweldoph.local accounts. Never
+  // enabled by default: a mis-set NODE_ENV alone must not open it. Accepts
+  // '1'/'true' (or boolean true when constructed programmatically); every
+  // other value, including '0'/'false', disables it.
+  ALLOW_DEV_LOGIN_BACKDOOR: z
+    .union([z.boolean(), z.enum(['1', '0', 'true', 'false'])])
+    .optional()
+    .default(false)
+    .transform((value) => value === true || value === '1' || value === 'true'),
   CORS_ORIGIN: z
     .string()
     .default('http://localhost:3000')

@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { type Prisma, prisma } from '@workspace/db';
+import { formatCentavosToPesos } from '@workspace/payroll-engine';
 
 export type BankFormat = 'BDO' | 'BPI' | 'UNIONBANK' | 'METROBANK';
 
@@ -21,7 +22,9 @@ export interface BankTransmittalItem {
   accountName: string;
   accountNumber: string;
   bankName: string;
-  amountPesos: number;
+  // Integer centavos. Amounts are formatted to exact decimal strings only at
+  // CSV render time: float division silently rounds above 2^53 centavos.
+  amountCents: bigint;
   remarks: string;
 }
 
@@ -29,6 +32,10 @@ export interface Bir1601CSummary {
   taxablePeriod: string;
   totalEmployees: number;
   minimumWageEarnersCount: number;
+  // Display numerics summed from real disbursed payslips, far below the
+  // 2^53-centavo float limit. Every file-bound amount in this service
+  // (bank CSVs) is formatted from integer centavos via
+  // formatCentavosToPesos instead.
   grossCompensationPesos: number;
   nonTaxableCompensationPesos: number; // Statutory EE share + De Minimis
   taxableCompensationPesos: number;
@@ -103,7 +110,6 @@ export class WithholdingExportsService {
     }
 
     const items: BankTransmittalItem[] = bankPayslips.map((ps) => {
-      const netPesos = Number(ps.netPayCents) / 100;
       return {
         employeeNumber: ps.employee.employeeNumber,
         accountName:
@@ -111,7 +117,7 @@ export class WithholdingExportsService {
           `${ps.employee.firstName} ${ps.employee.lastName}`,
         accountNumber: ps.employee.bankAccountNumber || 'N/A',
         bankName: ps.employee.bankName || bankFormat,
-        amountPesos: netPesos,
+        amountCents: ps.netPayCents,
         remarks: `PAYROLL-${ps.id.slice(0, 8)}`,
       };
     });
@@ -130,7 +136,7 @@ export class WithholdingExportsService {
           'Account_Number,Amount,Beneficiary_Name,Employee_ID,Reference';
         const rows = items.map(
           (i) =>
-            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.employeeNumber)},${csvField(i.remarks)}`,
+            `${csvField(i.accountNumber)},${formatCentavosToPesos(i.amountCents)},${csvField(i.accountName)},${csvField(i.employeeNumber)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -139,7 +145,7 @@ export class WithholdingExportsService {
         const headers = 'BPI_Account_Number,Payee_Name,Amount,Remarks';
         const rows = items.map(
           (i) =>
-            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},${csvField(i.remarks)}`,
+            `${csvField(i.accountNumber)},${csvField(i.accountName)},${formatCentavosToPesos(i.amountCents)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -149,7 +155,7 @@ export class WithholdingExportsService {
           'Recipient_Account,Recipient_Name,Amount,Currency,Remarks,Employee_ID';
         const rows = items.map(
           (i) =>
-            `${csvField(i.accountNumber)},${csvField(i.accountName)},${i.amountPesos.toFixed(2)},"PHP",${csvField(i.remarks)},${csvField(i.employeeNumber)}`,
+            `${csvField(i.accountNumber)},${csvField(i.accountName)},${formatCentavosToPesos(i.amountCents)},"PHP",${csvField(i.remarks)},${csvField(i.employeeNumber)}`,
         );
         return [headers, ...rows].join('\r\n');
       }
@@ -158,7 +164,7 @@ export class WithholdingExportsService {
         const headers = 'Metrobank_Account,Amount,Customer_Name,Description';
         const rows = items.map(
           (i) =>
-            `${csvField(i.accountNumber)},${i.amountPesos.toFixed(2)},${csvField(i.accountName)},${csvField(i.remarks)}`,
+            `${csvField(i.accountNumber)},${formatCentavosToPesos(i.amountCents)},${csvField(i.accountName)},${csvField(i.remarks)}`,
         );
         return [headers, ...rows].join('\r\n');
       }

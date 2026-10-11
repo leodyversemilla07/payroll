@@ -1,7 +1,6 @@
 import {
   ConflictException,
   ForbiddenException,
-  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -97,21 +96,6 @@ async function withLeaveErrors<T>(operation: () => Promise<T>): Promise<T> {
       message: 'Leave request failed. Please retry.',
       cause: error,
     });
-  }
-}
-
-const notificationsLogger = new Logger('LeaveNotifications');
-
-async function notifySafely(operation: () => Promise<unknown>): Promise<void> {
-  try {
-    await operation();
-  } catch (error) {
-    // Notifications are best-effort: the leave decision already committed,
-    // so a fan-out failure must never fail the mutation itself.
-    notificationsLogger.error(
-      'Leave notification fan-out failed',
-      error instanceof Error ? error.stack : String(error),
-    );
   }
 }
 
@@ -433,20 +417,24 @@ export function createLeavesRouter(ctx: RouterContext) {
                 },
                 transaction,
               );
+              // Filed notifications commit with the request itself: a crash
+              // can neither lose the fan-out nor publish it for a rollback.
+              await notificationService.notifyLeaveFiled(
+                ctx.user.organizationId,
+                {
+                  id: request.id,
+                  employeeId: request.employeeId,
+                  leaveType: request.leaveType,
+                  startDate: request.startDate,
+                  endDate: request.endDate,
+                  daysCount: Number(request.daysCount),
+                },
+                transaction,
+              );
               return request;
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
-        );
-        await notifySafely(() =>
-          notificationService.notifyLeaveFiled(ctx.user.organizationId, {
-            id: created.id,
-            employeeId: created.employeeId,
-            leaveType: created.leaveType,
-            startDate: created.startDate,
-            endDate: created.endDate,
-            daysCount: Number(created.daysCount),
-          }),
         );
         return serializeRequest(created);
       }),
@@ -456,6 +444,8 @@ export function createLeavesRouter(ctx: RouterContext) {
       .input(z.object({ requestId: z.string().uuid() }))
       .mutation(async ({ input, ctx }) => {
         await assertManagerRequestScope(ctx.user, input.requestId);
+        // Replays return newlyApproved=false before the audit/notify hooks,
+        // so a repeated approval stays silent instead of duplicating rows.
         const decided = await withLeaveErrors(async () => {
           const { request, newlyApproved } =
             await leavesService.approveLeaveRequest(
@@ -476,25 +466,25 @@ export function createLeavesRouter(ctx: RouterContext) {
                   transaction,
                 ),
               ctx.user.employeeId,
+              async ({ request, transaction }) =>
+                notificationService
+                  .notifyLeaveDecided(
+                    ctx.user.organizationId,
+                    {
+                      id: request.id,
+                      employeeId: request.employeeId,
+                      leaveType: request.leaveType,
+                      startDate: request.startDate,
+                      endDate: request.endDate,
+                      daysCount: Number(request.daysCount),
+                    },
+                    'APPROVED',
+                    transaction,
+                  )
+                  .then(() => undefined),
             );
           return { request, newlyApproved };
         });
-        if (decided.newlyApproved) {
-          await notifySafely(() =>
-            notificationService.notifyLeaveDecided(
-              ctx.user.organizationId,
-              {
-                id: decided.request.id,
-                employeeId: decided.request.employeeId,
-                leaveType: decided.request.leaveType,
-                startDate: decided.request.startDate,
-                endDate: decided.request.endDate,
-                daysCount: Number(decided.request.daysCount),
-              },
-              'APPROVED',
-            ),
-          );
-        }
         return serializeRequest(decided.request);
       }),
 
@@ -529,25 +519,25 @@ export function createLeavesRouter(ctx: RouterContext) {
                   transaction,
                 ),
               ctx.user.employeeId,
+              async ({ request, transaction }) =>
+                notificationService
+                  .notifyLeaveDecided(
+                    ctx.user.organizationId,
+                    {
+                      id: request.id,
+                      employeeId: request.employeeId,
+                      leaveType: request.leaveType,
+                      startDate: request.startDate,
+                      endDate: request.endDate,
+                      daysCount: Number(request.daysCount),
+                    },
+                    'REJECTED',
+                    transaction,
+                  )
+                  .then(() => undefined),
             );
           return { request, newlyRejected };
         });
-        if (decided.newlyRejected) {
-          await notifySafely(() =>
-            notificationService.notifyLeaveDecided(
-              ctx.user.organizationId,
-              {
-                id: decided.request.id,
-                employeeId: decided.request.employeeId,
-                leaveType: decided.request.leaveType,
-                startDate: decided.request.startDate,
-                endDate: decided.request.endDate,
-                daysCount: Number(decided.request.daysCount),
-              },
-              'REJECTED',
-            ),
-          );
-        }
         return serializeRequest(decided.request);
       }),
 

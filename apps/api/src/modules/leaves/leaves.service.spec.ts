@@ -140,6 +140,52 @@ describe('LeavesService approval', () => {
     expect(getBalance()).toBe(3);
   });
 
+  it('notifies inside the approval transaction and stays silent on replay', async () => {
+    const { transaction } = mockApproval();
+    const service = new LeavesService();
+    const notify = jest.fn();
+    const first = await service.approveLeaveRequest(
+      'request-1',
+      'org-1',
+      'admin-1',
+      undefined,
+      undefined,
+      notify,
+    );
+    expect(first.newlyApproved).toBe(true);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith({
+      request: expect.objectContaining({ id: 'request-1' }),
+      transaction,
+    });
+    const second = await service.approveLeaveRequest(
+      'request-1',
+      'org-1',
+      'admin-2',
+      undefined,
+      undefined,
+      notify,
+    );
+    expect(second.newlyApproved).toBe(false);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back the approval when the notify hook fails', async () => {
+    const { getStatus } = mockApproval();
+    const notify = jest.fn().mockRejectedValue(new Error('fan-out down'));
+    await expect(
+      new LeavesService().approveLeaveRequest(
+        'request-1',
+        'org-1',
+        'admin-1',
+        undefined,
+        undefined,
+        notify,
+      ),
+    ).rejects.toThrow('fan-out down');
+    expect(getStatus()).toBe('PENDING');
+  });
+
   it('does not approve paid leave without enough balance', async () => {
     const { transaction, getBalance, getStatus } = mockApproval({ balance: 1 });
     await expect(

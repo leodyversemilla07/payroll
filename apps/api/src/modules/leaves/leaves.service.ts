@@ -68,6 +68,11 @@ type DecisionAudit = (data: {
   transaction: Prisma.TransactionClient;
 }) => Promise<void>;
 
+export type DecisionNotify = (data: {
+  request: LeaveRequest;
+  transaction: Prisma.TransactionClient;
+}) => Promise<void>;
+
 @Injectable()
 export class LeavesService {
   listLeavePolicies(organizationId: string, includeInactive = false) {
@@ -185,14 +190,16 @@ export class LeavesService {
     });
   }
 
-  // Approval, debit, and the API's audit callback commit or roll back together.
-  // Replays retain the original approver and never debit or audit a second time.
+  // Approval, debit, audit callback, and notify callback commit or roll
+  // back together. Replays retain the original approver and never debit,
+  // audit, or notify a second time.
   async approveLeaveRequest(
     requestId: string,
     organizationId: string,
     approvedById: string,
     audit?: DecisionAudit,
     approverEmployeeId?: string,
+    notify?: DecisionNotify,
   ) {
     return this.runDecision(async (transaction) => {
       const request = await transaction.leaveRequest.findFirst({
@@ -295,6 +302,7 @@ export class LeavesService {
         where: { id: requestId },
       });
       await audit?.({ previous: request, request: approved, transaction });
+      await notify?.({ request: approved, transaction });
       return { request: approved, newlyApproved: true };
     });
   }
@@ -306,6 +314,7 @@ export class LeavesService {
     rejectionReason: string,
     audit?: DecisionAudit,
     rejecterEmployeeId?: string,
+    notify?: DecisionNotify,
   ) {
     return this.runDecision(async (transaction) => {
       const previous = await transaction.leaveRequest.findFirst({
@@ -337,6 +346,7 @@ export class LeavesService {
         where: { id: requestId },
       });
       await audit?.({ previous, request, transaction });
+      await notify?.({ request, transaction });
       return { request, newlyRejected: true };
     });
   }

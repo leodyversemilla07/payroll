@@ -212,6 +212,8 @@ describe('WithholdingExportsService exports', () => {
       );
     expect(csv).toContain('Alex Santos');
     expect(csv).not.toContain('Jo Reyes');
+    // Exact decimal from integer centavos: 100000n -> "1000.00".
+    expect(csv).toContain(',1000.00,');
 
     jest.mocked(prisma.payslip.findMany).mockResolvedValue([
       {

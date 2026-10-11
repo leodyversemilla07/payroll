@@ -213,12 +213,16 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
     getEmployeeLeaveBalances.mockResolvedValue([]);
     listEmployeeLeaveRequests.mockResolvedValue([saved]);
     fileLeaveRequest.mockResolvedValue(saved);
+    notifyLeaveFiled.mockResolvedValue(1);
+    notifyLeaveDecided.mockResolvedValue(1);
     approveLeaveRequest.mockImplementation(
       async (
         _id: string,
         _org: string,
         _actor: string,
         audit: Parameters<LeavesService['approveLeaveRequest']>[3],
+        _approver: unknown,
+        notify: Parameters<LeavesService['approveLeaveRequest']>[5],
       ) => {
         const request = { ...saved, status: 'APPROVED' };
         await audit?.({
@@ -226,6 +230,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           request: request as never,
           transaction: database,
         });
+        await notify?.({ request: request as never, transaction: database });
         return { request, newlyApproved: true };
       },
     );
@@ -236,6 +241,8 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         _actor: string,
         reason: string,
         audit: Parameters<LeavesService['rejectLeaveRequest']>[4],
+        _rejecter: unknown,
+        notify: Parameters<LeavesService['rejectLeaveRequest']>[6],
       ) => {
         const request = {
           ...saved,
@@ -247,6 +254,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
           request: request as never,
           transaction: database,
         });
+        await notify?.({ request: request as never, transaction: database });
         return { request, newlyRejected: true };
       },
     );
@@ -276,6 +284,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
         'user-1',
         expect.any(Function),
         employeeId,
+        expect.any(Function),
       );
       expect(record).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -310,6 +319,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
     expect(notifyLeaveFiled).toHaveBeenCalledWith(
       'org-1',
       expect.objectContaining({ id: requestId, employeeId }),
+      database,
     );
     expect(notifyLeaveDecided).not.toHaveBeenCalled();
   });
@@ -320,6 +330,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
       'org-1',
       expect.objectContaining({ id: requestId, employeeId }),
       'APPROVED',
+      database,
     );
     await caller.reject({
       requestId,
@@ -329,6 +340,7 @@ describe('leave tRPC permissions, transport and transactional provenance', () =>
       'org-1',
       expect.objectContaining({ id: requestId, employeeId }),
       'REJECTED',
+      database,
     );
   });
   describe('department manager scoping', () => {

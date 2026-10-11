@@ -40,6 +40,19 @@ export type PayrollMutationAudit = (data: {
   transaction: Prisma.TransactionClient;
 }) => Promise<void>;
 
+/**
+ * Fan-out hook invoked inside the same serializable transaction as the
+ * payroll transition, immediately after the audit callback. Notification
+ * rows therefore commit or roll back with the run itself: a crash can
+ * neither lose a notification nor publish one for a rolled-back run.
+ * Idempotent replays return before the audit/notify hooks, so replays
+ * stay silent instead of duplicating "ready for review" rows.
+ */
+export type PayrollMutationNotification = (data: {
+  run: PayrollRun;
+  transaction: Prisma.TransactionClient;
+}) => Promise<void>;
+
 interface ExecutePayrollRunParams {
   organizationId: string;
   processedById: string;
@@ -256,6 +269,7 @@ export class PayrollService {
       approvedById: string;
     },
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     return this.runLifecycleTransaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
@@ -289,6 +303,7 @@ export class PayrollService {
         include: { payslips: true },
       });
       await audit?.({ previous: run, run: approved, transaction });
+      await notify?.({ run: approved, transaction });
       return approved;
     });
   }
@@ -297,6 +312,7 @@ export class PayrollService {
   async disbursePayrollRun(
     params: { runId: string; organizationId: string },
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     return this.runLifecycleTransaction(async (transaction) => {
       const run = await transaction.payrollRun.findFirst({
@@ -324,6 +340,7 @@ export class PayrollService {
         include: { payslips: true },
       });
       await audit?.({ previous: run, run: disbursed, transaction });
+      await notify?.({ run: disbursed, transaction });
       return disbursed;
     });
   }
@@ -355,14 +372,15 @@ export class PayrollService {
    * reactivation is an exact reversal), then payments, payslips, and the
    * run row itself are removed so the cutoff can be re-run cleanly and
    * later year-to-date bucket accounting stays exact. The audit log keeps
-   * the full trail. Blocked past disbursement, and blocked when a later
-   * run already builds on this one — cancel the later run first.
-   * (Bank transmittal batches, once persisted, must additionally be voided
-   * here before the run row is removed.)
+   * the full trail. Blocked past disbursement, blocked when a later
+   * run already builds on this one — cancel the later run first — and
+   * blocked while bank transmittal batches reference the run (they carry
+   * ON DELETE RESTRICT and have no void procedure yet).
    */
   async cancelPayrollRun(
     params: { runId: string; organizationId: string },
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     for (let attempt = 1; attempt <= PAYROLL_TRANSACTION_RETRIES; attempt++) {
       try {
@@ -379,6 +397,20 @@ export class PayrollService {
               throw new NotFoundException('Payroll run not found');
             }
             assertValidPayrollTransition(run.status, 'CANCEL');
+
+            // Bank transmittal batches reference the run with ON DELETE
+            // RESTRICT and have no void procedure: block cancellation
+            // explicitly instead of leaking a Prisma P2003 foreign-key
+            // error from the delete below.
+            const transmittalBatches =
+              await transaction.bankTransmittalBatch.count({
+                where: { payrollRunId: run.id },
+              });
+            if (transmittalBatches > 0) {
+              throw new ConflictException(
+                'Bank transmittal batches exist for this run; void them before cancelling',
+              );
+            }
 
             // Later regular runs depend on earlier monthly withholding. A special
             // payout also depends on all earlier basic earnings and bucket usage:
@@ -469,6 +501,7 @@ export class PayrollService {
               run: { ...run, status: 'CANCELLED' },
               transaction,
             });
+            await notify?.({ run, transaction });
 
             return { success: true, runId: run.id };
           },
@@ -494,6 +527,7 @@ export class PayrollService {
   async executePayrollRun(
     params: ExecutePayrollRunParams,
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     const normalized = this.validateAndNormalizeRun(params);
 
@@ -501,7 +535,7 @@ export class PayrollService {
       try {
         return await prisma.$transaction(
           (transaction) =>
-            this.executeInTransaction(transaction, normalized, audit),
+            this.executeInTransaction(transaction, normalized, audit, notify),
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             maxWait: 10_000,
@@ -531,6 +565,7 @@ export class PayrollService {
     transaction: Prisma.TransactionClient,
     params: ExecutePayrollRunParams,
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     const existing = await transaction.payrollRun.findUnique({
       where: payrollRunKey(params),
@@ -952,6 +987,7 @@ export class PayrollService {
       include: { payslips: true },
     });
     await audit?.({ previous: null, run: completed, transaction });
+    await notify?.({ run: completed, transaction });
     return completed;
   }
 
@@ -972,6 +1008,7 @@ export class PayrollService {
   async executeThirteenthMonthRun(
     params: ExecuteThirteenthMonthRunParams,
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     const normalized = {
       ...params,
@@ -1008,6 +1045,7 @@ export class PayrollService {
                 taxYear,
               },
               audit,
+              notify,
             ),
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -1038,6 +1076,7 @@ export class PayrollService {
     transaction: Prisma.TransactionClient,
     params: ExecuteThirteenthMonthRunParams & { taxYear: number },
     audit?: PayrollMutationAudit,
+    notify?: PayrollMutationNotification,
   ) {
     const runKey = {
       organizationId: params.organizationId,
@@ -1251,6 +1290,7 @@ export class PayrollService {
       include: { payslips: true },
     });
     await audit?.({ previous: null, run: completed, transaction });
+    await notify?.({ run: completed, transaction });
     return completed;
   }
 

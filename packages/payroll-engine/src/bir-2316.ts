@@ -4,6 +4,7 @@
  * not be signed, filed or sent to an employee as a substitute for the form.
  */
 
+import { formatCentavosGrouped } from "./money";
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
 import { annualizeTax } from "./withholding-tax";
 
@@ -269,8 +270,7 @@ export function generateBir2316Certificate(
 export function formatBir2316TextDocument(
   cert: Bir2316CertificateData,
 ): string {
-  const f = (cents: bigint) =>
-    (Number(cents) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 });
+  const f = (cents: bigint) => formatCentavosGrouped(cents);
 
   return [
     "==========================================================================================",

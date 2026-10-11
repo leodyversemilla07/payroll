@@ -3,6 +3,7 @@
  * Compliant with Presidential Decree No. 851 & DOLE Labor Advisory on 13th Month Pay
  */
 
+import { formatCentavosGrouped } from "./money";
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
 
 export interface ThirteenthMonthEmployeeInput {
@@ -189,8 +190,7 @@ export function calculate13thMonthBatch(
 export function formatDole13thMonthComplianceReport(
   input: DoleComplianceReportInput,
 ): string {
-  const f = (cents: bigint) =>
-    (Number(cents) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 });
+  const f = (cents: bigint) => formatCentavosGrouped(cents);
 
   return [
     "==========================================================================================",

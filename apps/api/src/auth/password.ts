@@ -97,3 +97,37 @@ export async function verifyPassword(
 
   return timingSafeEqual(actualKey, expectedKey);
 }
+
+/**
+ * Salted slow hash for system-derived document passwords (e.g. the DOB-based
+ * payslip PDF password). Unlike login passwords these are short by design,
+ * so no length minimum is enforced here — brute-force resistance comes from
+ * the unique per-document salt and scrypt cost, not from password entropy.
+ * Stored in the same column as the legacy unsalted SHA-256 hex digest; the
+ * `pdfscrypt` prefix distinguishes the formats and legacy rows verify as
+ * false (never throw) so they can be rehashed on regeneration.
+ */
+export async function hashDocumentPassword(password: string): Promise<string> {
+  if (!password) {
+    throw new Error('Document password must not be empty');
+  }
+  const salt = randomBytes(16).toString('hex');
+  const key = await deriveKey(password, salt);
+  return ['pdfscrypt', 'v=1', salt, key.toString('base64url')].join('$');
+}
+
+export async function verifyDocumentPassword(
+  password: string,
+  encodedHash: string,
+): Promise<boolean> {
+  const [algorithm, version, salt, encodedKey] = encodedHash.split('$');
+  if (algorithm !== 'pdfscrypt' || version !== 'v=1' || !salt || !encodedKey) {
+    return false;
+  }
+  const expectedKey = Buffer.from(encodedKey, 'base64url');
+  if (expectedKey.length !== KEY_LENGTH) {
+    return false;
+  }
+  const actualKey = await deriveKey(password, salt);
+  return timingSafeEqual(actualKey, expectedKey);
+}

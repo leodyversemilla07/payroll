@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -9,6 +8,7 @@ import { prisma, Role } from '@workspace/db';
 import JSZip from 'jszip';
 import PDFDocument from 'pdfkit';
 import type { AuthenticatedUser } from '../../auth/auth.service';
+import { hashDocumentPassword } from '../../auth/password';
 import { findDepartmentManagerDepartmentId } from '../../infrastructure/authorization/department-scope';
 import { StorageService } from '../../infrastructure/storage/storage.service';
 
@@ -101,8 +101,10 @@ export class PayslipPdfService {
       'application/pdf',
     );
 
+    // Salted slow hash: the column predates it with unsalted SHA-256 rows,
+    // which verifyDocumentPassword treats as unverifiable (never throws).
     const passwordHash = dobPassword
-      ? createHash('sha256').update(dobPassword).digest('hex')
+      ? await hashDocumentPassword(dobPassword)
       : null;
 
     await prisma.payslip.update({
@@ -254,8 +256,10 @@ export class PayslipPdfService {
       );
       presignedUrl = uploadResult.url;
 
+      // Salted slow hash: the column predates it with unsalted SHA-256 rows,
+      // which verifyDocumentPassword treats as unverifiable (never throws).
       const passwordHash = dobPassword
-        ? createHash('sha256').update(dobPassword).digest('hex')
+        ? await hashDocumentPassword(dobPassword)
         : null;
 
       await prisma.payslip.update({
@@ -332,8 +336,9 @@ export class PayslipPdfService {
           pdfBuffer,
           'application/pdf',
         );
+        // Salted slow hash (see generatePayslipPdf).
         const passwordHash = dobPassword
-          ? createHash('sha256').update(dobPassword).digest('hex')
+          ? await hashDocumentPassword(dobPassword)
           : null;
         await prisma.payslip.update({
           where: { id: payslip.id },

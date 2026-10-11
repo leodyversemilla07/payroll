@@ -26,6 +26,17 @@ const LOGIN_LOCK_MINUTES = 15;
 const DUMMY_PASSWORD_HASH =
   'scrypt$v=1$16384$8$1$00000000000000000000000000000000$p5vid_QWQzFkNgNog0jke_hs45AKY7i8GoN8CQ8ltVXNo5oQbwobh2bKdnj9qMNhXCPDs7DGtx4ktWKMuPmaBw';
 
+/**
+ * Whether the local @sweldoph.local emergency login is armed. Explicit
+ * string comparison only: Boolean('false') is true, so truthy coercion
+ * must never be used here.
+ */
+export function isDevLoginBackdoorEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  const flag = process.env.ALLOW_DEV_LOGIN_BACKDOOR;
+  return flag === '1' || flag === 'true';
+}
+
 export interface AuthenticatedUser {
   id: string;
   organizationId: string;
@@ -262,9 +273,13 @@ export class AuthService {
       password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
+    // Local-development escape hatch for seeded @sweldoph.local accounts
+    // with a stale password hash. Requires an explicit opt-in flag in
+    // addition to a non-production NODE_ENV, so a mis-set NODE_ENV alone
+    // can never open it. Production ignores the flag entirely.
     if (
       !passwordMatches &&
-      process.env.NODE_ENV !== 'production' &&
+      isDevLoginBackdoorEnabled() &&
       user?.email.endsWith('@sweldoph.local') &&
       (password === 'AdminPassword123!' || password === 'DemoPassword123!')
     ) {

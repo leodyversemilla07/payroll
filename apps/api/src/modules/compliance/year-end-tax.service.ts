@@ -9,6 +9,7 @@ import type {
   Bir1604CSchedule71Employee,
   Bir1604CSchedule72Employee,
 } from '@workspace/payroll-engine';
+import { formatCentavosToPesos } from '@workspace/payroll-engine';
 import { Bir2316PdfService } from './bir-2316-pdf.service';
 import { resolvePriorEmployerTotals } from './prior-employment.inputs';
 import {
@@ -1163,9 +1164,9 @@ export class YearEndTaxService {
           'PRIOR EMPLOYER INCOME (TRANSCRIBED 2316 FIGURES, SELF-REPORTED — NOT VERIFIED)',
           `  Previous employers recorded ............................. ${priorEmployerTotals.employerCount}`,
           `  Effective documents recorded ............................ ${priorEmployerTotals.documentCount}`,
-          `  Prior gross compensation ................................ PHP ${(Number(priorEmployerTotals.grossCents) / 100).toFixed(2)}`,
-          `  Prior taxable compensation .............................. PHP ${(Number(priorEmployerTotals.taxableCents) / 100).toFixed(2)}`,
-          `  Prior tax withheld ...................................... PHP ${(Number(priorEmployerTotals.withheldCents) / 100).toFixed(2)}`,
+          `  Prior gross compensation ................................ PHP ${formatCentavosToPesos(priorEmployerTotals.grossCents)}`,
+          `  Prior taxable compensation .............................. PHP ${formatCentavosToPesos(priorEmployerTotals.taxableCents)}`,
+          `  Prior tax withheld ...................................... PHP ${formatCentavosToPesos(priorEmployerTotals.withheldCents)}`,
           '  Combined totals above annualize these transcribed prior-employer',
           '  figures with present-employer payroll per RR 11-2018 §2.79.',
           '  Wage/benefit detail sections remain PRESENT-EMPLOYER ONLY.',

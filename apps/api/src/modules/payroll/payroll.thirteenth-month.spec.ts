@@ -101,6 +101,26 @@ describe('PayrollService 13th-month runs', () => {
     expect(payout.grossPayCents).toBe(payout.bonusPaidCents);
   });
 
+  it('stays silent on idempotent replay: no audit, no notification', async () => {
+    const tx = mockTransaction();
+    tx.payrollRun.findUnique.mockResolvedValue({
+      id: 'special-1',
+      status: 'AUDITED',
+      paymentDate: new Date('2026-12-21'),
+    });
+    const audit = jest.fn();
+    const notify = jest.fn();
+
+    const result = await new PayrollService(
+      {} as never,
+    ).executeThirteenthMonthRun(run, audit, notify);
+
+    expect(result).toMatchObject({ id: 'special-1' });
+    expect(tx.payslip.create).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('releases only the unpaid balance after an earlier disbursed 13th-month run', async () => {
     const tx = mockTransaction();
     tx.payrollRun.findMany.mockResolvedValue([

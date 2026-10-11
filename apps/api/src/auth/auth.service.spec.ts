@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
-import { AuthService } from './auth.service';
+import { AuthService, isDevLoginBackdoorEnabled } from './auth.service';
 import { hashPassword } from './password';
 import {
   generateBackupCodes,
@@ -220,6 +220,126 @@ describe('AuthService MFA', () => {
           expiresAt: expect.any(Date),
         },
       });
+    });
+  });
+
+  describe('dev login backdoor', () => {
+    const backdoorUser = {
+      id: 'user-dev',
+      email: 'admin@sweldoph.local',
+      name: 'Dev Admin',
+      role: Role.SUPER_ADMIN,
+      // Deliberately stale: does not match either backdoor password.
+      passwordHash,
+      isActive: true,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      mfaEnabled: false,
+      organizationId: 'org-1',
+    };
+    const savedNodeEnv = process.env.NODE_ENV;
+    const savedFlag = process.env.ALLOW_DEV_LOGIN_BACKDOOR;
+
+    afterEach(() => {
+      if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = savedNodeEnv;
+      if (savedFlag === undefined) delete process.env.ALLOW_DEV_LOGIN_BACKDOOR;
+      else process.env.ALLOW_DEV_LOGIN_BACKDOOR = savedFlag;
+    });
+
+    function mockStaleDevUser(email = backdoorUser.email) {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...backdoorUser,
+        email,
+      });
+      (prisma.authSession.create as jest.Mock).mockResolvedValue({});
+      (prisma.user.update as jest.Mock).mockResolvedValue({});
+    }
+
+    it('refuses the backdoor password when the flag is unset', async () => {
+      delete process.env.ALLOW_DEV_LOGIN_BACKDOOR;
+      mockStaleDevUser();
+
+      const result = await service.signIn(
+        'admin@sweldoph.local',
+        'AdminPassword123!',
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).toBeNull();
+      expect(mockResponse.cookie).not.toHaveBeenCalled();
+    });
+
+    it('refuses the backdoor password when the flag is falsy', async () => {
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = 'false';
+      mockStaleDevUser();
+
+      const result = await service.signIn(
+        'admin@sweldoph.local',
+        'AdminPassword123!',
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('admits a stale @sweldoph.local hash when explicitly flagged', async () => {
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = '1';
+      mockStaleDevUser();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...backdoorUser,
+        failedLoginAttempts: 1,
+      });
+
+      const result = await service.signIn(
+        'admin@sweldoph.local',
+        'DemoPassword123!',
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result?.requiresMfa).toBe(false);
+      expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+
+    it('still rejects non-local domains when flagged', async () => {
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = '1';
+      mockStaleDevUser('admin@example.com');
+
+      const result = await service.signIn(
+        'admin@example.com',
+        'AdminPassword123!',
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('ignores the flag in production', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = '1';
+      mockStaleDevUser();
+
+      const result = await service.signIn(
+        'admin@sweldoph.local',
+        'AdminPassword123!',
+        mockRequest as Request,
+        mockResponse as unknown as Response,
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('reports the flag state without truthy coercion', () => {
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = 'false';
+      expect(isDevLoginBackdoorEnabled()).toBe(false);
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = '0';
+      expect(isDevLoginBackdoorEnabled()).toBe(false);
+      process.env.ALLOW_DEV_LOGIN_BACKDOOR = 'true';
+      expect(isDevLoginBackdoorEnabled()).toBe(true);
     });
   });
 

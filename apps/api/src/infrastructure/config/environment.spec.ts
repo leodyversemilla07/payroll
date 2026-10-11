@@ -13,6 +13,7 @@ describe('validateEnvironment', () => {
       DATABASE_URL: 'postgresql://postgres:password@localhost:5432/payroll_db',
       AUTH_COOKIE_NAME: 'sweldoph_session',
       AUTH_SESSION_TTL_HOURS: 8,
+      ALLOW_DEV_LOGIN_BACKDOOR: false,
       CORS_ORIGIN: ['http://localhost:3000'],
     });
   });
@@ -42,4 +43,25 @@ describe('validateEnvironment', () => {
       'Invalid environment configuration: DATABASE_URL: DATABASE_URL is required; CORS_ORIGIN: Invalid CORS origin: https://payroll.example.com/path',
     );
   });
+
+  it.each([
+    ['1', true],
+    ['true', true],
+    [true, true],
+    ['0', false],
+    ['false', false],
+    [false, false],
+    [undefined, false],
+  ])(
+    'parses ALLOW_DEV_LOGIN_BACKDOOR=%s as %s (never truthy-coerced)',
+    (flag, expected) => {
+      expect(
+        validateEnvironment({
+          DATABASE_URL:
+            'postgresql://postgres:password@localhost:5432/payroll_db',
+          ALLOW_DEV_LOGIN_BACKDOOR: flag,
+        } as NodeJS.ProcessEnv).ALLOW_DEV_LOGIN_BACKDOOR,
+      ).toBe(expected);
+    },
+  );
 });

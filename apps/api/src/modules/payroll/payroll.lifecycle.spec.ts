@@ -136,6 +136,20 @@ describe('PayrollService atomic lifecycle transitions', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
+  it('notifies inside the approval transaction with the committed run', async () => {
+    const notify = jest.fn();
+    const result = await service.approvePayrollRun(approval, audit, notify);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith({ run: result, transaction });
+  });
+
+  it('rolls back approval when the notify hook fails', async () => {
+    const notify = jest.fn().mockRejectedValue(new Error('fan-out down'));
+    await expect(
+      service.approvePayrollRun(approval, audit, notify),
+    ).rejects.toThrow('fan-out down');
+  });
+
   it('claims only an approved run for disbursement', async () => {
     const before = {
       ...audited,
@@ -191,5 +205,83 @@ describe('PayrollService atomic lifecycle transitions', () => {
       ConflictException,
     );
     expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('PayrollService cancellation guards', () => {
+  const cancellable = {
+    id: 'run-9',
+    organizationId: 'org-1',
+    status: 'APPROVED',
+    processedById: 'maker-1',
+    approvedById: 'checker-1',
+    cutoffSequence: 'FIRST_CUTOFF',
+    cutoffEndDate: new Date('2026-01-15'),
+  };
+  const cancelTransaction = {
+    payrollRun: {
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+      delete: jest.fn(),
+    },
+    bankTransmittalBatch: { count: jest.fn() },
+    loanPayment: { findMany: jest.fn(), deleteMany: jest.fn() },
+    payslip: { deleteMany: jest.fn() },
+  };
+  const cancelAudit = jest.fn();
+  const cancelService = new PayrollService({} as never);
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // First findFirst resolves the run; the second checks for later runs.
+    cancelTransaction.payrollRun.findFirst
+      .mockResolvedValueOnce(cancellable)
+      .mockResolvedValueOnce(null);
+    cancelTransaction.payrollRun.updateMany.mockResolvedValue({ count: 1 });
+    cancelTransaction.loanPayment.findMany.mockResolvedValue([]);
+    jest
+      .mocked(prisma.$transaction)
+      .mockImplementation(async (callback: unknown) =>
+        (callback as (tx: unknown) => Promise<unknown>)(cancelTransaction),
+      );
+  });
+
+  it('blocks cancellation while transmittal batches reference the run', async () => {
+    cancelTransaction.bankTransmittalBatch.count.mockResolvedValue(1);
+
+    await expect(
+      cancelService.cancelPayrollRun(
+        { runId: 'run-9', organizationId: 'org-1' },
+        cancelAudit,
+      ),
+    ).rejects.toThrow(
+      'Bank transmittal batches exist for this run; void them before cancelling',
+    );
+    expect(cancelTransaction.bankTransmittalBatch.count).toHaveBeenCalledWith({
+      where: { payrollRunId: 'run-9' },
+    });
+    expect(cancelTransaction.loanPayment.deleteMany).not.toHaveBeenCalled();
+    expect(cancelTransaction.payslip.deleteMany).not.toHaveBeenCalled();
+    expect(cancelTransaction.payrollRun.delete).not.toHaveBeenCalled();
+    expect(cancelAudit).not.toHaveBeenCalled();
+  });
+
+  it('cancels cleanly when no transmittal batches exist', async () => {
+    cancelTransaction.bankTransmittalBatch.count.mockResolvedValue(0);
+
+    const result = await cancelService.cancelPayrollRun(
+      { runId: 'run-9', organizationId: 'org-1' },
+      cancelAudit,
+    );
+
+    expect(result).toEqual({ success: true, runId: 'run-9' });
+    expect(cancelTransaction.payrollRun.delete).toHaveBeenCalledWith({
+      where: { id: 'run-9' },
+    });
+    expect(cancelAudit).toHaveBeenCalledWith({
+      previous: cancellable,
+      run: { ...cancellable, status: 'CANCELLED' },
+      transaction: cancelTransaction,
+    });
   });
 });
