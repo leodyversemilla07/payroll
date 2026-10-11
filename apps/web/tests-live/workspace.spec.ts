@@ -249,7 +249,7 @@ test("real workspace persists onboarding, attendance, leave and maker-checker pa
       exact: true,
     });
     await request.getByLabel("Pay treatment", { exact: true }).click();
-    await page.getByRole("option", { name: "Paid leave" }).click();
+    await page.getByRole("option", { name: "Paid leave", exact: true }).click();
     await request.getByLabel("Leave type", { exact: true }).click();
     await page.getByRole("option", { name: /VACATION/ }).click();
     await request.getByLabel("Leave start date").fill("2026-09-10");
