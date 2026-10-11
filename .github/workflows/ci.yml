@@ -5,9 +5,17 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -68,13 +76,160 @@ jobs:
       - name: Production smoke test
         run: pnpm --filter @workspace/api test:smoke
 
-      - name: Install browser
+  browser-mocked:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
+
+    env:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://localhost:4000/trpc
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 12.7.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install chromium only
         run: pnpm --filter web exec playwright install --with-deps chromium
 
-      - name: Web portal browser test
-        run: pnpm --filter web test:browser
+      - name: Mocked browser tests (shard ${{ matrix.shard }})
+        run: pnpm --filter web exec playwright test --shard=${{ matrix.shard }}
 
-      - name: Web portal browser test with real API and PostgreSQL
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-mocked-${{ strategy.job-index }}
+          path: apps/web/blob-report
+          if-no-files-found: error
+          retention-days: 7
+
+  merge-mocked-report:
+    if: always()
+    needs: browser-mocked
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 12.7.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-mocked-*
+
+      - name: Merge into HTML report
+        run: pnpm --filter web exec playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-mocked
+          path: apps/web/playwright-report
+          if-no-files-found: error
+          retention-days: 14
+
+  browser-live:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          PAYROLL_LIVE_TEST_DATABASE: "1"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: payroll_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/payroll_test?schema=public
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://localhost:4000/trpc
+      PAYROLL_LIVE_TEST_DATABASE: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 12.7.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @workspace/db db:generate
+
+      - name: Apply database migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install chromium only
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Live browser tests (real API + PostgreSQL)
         run: pnpm --filter web test:browser:live
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-live
+          path: apps/web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-live
+          path: apps/web/test-results-live
+          if-no-files-found: ignore
+          retention-days: 14

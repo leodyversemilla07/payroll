@@ -21,16 +21,32 @@ if (
   );
 }
 
+// Live browser suite: UI -> HTTP tRPC -> PostgreSQL against a disposable
+// database. Serial by design (workers: 1): every test provisions and deletes
+// only its own UUID-scoped tenant, but shares one API/web server pair.
 export default defineConfig({
   testDir: "./tests-live",
   outputDir: "./test-results-live",
-  workers: 1,
   timeout: 120_000,
   expect: { timeout: 15_000 },
+
+  // Serial: live tests share one disposable database and server pair.
+  fullyParallel: false,
+  workers: 1,
+
+  // Fail the build on CI if test.only is left in source.
+  forbidOnly: !!process.env.CI,
+
+  // Retry on CI only.
+  retries: process.env.CI ? 2 : 0,
+
+  reporter: process.env.CI
+    ? [["blob", { outputDir: "./blob-report-live" }], ["list"]]
+    : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://localhost:3101",
     browserName: "chromium",
-    trace: "retain-on-failure",
+    trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
   webServer: [
