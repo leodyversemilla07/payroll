@@ -55,7 +55,13 @@ try {
   }
 
   const body = await response.text();
-  if (body !== "Hello World!") {
+  let info;
+  try {
+    info = JSON.parse(body);
+  } catch {
+    throw new Error(`Unexpected non-JSON health response: ${body}`);
+  }
+  if (info?.name !== "payroll-api" || info?.status !== "ok") {
     throw new Error(`Unexpected health response: ${body}`);
   }
 

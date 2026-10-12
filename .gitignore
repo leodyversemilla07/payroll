@@ -61,3 +61,6 @@ apps/web/CLAUDE.md
 
 # Video recordings
 recordings/
+
+# Local object-storage fallback (StorageService writes here when S3 is unset)
+storage/

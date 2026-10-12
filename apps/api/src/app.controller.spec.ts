@@ -15,8 +15,14 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return API metadata with an ok status', () => {
+      expect(appController.getInfo()).toEqual({
+        name: 'payroll-api',
+        version: expect.any(String),
+        status: 'ok',
+        timestamp: expect.any(String),
+        endpoints: { trpc: '/trpc' },
+      });
     });
   });
 });

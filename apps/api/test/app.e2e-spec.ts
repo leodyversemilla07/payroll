@@ -20,7 +20,15 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
+      .expect('Content-Type', /json/)
+      .expect((response) => {
+        if (response.body?.name !== 'payroll-api') {
+          throw new Error(`Unexpected API name: ${response.text}`);
+        }
+        if (response.body?.status !== 'ok') {
+          throw new Error(`Unexpected API status: ${response.text}`);
+        }
+      });
   });
 
   afterEach(async () => {

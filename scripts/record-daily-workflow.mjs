@@ -203,13 +203,15 @@ async function run() {
     if (await triggerForm.isVisible().catch(() => false)) {
       await triggerForm.getByLabel("Cutoff", { exact: true }).click();
       await sleep(800);
-      await clickIfVisible(
-        page.getByRole("option", { name: "First cutoff" }),
-      );
+      await clickIfVisible(page.getByRole("option", { name: "First cutoff" }));
       await sleep(500);
-      await triggerForm.getByLabel("Regular run cutoff start").fill("2026-09-01");
+      await triggerForm
+        .getByLabel("Regular run cutoff start")
+        .fill("2026-09-01");
       await triggerForm.getByLabel("Regular run cutoff end").fill("2026-09-15");
-      await triggerForm.getByLabel("Regular run payment date").fill("2026-09-16");
+      await triggerForm
+        .getByLabel("Regular run payment date")
+        .fill("2026-09-16");
       await sleep(800);
       if (
         await clickIfVisible(
@@ -249,7 +251,9 @@ async function run() {
       await smoothScroll(page, 500, 10, 60);
       await sleep(2000);
     } catch {
-      console.log("[afternoon] First-cutoff run not actionable; continuing tour.");
+      console.log(
+        "[afternoon] First-cutoff run not actionable; continuing tour.",
+      );
     }
     await logout(page);
 
