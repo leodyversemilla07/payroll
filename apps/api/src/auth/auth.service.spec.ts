@@ -89,6 +89,7 @@ describe('AuthService MFA', () => {
       expect(result.qrUri).toContain(
         'otpauth://totp/Payroll:user%40example.com?secret=',
       );
+      expect(result.qrDataUrl).toMatch(/^data:image\/png;base64,/);
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { mfaSecret: result.secret },
@@ -146,6 +147,58 @@ describe('AuthService MFA', () => {
         where: { id: 'user-1' },
         data: {
           mfaEnabled: true,
+          mfaBackupCodes: expect.any(Array),
+        },
+      });
+    });
+  });
+
+  describe('regenerateBackupCodes', () => {
+    it('throws BadRequestException if MFA is not enabled', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: false,
+        isActive: true,
+      });
+
+      await expect(
+        service.regenerateBackupCodes('user-1', testPassword),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws UnauthorizedException if password does not match', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: 'SECRET',
+        passwordHash,
+        isActive: true,
+      });
+
+      await expect(
+        service.regenerateBackupCodes('user-1', 'WrongPass!'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('generates 10 new backup codes when password matches', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: 'SECRET',
+        passwordHash,
+        isActive: true,
+      });
+      (prisma.user.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.regenerateBackupCodes(
+        'user-1',
+        testPassword,
+      );
+
+      expect(result.backupCodes).toHaveLength(10);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
           mfaBackupCodes: expect.any(Array),
         },
       });

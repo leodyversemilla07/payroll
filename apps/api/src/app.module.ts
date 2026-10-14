@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { AuditService } from './infrastructure/audit/audit.service';
+import { EmailModule } from './infrastructure/email/email.module';
 import { StorageService } from './infrastructure/storage/storage.service';
 import { DoleReportService } from './modules/compliance/dole-report.service';
 import { MonthlyRemittanceService } from './modules/compliance/monthly-remittance.service';
@@ -22,7 +23,7 @@ import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
 import { TrpcModule } from './trpc/trpc.module';
 
 @Module({
-  imports: [TrpcModule],
+  imports: [TrpcModule, EmailModule],
   controllers: [AppController],
   providers: [
     AppService,
@@ -64,6 +65,7 @@ import { TrpcModule } from './trpc/trpc.module';
     NotificationService,
     StorageService,
     PayslipPdfService,
+    EmailModule,
   ],
 })
 export class AppModule {}

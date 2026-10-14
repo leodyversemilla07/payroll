@@ -18,7 +18,7 @@ import {
 } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -201,12 +201,18 @@ export function LoginForm() {
           {step === "MFA" ? (
             <Card>
               <CardHeader>
+                <div className="flex items-center gap-2 text-primary mb-1">
+                  <ShieldCheck className="size-5" />
+                  <span className="text-xs font-semibold uppercase tracking-wider">
+                    Two-Factor Challenge
+                  </span>
+                </div>
                 <CardTitle>
                   <h1>Two-Factor Authentication</h1>
                 </CardTitle>
                 <CardDescription>
-                  Enter the 6-digit code from your authenticator app, or an
-                  8-character backup code.
+                  Enter the 6-digit code from Google Authenticator, 1Password,
+                  or an 8-character backup code.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -218,12 +224,13 @@ export function LoginForm() {
                         id="mfaCode"
                         name="mfaCode"
                         type="text"
-                        placeholder="123456"
+                        placeholder="123456 or A1B2-C3D4"
                         autoComplete="one-time-code"
                         value={mfaCode}
                         onChange={(event) =>
                           setMfaCode(event.currentTarget.value)
                         }
+                        className="font-mono tracking-widest text-center text-lg"
                         autoFocus
                         required
                       />

@@ -135,6 +135,41 @@ export function createAuthRouter(ctx: RouterContext) {
         }
       }),
 
+    regenerateBackupCodes: protectedProcedure
+      .input(
+        z.object({
+          password: z.string().min(1).max(1024),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const result = await authService.regenerateBackupCodes(
+            ctx.user.id,
+            input.password,
+          );
+          await auditService.record({
+            user: ctx.user,
+            request: ctx.req,
+            action: 'UPDATE',
+            entityType: 'User',
+            entityId: ctx.user.id,
+            newValue: { mfaBackupCodesRegenerated: true },
+          });
+          return result;
+        } catch (error) {
+          if (error instanceof TRPCError) {
+            throw error;
+          }
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Failed to regenerate backup codes',
+          });
+        }
+      }),
+
     disableMfa: protectedProcedure
       .input(
         z.object({

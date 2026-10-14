@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
+import * as QRCode from 'qrcode';
 import { hashPassword, verifyPassword } from './password';
 import {
   formatOtpauthUri,
@@ -46,6 +47,7 @@ export interface AuthenticatedUser {
   name: string;
   role: Role;
   mfaEnabled?: boolean;
+  mfaBackupCodesCount?: number;
 }
 
 export interface AuthResult {
@@ -69,6 +71,7 @@ export class AuthService {
         email: true,
         role: true,
         isActive: true,
+        mfaEnabled: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -440,7 +443,11 @@ export class AuthService {
     };
   }
 
-  async setupMfa(userId: string): Promise<{ secret: string; qrUri: string }> {
+  async setupMfa(userId: string): Promise<{
+    secret: string;
+    qrUri: string;
+    qrDataUrl: string;
+  }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -455,7 +462,16 @@ export class AuthService {
     });
 
     const qrUri = formatOtpauthUri(user.email, secret, 'Payroll');
-    return { secret, qrUri };
+    const qrDataUrl = await QRCode.toDataURL(qrUri, {
+      margin: 2,
+      width: 240,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    });
+
+    return { secret, qrUri, qrDataUrl };
   }
 
   async confirmMfa(
@@ -481,6 +497,38 @@ export class AuthService {
       where: { id: userId },
       data: {
         mfaEnabled: true,
+        mfaBackupCodes: hashedCodes,
+      },
+    });
+
+    return { backupCodes: rawBackupCodes };
+  }
+
+  async regenerateBackupCodes(
+    userId: string,
+    password: string,
+  ): Promise<{ backupCodes: string[] }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      throw new BadRequestException('MFA is not enabled for this account');
+    }
+
+    const passwordMatches = await verifyPassword(password, user.passwordHash);
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid password');
+    }
+
+    const rawBackupCodes = generateBackupCodes(10);
+    const hashedCodes = rawBackupCodes.map(hashBackupCode);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
         mfaBackupCodes: hashedCodes,
       },
     });
@@ -555,6 +603,7 @@ export class AuthService {
     name: string;
     role: Role;
     mfaEnabled?: boolean;
+    mfaBackupCodes?: string[];
   }): AuthenticatedUser {
     return {
       id: user.id,
@@ -565,6 +614,7 @@ export class AuthService {
       name: user.name,
       role: user.role,
       mfaEnabled: Boolean(user.mfaEnabled),
+      mfaBackupCodesCount: user.mfaBackupCodes ? user.mfaBackupCodes.length : 0,
     };
   }
 

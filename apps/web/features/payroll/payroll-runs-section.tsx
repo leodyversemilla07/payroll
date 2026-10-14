@@ -16,7 +16,7 @@ import {
 } from "@workspace/ui/components/empty";
 import { Separator } from "@workspace/ui/components/separator";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Archive, Download, FileText, Loader2 } from "lucide-react";
+import { Archive, Download, FileText, Loader2, Mail } from "lucide-react";
 import { useState } from "react";
 import { downloadBase64File } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
@@ -41,6 +41,12 @@ export function PayrollRunsSection() {
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
   const [pdfStatusMessage, setPdfStatusMessage] = useState<string | null>(null);
+  const [emailStatusMessage, setEmailStatusMessage] = useState<string | null>(
+    null,
+  );
+  const [emailSingleStatusMessage, setEmailSingleStatusMessage] = useState<
+    string | null
+  >(null);
   const [downloadingSlipId, setDownloadingSlipId] = useState<string | null>(
     null,
   );
@@ -67,6 +73,28 @@ export function PayrollRunsSection() {
   const downloadRunZip = trpc.payroll.downloadRunZip.useMutation({
     onSuccess: (data) => {
       downloadBase64File(data.dataBase64, data.fileName, "application/zip");
+    },
+  });
+
+  const emailRunPayslips = trpc.payroll.emailRunPayslips.useMutation({
+    onSuccess: (data) => {
+      setEmailStatusMessage(
+        `Dispatched ${data.sentCount} payslip email(s) (${data.skippedCount} skipped without email, ${data.failedCount} failed).`,
+      );
+      setTimeout(() => setEmailStatusMessage(null), 8000);
+    },
+    onError: (err) => {
+      setEmailStatusMessage(`Failed to email payslips: ${err.message}`);
+    },
+  });
+
+  const emailSinglePayslip = trpc.payroll.emailPayslip.useMutation({
+    onSuccess: (data) => {
+      setEmailSingleStatusMessage(`Payslip emailed to ${data.employeeEmail}`);
+      setTimeout(() => setEmailSingleStatusMessage(null), 5000);
+    },
+    onError: (err) => {
+      setEmailSingleStatusMessage(`Failed to email: ${err.message}`);
     },
   });
 
@@ -227,6 +255,39 @@ export function PayrollRunsSection() {
                       </>
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!details.data?.id) return;
+                      setEmailStatusMessage(null);
+                      emailRunPayslips.mutate({ runId: details.data.id });
+                    }}
+                    disabled={
+                      emailRunPayslips.isPending ||
+                      details.data.payslips.length === 0 ||
+                      (details.data.status !== "DISBURSED" &&
+                        details.data.status !== "APPROVED")
+                    }
+                  >
+                    {emailRunPayslips.isPending ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Dispatching Emails…
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="mr-1.5 size-3.5" />
+                        Email All Payslips
+                      </>
+                    )}
+                  </Button>
+                  {emailStatusMessage && (
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      {emailStatusMessage}
+                    </span>
+                  )}
                   {pdfStatusMessage && (
                     <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                       {pdfStatusMessage}
@@ -290,26 +351,55 @@ export function PayrollRunsSection() {
                         Payslip · {slip.employee.firstName}{" "}
                         {slip.employee.lastName}
                       </h3>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadSinglePdf(slip.id)}
-                        disabled={downloadingSlipId === slip.id}
-                      >
-                        {downloadingSlipId === slip.id ? (
-                          <>
-                            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                            Downloading…
-                          </>
-                        ) : (
-                          <>
-                            <Download className="mr-1.5 size-3.5" />
-                            Download Payslip PDF
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEmailSingleStatusMessage(null);
+                            emailSinglePayslip.mutate({ payslipId: slip.id });
+                          }}
+                          disabled={emailSinglePayslip.isPending}
+                        >
+                          {emailSinglePayslip.isPending ? (
+                            <>
+                              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                              Sending…
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="mr-1.5 size-3.5" />
+                              Email to Employee
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownloadSinglePdf(slip.id)}
+                          disabled={downloadingSlipId === slip.id}
+                        >
+                          {downloadingSlipId === slip.id ? (
+                            <>
+                              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                              Downloading…
+                            </>
+                          ) : (
+                            <>
+                              <Download className="mr-1.5 size-3.5" />
+                              Download Payslip PDF
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
+                    {emailSingleStatusMessage && (
+                      <p className="mb-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        {emailSingleStatusMessage}
+                      </p>
+                    )}
                     <p className="mb-2 text-sm text-muted-foreground">
                       Amounts in Philippine pesos. Password encrypted with
                       employee DOB (MMDDYYYY).

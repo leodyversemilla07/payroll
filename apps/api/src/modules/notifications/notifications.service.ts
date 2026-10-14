@@ -6,6 +6,7 @@ import {
   prisma,
   Role,
 } from '@workspace/db';
+import { EmailService } from '../../infrastructure/email/email.service';
 
 export interface NotifyInput {
   organizationId: string;
@@ -49,6 +50,12 @@ function formatCutoff(run: PayrollRunSummary): string {
 
 @Injectable()
 export class NotificationService {
+  private readonly emailService: EmailService;
+
+  constructor(emailService?: EmailService) {
+    this.emailService = emailService ?? new EmailService();
+  }
+
   async notify(
     input: NotifyInput,
     database: Prisma.TransactionClient = prisma,
@@ -161,7 +168,7 @@ export class NotificationService {
         database,
       ),
     ]);
-    return this.notify(
+    const notifCount = await this.notify(
       {
         organizationId,
         userIds: [...approvers, ...managers],
@@ -173,6 +180,38 @@ export class NotificationService {
       },
       database,
     );
+
+    // Asynchronously dispatch leave filed notifications to managers / approvers
+    const managerUsers =
+      (await database.user.findMany({
+        where: {
+          id: { in: [...approvers, ...managers] },
+          organizationId,
+          isActive: true,
+        },
+        select: { email: true, name: true },
+      })) ?? [];
+
+    for (const m of managerUsers) {
+      if (m.email?.includes('@')) {
+        await this.emailService
+          .sendLeaveFiledEmail(
+            {
+              managerName: m.name || 'Manager',
+              employeeName: name,
+              leaveType: request.leaveType,
+              startDate: isoDay(request.startDate),
+              endDate: isoDay(request.endDate),
+              daysCount: request.daysCount,
+              reason: '',
+            },
+            m.email,
+          )
+          .catch(() => {});
+      }
+    }
+
+    return notifCount;
   }
 
   async notifyLeaveDecided(
@@ -188,7 +227,7 @@ export class NotificationService {
     );
     if (!userId) return 0;
     const action = decision === 'APPROVED' ? 'approved' : 'rejected';
-    return this.notify(
+    const notifCount = await this.notify(
       {
         organizationId,
         userIds: [userId],
@@ -200,6 +239,30 @@ export class NotificationService {
       },
       database,
     );
+
+    // Asynchronously dispatch leave decision notification to employee
+    const emp = await database.employee.findFirst({
+      where: { id: request.employeeId, organizationId },
+      select: { firstName: true, lastName: true, email: true },
+    });
+
+    if (emp?.email?.includes('@')) {
+      await this.emailService
+        .sendLeaveDecidedEmail(
+          {
+            employeeName: `${emp.firstName} ${emp.lastName}`,
+            leaveType: request.leaveType,
+            startDate: isoDay(request.startDate),
+            endDate: isoDay(request.endDate),
+            daysCount: request.daysCount,
+            decision,
+          },
+          emp.email,
+        )
+        .catch(() => {});
+    }
+
+    return notifCount;
   }
 
   async notifyPayrollRun(

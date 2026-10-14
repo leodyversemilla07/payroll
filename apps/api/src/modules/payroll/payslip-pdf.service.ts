@@ -282,6 +282,109 @@ export class PayslipPdfService {
     };
   }
 
+  async getPayslipPdfForEmail(
+    payslipId: string,
+    organizationId: string,
+  ): Promise<{
+    buffer: Buffer;
+    fileName: string;
+    isEncrypted: boolean;
+    passwordHint: string;
+    employeeEmail: string;
+    employeeName: string;
+    employeeNumber: string;
+    cutoffDescription: string;
+    paymentDate: string;
+    grossPayFormatted: string;
+    totalDeductionsFormatted: string;
+    netPayFormatted: string;
+    organizationName: string;
+  }> {
+    const payslip = await prisma.payslip.findFirst({
+      where: {
+        id: payslipId,
+        payrollRun: { organizationId },
+      },
+      include: {
+        payrollRun: {
+          include: {
+            organization: true,
+          },
+        },
+        employee: {
+          include: {
+            department: true,
+            branch: true,
+          },
+        },
+      },
+    });
+
+    if (!payslip) {
+      throw new NotFoundException('Payslip not found');
+    }
+
+    const safeDate = formatDate(payslip.payrollRun.paymentDate).replace(
+      /-/g,
+      '',
+    );
+    const fileName = `Payslip_${payslip.employee.employeeNumber}_${safeDate}.pdf`;
+
+    let pdfBuffer: Buffer | null = null;
+    if (payslip.pdfStoragePath) {
+      const fileData = await this.storageService.getFile(
+        payslip.pdfStoragePath,
+      );
+      if (fileData) {
+        pdfBuffer = fileData.buffer;
+      }
+    }
+
+    const dobPassword = formatDobPassword(payslip.employee.dateOfBirth);
+
+    if (!pdfBuffer) {
+      pdfBuffer = await this.renderPayslipPdf(payslip, dobPassword);
+      const storageKey = `organizations/${organizationId}/runs/${payslip.payrollRunId}/payslips/${payslip.id}.pdf`;
+      const uploadResult = await this.storageService.upload(
+        storageKey,
+        pdfBuffer,
+        'application/pdf',
+      );
+      const passwordHash = dobPassword
+        ? await hashDocumentPassword(dobPassword)
+        : null;
+
+      await prisma.payslip.update({
+        where: { id: payslip.id },
+        data: {
+          pdfStoragePath: uploadResult.path,
+          pdfPasswordHash: passwordHash,
+        },
+      });
+    }
+
+    const orgName = payslip.payrollRun.organization?.name || 'SweldoPH';
+    const cutoffDesc = `${formatDate(payslip.payrollRun.cutoffStartDate)} – ${formatDate(payslip.payrollRun.cutoffEndDate)}`;
+
+    return {
+      buffer: pdfBuffer,
+      fileName,
+      isEncrypted: Boolean(dobPassword),
+      passwordHint: dobPassword
+        ? 'Protected with your Date of Birth in MMDDYYYY format (e.g. 05211990)'
+        : 'This document is unencrypted.',
+      employeeEmail: payslip.employee.email,
+      employeeName: `${payslip.employee.firstName} ${payslip.employee.lastName}`,
+      employeeNumber: payslip.employee.employeeNumber,
+      cutoffDescription: cutoffDesc,
+      paymentDate: formatDate(payslip.payrollRun.paymentDate),
+      grossPayFormatted: formatCents(payslip.grossPayCents),
+      totalDeductionsFormatted: formatCents(payslip.totalDeductionsCents),
+      netPayFormatted: formatCents(payslip.netPayCents),
+      organizationName: orgName,
+    };
+  }
+
   async downloadRunZip(
     runId: string,
     organizationId: string,

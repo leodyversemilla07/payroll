@@ -67,6 +67,14 @@ const environmentSchema = z.object({
 
       return origins;
     }),
+  EMAIL_DRIVER: z.enum(['resend', 'smtp', 'mock']).optional().default('mock'),
+  EMAIL_FROM: z.string().default('SweldoPH Payroll <payroll@sweldoph.local>'),
+  RESEND_API_KEY: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().optional().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_SECURE: z.coerce.boolean().optional().default(false),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

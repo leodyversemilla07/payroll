@@ -17,6 +17,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  QrCode,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
@@ -34,6 +36,7 @@ export function MfaSettingsCard() {
   >("IDLE");
   const [secret, setSecret] = useState("");
   const [qrUri, setQrUri] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -45,11 +48,19 @@ export function MfaSettingsCard() {
   const [showDisablePassword, setShowDisablePassword] = useState(false);
   const [disableCode, setDisableCode] = useState("");
 
+  // Regenerate backup codes state
+  const [regenerateState, setRegenerateState] = useState<"IDLE" | "CONFIRM">(
+    "IDLE",
+  );
+  const [regeneratePassword, setRegeneratePassword] = useState("");
+  const [showRegeneratePassword, setShowRegeneratePassword] = useState(false);
+
   // Mutations
   const setupMfa = trpc.auth.setupMfa.useMutation({
     onSuccess: (data) => {
       setSecret(data.secret);
       setQrUri(data.qrUri);
+      setQrDataUrl((data as { qrDataUrl?: string }).qrDataUrl ?? "");
       setSetupState("SETUP");
       setVerificationCode("");
     },
@@ -59,6 +70,16 @@ export function MfaSettingsCard() {
     onSuccess: (data) => {
       setBackupCodes(data.backupCodes);
       setSetupState("BACKUP_CODES");
+      void utils.auth.me.invalidate();
+    },
+  });
+
+  const regenerateBackupCodes = trpc.auth.regenerateBackupCodes.useMutation({
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setSetupState("BACKUP_CODES");
+      setRegenerateState("IDLE");
+      setRegeneratePassword("");
       void utils.auth.me.invalidate();
     },
   });
@@ -115,6 +136,16 @@ export function MfaSettingsCard() {
       .mutateAsync({
         password: disablePassword,
         code: disableCode.trim(),
+      })
+      .catch(() => {});
+  };
+
+  const handleRegenerateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regeneratePassword) return;
+    await regenerateBackupCodes
+      .mutateAsync({
+        password: regeneratePassword,
       })
       .catch(() => {});
   };
@@ -233,52 +264,74 @@ export function MfaSettingsCard() {
                 onSubmit={handleConfirmSubmit}
                 className="space-y-5 rounded-lg border bg-muted/10 p-5"
               >
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h4 className="text-sm font-semibold flex items-center gap-1.5">
                     <KeyRound className="size-4" />
                     Step 1: Add to Your Authenticator App
                   </h4>
                   <p className="text-xs text-muted-foreground">
-                    Enter the following secret key into your authenticator app,
-                    or open the URI link directly:
+                    Scan this QR code with Google Authenticator, 1Password,
+                    Microsoft Authenticator, or enter the manual key below.
                   </p>
 
-                  <div className="flex items-center gap-2 rounded-md border bg-card p-2.5 font-mono text-xs tracking-wider">
-                    <span className="flex-1 break-all select-all font-semibold text-foreground">
-                      {secret}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopySecret}
-                      className="shrink-0 text-xs"
-                    >
-                      {copiedSecret ? (
-                        <>
-                          <Check className="size-3.5 mr-1 text-emerald-600" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-3.5 mr-1" />
-                          Copy Key
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 rounded-lg border bg-card p-4">
+                    {qrDataUrl && (
+                      <div className="rounded-xl border bg-white p-2.5 shadow-xs shrink-0 dark:border-border">
+                        {/* biome-ignore lint/performance/noImgElement: Data URI QR code does not use remote optimization */}
+                        <img
+                          src={qrDataUrl}
+                          alt="Two-factor authentication QR code"
+                          width={160}
+                          height={160}
+                          className="rounded block"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-3 flex-1 min-w-0 w-full">
+                      <div className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <QrCode className="size-3.5" />
+                          Manual Secret Key:
+                        </span>
+                        <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-2 font-mono text-xs tracking-wider">
+                          <span className="flex-1 break-all select-all font-semibold text-foreground">
+                            {secret}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCopySecret}
+                            className="shrink-0 text-xs h-7 px-2"
+                          >
+                            {copiedSecret ? (
+                              <>
+                                <Check className="size-3 mr-1 text-emerald-600" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="size-3 mr-1" />
+                                Copy Key
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
 
-                  {qrUri && (
-                    <div className="pt-1">
-                      <a
-                        href={qrUri}
-                        className="inline-flex items-center text-xs text-primary hover:underline gap-1"
-                      >
-                        <ExternalLink className="size-3" />
-                        Open directly in Authenticator application
-                      </a>
+                      {qrUri && (
+                        <div>
+                          <a
+                            href={qrUri}
+                            className="inline-flex items-center text-xs text-primary hover:underline gap-1 font-medium"
+                          >
+                            <ExternalLink className="size-3" />
+                            Open directly in Authenticator application
+                          </a>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -343,13 +396,22 @@ export function MfaSettingsCard() {
             )}
           </>
         ) : (
-          <>
+          <div className="space-y-4">
+            {/* Authenticator App Status */}
             {disableState === "IDLE" && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-lg border bg-muted/20 p-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">Authenticator App</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">
+                      Authenticator App (RFC 6238)
+                    </p>
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 text-[11px] font-semibold">
+                      Active
+                    </span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Required on every sign-in challenge.
+                    Google Authenticator / 1Password verification is required on
+                    every sign-in.
                   </p>
                 </div>
                 <Button
@@ -359,6 +421,7 @@ export function MfaSettingsCard() {
                     setDisableState("CONFIRM");
                     setDisablePassword("");
                     setDisableCode("");
+                    setRegenerateState("IDLE");
                     disableMfa.reset();
                   }}
                 >
@@ -465,7 +528,138 @@ export function MfaSettingsCard() {
                 </div>
               </form>
             )}
-          </>
+
+            {/* Emergency Backup Codes Section */}
+            {disableState === "IDLE" && (
+              <>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">
+                        Emergency Backup Codes
+                      </p>
+                      <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-2 py-0.5 text-[11px] font-semibold">
+                        {(me.data as { mfaBackupCodesCount?: number })
+                          ?.mfaBackupCodesCount ?? 0}{" "}
+                        codes remaining
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      One-time use recovery codes if you lose access to your
+                      authenticator app.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setRegenerateState(
+                        regenerateState === "CONFIRM" ? "IDLE" : "CONFIRM",
+                      );
+                      setRegeneratePassword("");
+                      regenerateBackupCodes.reset();
+                    }}
+                  >
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Regenerate Codes
+                  </Button>
+                </div>
+
+                {regenerateState === "CONFIRM" && (
+                  <form
+                    onSubmit={handleRegenerateSubmit}
+                    className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-5"
+                  >
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">
+                        Regenerate Backup Recovery Codes
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Generating new recovery codes will immediately
+                        invalidate any previous unused backup codes. Enter your
+                        password to confirm.
+                      </p>
+                    </div>
+
+                    <div className="max-w-xs">
+                      <Field>
+                        <FieldLabel htmlFor="regeneratePassword">
+                          Account Password
+                        </FieldLabel>
+                        <div className="relative">
+                          <Input
+                            id="regeneratePassword"
+                            type={showRegeneratePassword ? "text" : "password"}
+                            value={regeneratePassword}
+                            onChange={(e) =>
+                              setRegeneratePassword(e.target.value)
+                            }
+                            placeholder="••••••••••••"
+                            required
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setShowRegeneratePassword((prev) => !prev)
+                            }
+                            className="absolute right-0 top-0 h-full w-9 text-muted-foreground hover:text-foreground"
+                            aria-label={
+                              showRegeneratePassword ? "Hide" : "Show"
+                            }
+                            title={
+                              showRegeneratePassword
+                                ? "Hide password"
+                                : "Show password"
+                            }
+                          >
+                            {showRegeneratePassword ? (
+                              <EyeOff className="size-4" aria-hidden="true" />
+                            ) : (
+                              <Eye className="size-4" aria-hidden="true" />
+                            )}
+                          </Button>
+                        </div>
+                      </Field>
+                    </div>
+
+                    {regenerateBackupCodes.isError && (
+                      <FieldError>
+                        {regenerateBackupCodes.error.message ||
+                          "Could not regenerate backup codes. Verify your password."}
+                      </FieldError>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        type="submit"
+                        disabled={
+                          regenerateBackupCodes.isPending || !regeneratePassword
+                        }
+                      >
+                        {regenerateBackupCodes.isPending
+                          ? "Generating…"
+                          : "Generate 10 Fresh Codes"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setRegenerateState("IDLE");
+                          setRegeneratePassword("");
+                          regenerateBackupCodes.reset();
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

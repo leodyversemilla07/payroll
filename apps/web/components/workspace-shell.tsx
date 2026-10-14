@@ -24,6 +24,7 @@ import {
   SidebarTrigger,
 } from "@workspace/ui/components/sidebar";
 import { TooltipProvider } from "@workspace/ui/components/tooltip";
+import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
@@ -166,6 +167,36 @@ export function WorkspaceShell({
                 Not validated for live payroll. Regulatory, annual-tax/BIR 2316
                 and bank-file checks remain outstanding.
               </p>
+              {me.data &&
+                !signedOut &&
+                (me.data.role === "SUPER_ADMIN" ||
+                  me.data.role === "HR_ADMIN") &&
+                !me.data.mfaEnabled && (
+                  <aside
+                    aria-label="Security Recommendation"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3.5 text-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ShieldAlert className="size-5 shrink-0 text-primary" />
+                      <div>
+                        <strong className="font-semibold text-foreground">
+                          Two-Factor Authentication Recommended:
+                        </strong>{" "}
+                        <span className="text-muted-foreground">
+                          Your account holds administrative privileges. Secure
+                          payroll records and sensitive employee data by
+                          enabling 2FA.
+                        </span>
+                      </div>
+                    </div>
+                    <Link
+                      href="/security"
+                      className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      Configure 2FA
+                    </Link>
+                  </aside>
+                )}
               {me.data && !signedOut && (
                 <p className="sr-only">
                   Signed in as{" "}

@@ -15,6 +15,10 @@ describe('validateEnvironment', () => {
       AUTH_SESSION_TTL_HOURS: 8,
       ALLOW_DEV_LOGIN_BACKDOOR: false,
       CORS_ORIGIN: ['http://localhost:3000'],
+      EMAIL_DRIVER: 'mock',
+      EMAIL_FROM: 'SweldoPH Payroll <payroll@sweldoph.local>',
+      SMTP_PORT: 587,
+      SMTP_SECURE: false,
     });
   });
 

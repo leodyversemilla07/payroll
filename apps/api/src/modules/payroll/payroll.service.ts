@@ -23,6 +23,7 @@ import {
   WorkDayDivisor,
 } from '@workspace/payroll-engine';
 import type { AuthenticatedUser } from '../../auth/auth.service';
+import { EmailService } from '../../infrastructure/email/email.service';
 import { StorageService } from '../../infrastructure/storage/storage.service';
 import { TimekeepingService } from '../timekeeping/timekeeping.service';
 import {
@@ -96,13 +97,16 @@ export function assertValidPayrollTransition(
 @Injectable()
 export class PayrollService {
   private readonly payslipPdfService: PayslipPdfService;
+  private readonly emailService: EmailService;
 
   constructor(
     private readonly timekeepingService: TimekeepingService,
     payslipPdfService?: PayslipPdfService,
+    emailService?: EmailService,
   ) {
     this.payslipPdfService =
       payslipPdfService ?? new PayslipPdfService(new StorageService());
+    this.emailService = emailService ?? new EmailService();
   }
 
   async generatePayslipPdf(payslipId: string, organizationId: string) {
@@ -127,6 +131,184 @@ export class PayrollService {
 
   async downloadRunZip(runId: string, organizationId: string) {
     return this.payslipPdfService.downloadRunZip(runId, organizationId);
+  }
+
+  async emailPayslip(
+    payslipId: string,
+    organizationId: string,
+  ): Promise<{
+    success: boolean;
+    employeeName: string;
+    employeeEmail: string;
+    messageId?: string;
+  }> {
+    const data = await this.payslipPdfService.getPayslipPdfForEmail(
+      payslipId,
+      organizationId,
+    );
+
+    if (!data.employeeEmail?.includes('@')) {
+      throw new UnprocessableEntityException(
+        `Employee ${data.employeeName} has no valid email address configured.`,
+      );
+    }
+
+    const result = await this.emailService.sendPayslipEmail(
+      {
+        employeeName: data.employeeName,
+        employeeNumber: data.employeeNumber,
+        organizationName: data.organizationName,
+        cutoffDescription: data.cutoffDescription,
+        paymentDate: data.paymentDate,
+        grossPayFormatted: data.grossPayFormatted,
+        totalDeductionsFormatted: data.totalDeductionsFormatted,
+        netPayFormatted: data.netPayFormatted,
+        dobPasswordHint: data.passwordHint,
+      },
+      data.buffer,
+      data.employeeEmail,
+      data.fileName,
+    );
+
+    if (!result.success) {
+      throw new UnprocessableEntityException(
+        result.error || 'Failed to dispatch email payslip.',
+      );
+    }
+
+    return {
+      success: true,
+      employeeName: data.employeeName,
+      employeeEmail: data.employeeEmail,
+      messageId: result.messageId,
+    };
+  }
+
+  async emailRunPayslips(
+    runId: string,
+    organizationId: string,
+  ): Promise<{
+    totalPayslips: number;
+    sentCount: number;
+    failedCount: number;
+    skippedCount: number;
+    results: Array<{
+      payslipId: string;
+      employeeName: string;
+      email?: string;
+      status: 'SENT' | 'FAILED' | 'SKIPPED';
+      error?: string;
+    }>;
+  }> {
+    const run = await prisma.payrollRun.findFirst({
+      where: { id: runId, organizationId },
+      include: {
+        payslips: {
+          include: {
+            employee: true,
+          },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'DISBURSED' && run.status !== 'APPROVED') {
+      throw new UnprocessableEntityException(
+        'Payroll run must be approved or disbursed before payslips can be emailed',
+      );
+    }
+
+    const results: Array<{
+      payslipId: string;
+      employeeName: string;
+      email?: string;
+      status: 'SENT' | 'FAILED' | 'SKIPPED';
+      error?: string;
+    }> = [];
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+
+    for (const payslip of run.payslips) {
+      const empName = `${payslip.employee.firstName} ${payslip.employee.lastName}`;
+      const email = payslip.employee.email;
+
+      if (!email?.includes('@')) {
+        skippedCount++;
+        results.push({
+          payslipId: payslip.id,
+          employeeName: empName,
+          status: 'SKIPPED',
+          error: 'No valid email address',
+        });
+        continue;
+      }
+
+      try {
+        const data = await this.payslipPdfService.getPayslipPdfForEmail(
+          payslip.id,
+          organizationId,
+        );
+
+        const emailResult = await this.emailService.sendPayslipEmail(
+          {
+            employeeName: data.employeeName,
+            employeeNumber: data.employeeNumber,
+            organizationName: data.organizationName,
+            cutoffDescription: data.cutoffDescription,
+            paymentDate: data.paymentDate,
+            grossPayFormatted: data.grossPayFormatted,
+            totalDeductionsFormatted: data.totalDeductionsFormatted,
+            netPayFormatted: data.netPayFormatted,
+            dobPasswordHint: data.passwordHint,
+          },
+          data.buffer,
+          email,
+          data.fileName,
+        );
+
+        if (emailResult.success) {
+          sentCount++;
+          results.push({
+            payslipId: payslip.id,
+            employeeName: empName,
+            email,
+            status: 'SENT',
+          });
+        } else {
+          failedCount++;
+          results.push({
+            payslipId: payslip.id,
+            employeeName: empName,
+            email,
+            status: 'FAILED',
+            error: emailResult.error,
+          });
+        }
+      } catch (err: unknown) {
+        failedCount++;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        results.push({
+          payslipId: payslip.id,
+          employeeName: empName,
+          email,
+          status: 'FAILED',
+          error: message,
+        });
+      }
+    }
+
+    return {
+      totalPayslips: run.payslips.length,
+      sentCount,
+      failedCount,
+      skippedCount,
+      results,
+    };
   }
 
   async listPayrollRuns(organizationId: string) {

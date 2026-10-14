@@ -302,5 +302,21 @@ export function createPayrollRouter(ctx: RouterContext) {
           payrollService.downloadRunZip(input.runId, ctx.user.organizationId),
         ),
       ),
+
+    emailPayslip: payrollProcedure
+      .input(z.object({ payslipId: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.emailPayslip(input.payslipId, ctx.user.organizationId),
+        ),
+      ),
+
+    emailRunPayslips: payrollProcedure
+      .input(z.object({ runId: z.string().uuid() }))
+      .mutation(({ input, ctx }) =>
+        withPayrollErrors(() =>
+          payrollService.emailRunPayslips(input.runId, ctx.user.organizationId),
+        ),
+      ),
   });
 }
