@@ -53,57 +53,57 @@ enum NotificationType {
 }
 
 model Organization {
-  id                String       @id @default(uuid())
-  name              String
-  tin               String       // Employer TIN (9-12 digits)
-  sssNumber         String?      // Employer SSS ID
-  philhealthNumber  String?      // Employer PhilHealth ID
-  pagibigNumber     String?      // Employer Pag-IBIG ID
-  rdoCode           String       // BIR Revenue District Office Code
-  registeredAddress String
-  branches          Branch[]
-  departments       Department[]
-  employees         Employee[]
-  users             User[]
-  auditLogs          AuditLog[]
-  payrollRuns       PayrollRun[]
-  monthlyTaxRemittances MonthlyTaxRemittanceEvidence[]
+  id                        String                         @id @default(uuid())
+  name                      String
+  tin                       String // Employer TIN (9-12 digits)
+  sssNumber                 String? // Employer SSS ID
+  philhealthNumber          String? // Employer PhilHealth ID
+  pagibigNumber             String? // Employer Pag-IBIG ID
+  rdoCode                   String // BIR Revenue District Office Code
+  registeredAddress         String
+  branches                  Branch[]
+  departments               Department[]
+  employees                 Employee[]
+  users                     User[]
+  auditLogs                 AuditLog[]
+  payrollRuns               PayrollRun[]
+  monthlyTaxRemittances     MonthlyTaxRemittanceEvidence[]
   priorEmployerDeclarations PriorEmployerDeclaration[]
-  previousEmployerIncomes PreviousEmployerIncome[]
-  yearEndTaxSettlements YearEndTaxSettlement[]
-  bir2316Issuances Bir2316Issuance[]
-  taxEvidenceCorrections TaxEvidenceCorrection[]
-  holidayCalendars  HolidayCalendar[]
-  leavePolicies     LeavePolicy[]
-  notifications     Notification[]
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  previousEmployerIncomes   PreviousEmployerIncome[]
+  yearEndTaxSettlements     YearEndTaxSettlement[]
+  bir2316Issuances          Bir2316Issuance[]
+  taxEvidenceCorrections    TaxEvidenceCorrection[]
+  holidayCalendars          HolidayCalendar[]
+  leavePolicies             LeavePolicy[]
+  notifications             Notification[]
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
 }
 
 model Branch {
-  id              String       @id @default(uuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name            String
-  code            String
-  address         String
-  employees       Employee[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  address        String
+  employees      Employee[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
 }
 
 model Department {
-  id              String       @id @default(uuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name            String
-  code            String
-  managerId       String?
-  employees       Employee[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  managerId      String?
+  employees      Employee[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
 }
@@ -113,106 +113,142 @@ model Department {
 // ----------------------------------------------------
 
 model Employee {
-  id                String            @id @default(uuid())
-  organizationId    String
-  organization      Organization      @relation(fields: [organizationId], references: [id])
-  branchId          String
-  branch            Branch            @relation(fields: [branchId], references: [id])
-  departmentId      String
-  department        Department        @relation(fields: [departmentId], references: [id])
-  
-  employeeNumber    String            @unique
-  firstName         String
-  middleName        String?
-  lastName          String
-  suffix            String?
-  dateOfBirth       DateTime
-  gender            String
-  civilStatus       String            // Single, Married, etc.
-  email             String            @unique
-  contactNumber     String
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id])
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id])
+
+  employeeNumber     String
+  firstName          String
+  middleName         String?
+  lastName           String
+  suffix             String?
+  dateOfBirth        DateTime
+  gender             String
+  civilStatus        String // Single, Married, etc.
+  email              String
+  contactNumber      String
   residentialAddress String
 
   // Government & Statutory Identifiers
-  tin               String            // Tax Identification No.
-  sssNo             String            // SSS No.
-  philhealthNo      String            // PhilHealth No.
-  pagibigNo         String            // Pag-IBIG MID
-  
+  tin          String // Tax Identification No.
+  sssNo        String // SSS No.
+  philhealthNo String // PhilHealth No.
+  pagibigNo    String // Pag-IBIG MID
+
   // Employment Details
-  hireDate          DateTime
+  hireDate           DateTime
   regularizationDate DateTime?
-  resignationDate   DateTime?
-  employmentType    EmploymentType    @default(PROBATIONARY)
-  employmentStatus  EmploymentStatus  @default(ACTIVE)
-  role              Role              @default(EMPLOYEE)
-  payBasis          PayBasis          @default(MONTHLY)
+  resignationDate    DateTime?
+  employmentType     EmploymentType   @default(PROBATIONARY)
+  employmentStatus   EmploymentStatus @default(ACTIVE)
+  role               Role             @default(EMPLOYEE)
+  payBasis           PayBasis         @default(MONTHLY)
   // Labor Code managerial employees (vested with powers to lay down and
   // execute management policies or to hire, transfer, suspend, lay off,
   // recall, discharge, assign, or discipline employees) are excluded from
   // PD 851 13th-month coverage. Defaults to rank-and-file.
-  isManagerial      Boolean           @default(false)
+  isManagerial       Boolean          @default(false)
 
   // Bank Disbursement Details
-  bankName          String            // BDO, BPI, UnionBank, etc.
+  bankName          String // BDO, BPI, UnionBank, etc.
   bankAccountNumber String
   bankAccountName   String
 
   // Relationships
-  compensation      Compensation?
-  allowances        EmployeeAllowance[]
-  attendances       DailyTimeRecord[]
-  leaveBalances     LeaveBalance[]
-  leaveRequests     LeaveRequest[]
-  overtimeRequests  OvertimeRequest[]
-  loans             EmployeeLoan[]
-  payslips          Payslip[]
+  compensation              Compensation?
+  allowances                EmployeeAllowance[]
+  attendances               DailyTimeRecord[]
+  leaveBalances             LeaveBalance[]
+  leaveRequests             LeaveRequest[]
+  overtimeRequests          OvertimeRequest[]
+  loans                     EmployeeLoan[]
+  payslips                  Payslip[]
   priorEmployerDeclarations PriorEmployerDeclaration[]
-  priorEmployerIncomes PreviousEmployerIncome[]
-  yearEndTaxSettlements YearEndTaxSettlement[]
-  bir2316Issuances Bir2316Issuance[]
-  user              User?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  priorEmployerIncomes      PreviousEmployerIncome[]
+  yearEndTaxSettlements     YearEndTaxSettlement[]
+  bir2316Issuances          Bir2316Issuance[]
+  user                      User?
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
 
+  // Tenant-scoped identity: employee numbers and contact emails may repeat
+  // across organizations (global uniqueness blocked legitimate reuse and
+  // leashed tenancy to app-layer filtering), but must be unique inside
+  // each organization.
+  @@unique([organizationId, employeeNumber])
+  @@unique([organizationId, email])
   @@index([organizationId])
 }
 
 model User {
-  id                String       @id @default(uuid())
-  organizationId    String
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId        String?      @unique
-  employee          Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  name              String
-  email             String       @unique
-  passwordHash      String
-  role              Role         @default(EMPLOYEE)
-  isActive          Boolean      @default(true)
-  failedLoginAttempts Int        @default(0)
-  lockedUntil       DateTime?
-  mfaSecret         String?
-  mfaEnabled        Boolean      @default(false)
-  mfaBackupCodes    String[]     @default([])
-  sessions          AuthSession[]
-  mfaTickets        MfaTicket[]
-  notifications     Notification[]
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id                  String         @id @default(uuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId          String?        @unique
+  employee            Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  name                String
+  email               String         @unique
+  passwordHash        String
+  role                Role           @default(EMPLOYEE)
+  isActive            Boolean        @default(true)
+  failedLoginAttempts Int            @default(0)
+  lockedUntil         DateTime?
+  mfaSecret           String?
+  mfaEnabled          Boolean        @default(false)
+  mfaBackupCodes      String[]       @default([])
+  sessions            AuthSession[]
+  mfaTickets          MfaTicket[]
+  notifications       Notification[]
+
+  // Actor references back-relations (one named relation per action column).
+  // onDelete: Cascade mirrors the organization lifecycle: rows referencing a
+  // user are tenant data the org cascade already intends to purge together,
+  // and the app never hard-deletes users (deactivation only), so the cascade
+  // only fires during intended teardown, never silently mid-life.
+  processedPayrollRuns      PayrollRun[]                   @relation("PayrollRunProcessedBy")
+  approvedPayrollRuns       PayrollRun[]                   @relation("PayrollRunApprovedBy")
+  approvedOvertimeRequests  OvertimeRequest[]              @relation("OvertimeRequestApprovedBy")
+  approvedLeaveRequests     LeaveRequest[]                 @relation("LeaveRequestApprovedBy")
+  rejectedLeaveRequests     LeaveRequest[]                 @relation("LeaveRequestRejectedBy")
+  cancelledLeaveRequests    LeaveRequest[]                 @relation("LeaveRequestCancelledBy")
+  generatedBankBatches      BankTransmittalBatch[]         @relation("BankTransmittalBatchGeneratedBy")
+  createdHolidayCalendars   HolidayCalendar[]              @relation("HolidayCalendarCreatedBy")
+  createdLeavePolicies      LeavePolicy[]                  @relation("LeavePolicyCreatedBy")
+  leaveCreditChanges        LeaveCreditChange[]            @relation("LeaveCreditChangeActor")
+  requestedTaxCorrections   TaxEvidenceCorrection[]        @relation("TaxEvidenceCorrectionRequestedBy")
+  reviewedTaxCorrections    TaxEvidenceCorrection[]        @relation("TaxEvidenceCorrectionReviewedBy")
+  recordedPriorDeclarations PriorEmployerDeclaration[]     @relation("PriorEmployerDeclarationRecordedBy")
+  reviewedPriorDeclarations PriorEmployerDeclaration[]     @relation("PriorEmployerDeclarationReviewedBy")
+  recordedPriorIncomes      PreviousEmployerIncome[]       @relation("PreviousEmployerIncomeRecordedBy")
+  reviewedPriorIncomes      PreviousEmployerIncome[]       @relation("PreviousEmployerIncomeReviewedBy")
+  recordedRemittances       MonthlyTaxRemittanceEvidence[] @relation("MonthlyTaxRemittanceRecordedBy")
+  reviewedRemittances       MonthlyTaxRemittanceEvidence[] @relation("MonthlyTaxRemittanceReviewedBy")
+  recordedSettlements       YearEndTaxSettlement[]         @relation("YearEndTaxSettlementRecordedBy")
+  reviewedSettlements       YearEndTaxSettlement[]         @relation("YearEndTaxSettlementReviewedBy")
+  issuedBir2316             Bir2316Issuance[]              @relation("Bir2316IssuanceIssuedBy")
+  voidedBir2316             Bir2316Issuance[]              @relation("Bir2316IssuanceVoidedBy")
+  auditLogs                 AuditLog[]                     @relation("AuditLogActor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([organizationId])
 }
 
 model AuthSession {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash         String   @unique
-  expiresAt         DateTime
-  ipAddress         String?
-  userAgent         String?
-  createdAt         DateTime @default(now())
-  lastSeenAt        DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
 
   @@index([userId])
   @@index([expiresAt])
@@ -231,23 +267,23 @@ model MfaTicket {
 }
 
 model Compensation {
-  id                String       @id @default(uuid())
-  employeeId        String       @unique
-  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(uuid())
+  employeeId String   @unique
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   // Stored in Philippine Centavos (Minor Units: e.g., 3000000 = PHP 30,000.00)
-  basicRateMonthlyCents  BigInt
-  basicRateDailyCents    BigInt
-  basicRateHourlyCents   BigInt
-  
-  isTaxExempt       Boolean      @default(false) // Minimum Wage Earners (MWE)
-  customSssDeductionCents      BigInt?
+  basicRateMonthlyCents BigInt
+  basicRateDailyCents   BigInt
+  basicRateHourlyCents  BigInt
+
+  isTaxExempt                    Boolean @default(false) // Minimum Wage Earners (MWE)
+  customSssDeductionCents        BigInt?
   customPhilhealthDeductionCents BigInt?
-  customPagibigDeductionCents   BigInt?
-  
-  effectiveDate     DateTime     @default(now())
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  customPagibigDeductionCents    BigInt?
+
+  effectiveDate DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 enum AllowanceType {
@@ -259,29 +295,29 @@ enum AllowanceType {
 // BIR de minimis ceilings per RR No. 2-98 as amended, latest by RR No. 29-2025
 // (effective January 6, 2026).
 enum DeMinimisCategory {
-  RICE_SUBSIDY           // Max 2,500/mo
-  UNIFORM_CLOTHING       // Max 8,000/yr
+  RICE_SUBSIDY // Max 2,500/mo
+  UNIFORM_CLOTHING // Max 8,000/yr
   MEDICAL_CASH_ALLOWANCE // Max 2,000/semester, dependents
   ACTUAL_MEDICAL_ASSISTANCE // Max 12,000/yr
-  LAUNDRY_ALLOWANCE      // Max 400/mo
-  DAILY_MEAL_OVERTIME    // 30% of basic min wage per OT/night-shift day
-  ACHIEVEMENT_AWARD      // Max 12,000/yr
-  GIFTS_CHRISTMAS_MAJOR  // Max 6,000/yr
+  LAUNDRY_ALLOWANCE // Max 400/mo
+  DAILY_MEAL_OVERTIME // 30% of basic min wage per OT/night-shift day
+  ACHIEVEMENT_AWARD // Max 12,000/yr
+  GIFTS_CHRISTMAS_MAJOR // Max 6,000/yr
   OTHER
 }
 
 model EmployeeAllowance {
-  id                String            @id @default(uuid())
+  id                String             @id @default(uuid())
   employeeId        String
-  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   name              String
   type              AllowanceType
   deMinimisCategory DeMinimisCategory?
-  amountCents       BigInt            // In Centavos
-  frequency         String            // PER_CUTOFF, MONTHLY
-  isActive          Boolean           @default(true)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  amountCents       BigInt // In Centavos
+  frequency         String // PER_CUTOFF, MONTHLY
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([employeeId])
 }
@@ -300,65 +336,73 @@ enum DayType {
 }
 
 model DailyTimeRecord {
-  id                String       @id @default(uuid())
-  employeeId        String
-  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date              DateTime     @db.Date
-  dayType           DayType      @default(REGULAR_WORKDAY)
-  
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  dayType    DayType  @default(REGULAR_WORKDAY)
+
   // Ingested Times
-  timeIn            DateTime?
-  timeOut           DateTime?
-  
+  timeIn  DateTime?
+  timeOut DateTime?
+
   // Computed Durations (in minutes)
-  actualWorkedMinutes Int        @default(0)
-  tardinessMinutes    Int        @default(0)
-  undertimeMinutes    Int        @default(0)
-  overtimeMinutes     Int        @default(0)
-  nightDiffMinutes    Int        @default(0)
-  
+  actualWorkedMinutes Int @default(0)
+  tardinessMinutes    Int @default(0)
+  undertimeMinutes    Int @default(0)
+  overtimeMinutes     Int @default(0)
+  nightDiffMinutes    Int @default(0)
+
   // Holiday & Rest Day OT breakdown
-  restDayOTMinutes    Int        @default(0)
-  specialHolidayMinutes Int      @default(0)
-  regularHolidayMinutes Int      @default(0)
-  
-  isApproved        Boolean      @default(false)
-  isAbsent          Boolean      @default(false)
-  remarks           String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  restDayOTMinutes      Int @default(0)
+  specialHolidayMinutes Int @default(0)
+  regularHolidayMinutes Int @default(0)
+
+  isApproved Boolean  @default(false)
+  isAbsent   Boolean  @default(false)
+  remarks    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([employeeId, date])
   @@index([date])
 }
 
+enum OvertimeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model OvertimeRequest {
-  id                String       @id @default(uuid())
-  employeeId        String
-  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date              DateTime     @db.Date
-  requestedMinutes  Int
-  actualMinutes     Int?
-  reason            String
-  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED
-  approvedById      String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id               String                @id @default(uuid())
+  employeeId       String
+  employee         Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date             DateTime              @db.Date
+  requestedMinutes Int
+  actualMinutes    Int?
+  reason           String
+  status           OvertimeRequestStatus @default(PENDING)
+  approvedById     String?
+  approvedBy       User?                 @relation("OvertimeRequestApprovedBy", fields: [approvedById], references: [id], onDelete: Cascade)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([employeeId])
 }
 
 model HolidayCalendar {
-  id              String       @id @default(uuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  date            DateTime     @db.Date
-  name            String
-  dayType         DayType
-  isRecurring     Boolean      @default(false)
-  createdById     String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  date           DateTime     @db.Date
+  name           String
+  dayType        DayType
+  isRecurring    Boolean      @default(false)
+  createdById    String?
+  createdBy      User?        @relation("HolidayCalendarCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([organizationId, date])
   @@index([organizationId])
@@ -381,7 +425,7 @@ model LeavePolicy {
   id                  String           @id @default(uuid())
   organizationId      String
   organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leaveType           String           // SIL, VACATION, SICK, etc.
+  leaveType           String // SIL, VACATION, SICK, etc.
   annualCredits       Decimal          @db.Decimal(5, 2)
   accrualFrequency    AccrualFrequency @default(ANNUAL)
   carryoverPolicy     CarryoverPolicy  @default(NO_CARRYOVER)
@@ -389,6 +433,7 @@ model LeavePolicy {
   eligibleAfterMonths Int              @default(6)
   isActive            Boolean          @default(true)
   createdById         String?
+  createdBy           User?            @relation("LeavePolicyCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -398,18 +443,18 @@ model LeavePolicy {
 }
 
 model LeaveBalance {
-  id                String       @id @default(uuid())
-  employeeId        String
-  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType         String       // SIL, VACATION, SICK, MATERNITY, PATERNITY, SOLO_PARENT
-  totalCredits      Decimal      @default(0) @db.Decimal(5, 2)
-  usedCredits       Decimal      @default(0) @db.Decimal(5, 2)
-  balance           Decimal      @default(0) @db.Decimal(5, 2)
-  revision          Int          @default(0)
-  creditChanges     LeaveCreditChange[]
-  year              Int
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id            String              @id @default(uuid())
+  employeeId    String
+  employee      Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType     String // SIL, VACATION, SICK, MATERNITY, PATERNITY, SOLO_PARENT
+  totalCredits  Decimal             @default(0) @db.Decimal(5, 2)
+  usedCredits   Decimal             @default(0) @db.Decimal(5, 2)
+  balance       Decimal             @default(0) @db.Decimal(5, 2)
+  revision      Int                 @default(0)
+  creditChanges LeaveCreditChange[]
+  year          Int
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   @@unique([employeeId, leaveType, year])
 }
@@ -419,7 +464,7 @@ model LeaveCreditChange {
   id                   String       @id @default(uuid())
   balanceId            String
   balance              LeaveBalance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
-  kind                 String       // ALLOCATION, ADJUSTMENT
+  kind                 String // ALLOCATION, ADJUSTMENT
   previousTotalCredits Decimal?     @db.Decimal(5, 2)
   totalCredits         Decimal      @db.Decimal(5, 2)
   usedCredits          Decimal      @db.Decimal(5, 2)
@@ -428,6 +473,7 @@ model LeaveCreditChange {
   previousRevision     Int?
   revision             Int
   actorId              String
+  actor                User         @relation("LeaveCreditChangeActor", fields: [actorId], references: [id], onDelete: Cascade)
   sourceReference      String
   reason               String
   createdAt            DateTime     @default(now())
@@ -435,32 +481,42 @@ model LeaveCreditChange {
   @@index([balanceId, createdAt])
 }
 
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model LeaveRequest {
-  id                String       @id @default(uuid())
-  employeeId        String
-  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType         String
-  startDate         DateTime     @db.Date
-  endDate           DateTime     @db.Date
-  daysCount         Decimal      @db.Decimal(5, 2)
+  id                  String              @id @default(uuid())
+  employeeId          String
+  employee            Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType           String
+  startDate           DateTime            @db.Date
+  endDate             DateTime            @db.Date
+  daysCount           Decimal             @db.Decimal(5, 2)
   // The single half-day date for fractional (x.5) requests; null for whole-day requests.
-  partialDate       DateTime?    @db.Date
-  isPaid            Boolean      @default(true)
-  reason            String
-  status            String       @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
-  approvedById      String?
-  rejectedById      String?
-  rejectionReason   String?
+  partialDate         DateTime?           @db.Date
+  isPaid              Boolean             @default(true)
+  reason              String
+  status              LeaveRequestStatus  @default(PENDING)
+  approvedById        String?
+  approvedBy          User?               @relation("LeaveRequestApprovedBy", fields: [approvedById], references: [id], onDelete: Cascade)
+  rejectedById        String?
+  rejectedBy          User?               @relation("LeaveRequestRejectedBy", fields: [rejectedById], references: [id], onDelete: Cascade)
+  rejectionReason     String?
   // Nullable for legacy approvals: never infer a refundable debit from totals alone.
-  debitedBalanceId  String?
-  debitedDays       Decimal?     @db.Decimal(5, 2)
-  cancelledById     String?
-  cancellationReason String?
-  cancelledFromStatus String?
-  cancelledAt       DateTime?
-  refundedDays      Decimal?     @db.Decimal(5, 2)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  debitedBalanceId    String?
+  debitedDays         Decimal?            @db.Decimal(5, 2)
+  cancelledById       String?
+  cancelledBy         User?               @relation("LeaveRequestCancelledBy", fields: [cancelledById], references: [id], onDelete: Cascade)
+  cancellationReason  String?
+  cancelledFromStatus LeaveRequestStatus?
+  cancelledAt         DateTime?
+  refundedDays        Decimal?            @db.Decimal(5, 2)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@index([employeeId])
 }
@@ -479,22 +535,22 @@ enum LoanType {
 }
 
 model EmployeeLoan {
-  id                String            @id @default(uuid())
+  id                String   @id @default(uuid())
   employeeId        String
-  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   loanType          LoanType
   referenceNumber   String?
   principalCents    BigInt
   totalAmountCents  BigInt
-  amortizationCents BigInt            // Deduction amount per pay cutoff
+  amortizationCents BigInt // Deduction amount per pay cutoff
   balanceCents      BigInt
-  
-  startDate         DateTime
-  endDate           DateTime?
-  isActive          Boolean           @default(true)
-  payments          LoanPayment[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+
+  startDate DateTime
+  endDate   DateTime?
+  isActive  Boolean       @default(true)
+  payments  LoanPayment[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@index([employeeId])
 }
@@ -527,32 +583,34 @@ enum PayrollStatus {
 }
 
 enum CutoffSequence {
-  FIRST_CUTOFF   // e.g. 1st - 15th
-  SECOND_CUTOFF  // e.g. 16th - 30th/31st
-  SPECIAL_RUN    // 13th month or bonus
+  FIRST_CUTOFF // e.g. 1st - 15th
+  SECOND_CUTOFF // e.g. 16th - 30th/31st
+  SPECIAL_RUN // 13th month or bonus
 }
 
 model PayrollRun {
-  id                String         @id @default(uuid())
-  organizationId    String
-  organization      Organization   @relation(fields: [organizationId], references: [id])
-  cutoffSequence    CutoffSequence
-  cutoffStartDate   DateTime       @db.Date
-  cutoffEndDate     DateTime       @db.Date
-  paymentDate       DateTime       @db.Date
-  status            PayrollStatus  @default(DRAFT)
-  
-  totalGrossCents   BigInt         @default(0)
-  totalDeductionsCents BigInt      @default(0)
-  totalNetCents     BigInt         @default(0)
-  totalEmployerCostCents BigInt    @default(0)
-  
-  payslips          Payslip[]
-  bankTransmittals  BankTransmittalBatch[]
-  processedById     String?
-  approvedById      String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id              String         @id @default(uuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  cutoffSequence  CutoffSequence
+  cutoffStartDate DateTime       @db.Date
+  cutoffEndDate   DateTime       @db.Date
+  paymentDate     DateTime       @db.Date
+  status          PayrollStatus  @default(DRAFT)
+
+  totalGrossCents        BigInt @default(0)
+  totalDeductionsCents   BigInt @default(0)
+  totalNetCents          BigInt @default(0)
+  totalEmployerCostCents BigInt @default(0)
+
+  payslips         Payslip[]
+  bankTransmittals BankTransmittalBatch[]
+  processedById    String?
+  processedBy      User?                  @relation("PayrollRunProcessedBy", fields: [processedById], references: [id], onDelete: Cascade)
+  approvedById     String?
+  approvedBy       User?                  @relation("PayrollRunApprovedBy", fields: [approvedById], references: [id], onDelete: Cascade)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
   @@unique([organizationId, cutoffStartDate, cutoffEndDate, cutoffSequence], map: "PayrollRun_organization_cutoff_key")
   @@index([organizationId, status])
@@ -560,67 +618,67 @@ model PayrollRun {
 }
 
 model Payslip {
-  id                    String        @id @default(uuid())
-  payrollRunId          String
-  payrollRun            PayrollRun    @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employeeId            String
-  employee              Employee      @relation(fields: [employeeId], references: [id])
-  
+  id           String     @id @default(uuid())
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id])
+
   // Earnings (Centavos)
-  basicPayCents         BigInt
-  paidLeavePayCents     BigInt        @default(0) // Included in basicPayCents for daily/hourly staff
-  overtimePayCents      BigInt        @default(0)
-  nightDiffPayCents     BigInt        @default(0)
-  holidayPayCents       BigInt        @default(0)
-  restDayPayCents       BigInt        @default(0)
-  taxableAllowancesCents BigInt       @default(0)
-  nonTaxableAllowancesCents BigInt    @default(0)
-  grossPayCents         BigInt
-  
+  basicPayCents             BigInt
+  paidLeavePayCents         BigInt @default(0) // Included in basicPayCents for daily/hourly staff
+  overtimePayCents          BigInt @default(0)
+  nightDiffPayCents         BigInt @default(0)
+  holidayPayCents           BigInt @default(0)
+  restDayPayCents           BigInt @default(0)
+  taxableAllowancesCents    BigInt @default(0)
+  nonTaxableAllowancesCents BigInt @default(0)
+  grossPayCents             BigInt
+
   // Timekeeping Deductions
-  tardinessDeductionCents BigInt      @default(0)
-  undertimeDeductionCents BigInt      @default(0)
-  absenceDeductionCents   BigInt      @default(0)
-  
+  tardinessDeductionCents BigInt @default(0)
+  undertimeDeductionCents BigInt @default(0)
+  absenceDeductionCents   BigInt @default(0)
+
   // Statutory Employee Deductions
-  sssEmployeeCents      BigInt        @default(0)
-  sssWispEmployeeCents  BigInt        @default(0) // Subset of sssEmployeeCents; do not add twice
-  philhealthEmployeeCents BigInt      @default(0)
-  pagibigEmployeeCents  BigInt        @default(0)
-  withholdingTaxCents   BigInt        @default(0)
-  
+  sssEmployeeCents        BigInt @default(0)
+  sssWispEmployeeCents    BigInt @default(0) // Subset of sssEmployeeCents; do not add twice
+  philhealthEmployeeCents BigInt @default(0)
+  pagibigEmployeeCents    BigInt @default(0)
+  withholdingTaxCents     BigInt @default(0)
+
   // Statutory Employer Shares (for Cost/Ledger)
-  sssEmployerCents      BigInt        @default(0)
-  sssWispEmployerCents  BigInt        @default(0) // Subset of sssEmployerCents; do not add twice
-  sssECCents            BigInt        @default(0) // Employees' Compensation
-  philhealthEmployerCents BigInt      @default(0)
-  pagibigEmployerCents  BigInt        @default(0)
-  
+  sssEmployerCents        BigInt @default(0)
+  sssWispEmployerCents    BigInt @default(0) // Subset of sssEmployerCents; do not add twice
+  sssECCents              BigInt @default(0) // Employees' Compensation
+  philhealthEmployerCents BigInt @default(0)
+  pagibigEmployerCents    BigInt @default(0)
+
   // Other Deductions
-  loanDeductionsCents   BigInt        @default(0)
-  otherDeductionsCents  BigInt        @default(0)
-  totalDeductionsCents  BigInt
-  
+  loanDeductionsCents  BigInt @default(0)
+  otherDeductionsCents BigInt @default(0)
+  totalDeductionsCents BigInt
+
   // Net Pay
-  netPayCents           BigInt
-  
+  netPayCents BigInt
+
   // 13th Month Accrual
-  thirteenthMonthAccrualCents BigInt  @default(0)
+  thirteenthMonthAccrualCents BigInt @default(0)
 
   // PHP 90,000 Bucket Accounting
   // Total de minimis excess this period (exempt + taxable) for YTD cap tracking.
-  deMinimisExcessCents  BigInt        @default(0)
+  deMinimisExcessCents BigInt @default(0)
   // 13th-month/bonus payouts this period, for YTD cap tracking.
-  bonusPaidCents        BigInt        @default(0)
-  
+  bonusPaidCents       BigInt @default(0)
+
   // PDF Storage & Security
-  pdfStoragePath        String?
-  pdfPasswordHash       String?       // Encrypted with employee DOB (MMDDYYYY)
-  isSentToEmployee      Boolean       @default(false)
-  
-  loanPayments          LoanPayment[]
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  pdfStoragePath   String?
+  pdfPasswordHash  String? // Encrypted with employee DOB (MMDDYYYY)
+  isSentToEmployee Boolean @default(false)
+
+  loanPayments LoanPayment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@unique([payrollRunId, employeeId])
   @@index([employeeId])
@@ -644,16 +702,17 @@ enum BankCode {
 }
 
 model BankTransmittalBatch {
-  id              String       @id @default(uuid())
-  payrollRunId    String
-  payrollRun      PayrollRun   @relation(fields: [payrollRunId], references: [id])
-  bankCode        BankCode
-  batchReference  String       @unique
-  totalRecords    Int
+  id               String     @id @default(uuid())
+  payrollRunId     String
+  payrollRun       PayrollRun @relation(fields: [payrollRunId], references: [id])
+  bankCode         BankCode
+  batchReference   String     @unique
+  totalRecords     Int
   totalAmountCents BigInt
-  fileExportPath  String
-  generatedById   String
-  createdAt       DateTime     @default(now())
+  fileExportPath   String
+  generatedById    String
+  generatedBy      User       @relation("BankTransmittalBatchGeneratedBy", fields: [generatedById], references: [id], onDelete: Cascade)
+  createdAt        DateTime   @default(now())
 
   @@index([payrollRunId])
 }
@@ -661,24 +720,32 @@ model BankTransmittalBatch {
 // Proposals do not change effective evidence until an authenticated second
 // HR/admin accepts them. Payloads contain decimal strings, never JSON numbers
 // for centavos. A partial SQL index permits only one pending proposal per target.
+enum TaxCorrectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model TaxEvidenceCorrection {
-  id                 String @id @default(uuid())
-  organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId         String?
-  taxYear            Int
-  kind               String
-  targetId           String
-  payload            Json
-  originalEvidence   Json
-  sourceFingerprint  String
-  requestedById      String
-  status             String @default("PENDING")
-  reviewedById       String?
-  reviewReason       String?
-  publishedRecordId  String?
-  createdAt          DateTime @default(now())
-  reviewedAt         DateTime?
+  id                String              @id @default(uuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId        String?
+  taxYear           Int
+  kind              String
+  targetId          String
+  payload           Json
+  originalEvidence  Json
+  sourceFingerprint String
+  requestedById     String
+  requestedBy       User                @relation("TaxEvidenceCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  status            TaxCorrectionStatus @default(PENDING)
+  reviewedById      String?
+  reviewedBy        User?               @relation("TaxEvidenceCorrectionReviewedBy", fields: [reviewedById], references: [id], onDelete: Cascade)
+  reviewReason      String?
+  publishedRecordId String?
+  createdAt         DateTime            @default(now())
+  reviewedAt        DateTime?
 
   @@index([organizationId, taxYear, status])
 }
@@ -687,22 +754,24 @@ model TaxEvidenceCorrection {
 // recorded assertion, not independent verification of employment history.
 // Approved corrections append a version; readers use the highest version.
 model PriorEmployerDeclaration {
-  id                String   @id @default(uuid())
-  organizationId    String
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId        String
-  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  taxYear           Int
-  hasPriorEmployer  Boolean
-  sourceReference   String
-  recordedById      String
-  version           Int      @default(1)
-  supersedesId      String?  @unique
-  supersedes        PriorEmployerDeclaration? @relation("DeclarationSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
-  supersededBy      PriorEmployerDeclaration? @relation("DeclarationSupersession")
-  correctionReason  String?
-  reviewedById      String?
-  createdAt         DateTime @default(now())
+  id               String                    @id @default(uuid())
+  organizationId   String
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear          Int
+  hasPriorEmployer Boolean
+  sourceReference  String
+  recordedById     String
+  recordedBy       User                      @relation("PriorEmployerDeclarationRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+  version          Int                       @default(1)
+  supersedesId     String?                   @unique
+  supersedes       PriorEmployerDeclaration? @relation("DeclarationSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy     PriorEmployerDeclaration? @relation("DeclarationSupersession")
+  correctionReason String?
+  reviewedById     String?
+  reviewedBy       User?                     @relation("PriorEmployerDeclarationReviewedBy", fields: [reviewedById], references: [id], onDelete: Cascade)
+  createdAt        DateTime                  @default(now())
 
   @@unique([employeeId, taxYear, version])
   @@index([organizationId, taxYear])
@@ -713,28 +782,30 @@ model PriorEmployerDeclaration {
 // Corrections append a higher version of the same document key; readers use
 // the highest version per key.
 model PreviousEmployerIncome {
-  id                          String   @id @default(uuid())
-  organizationId              String
-  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId                  String
-  employee                    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  taxYear                     Int
-  employerName                String
-  employerTin                 String
-  periodStart                 DateTime @db.Date
-  periodEnd                   DateTime @db.Date
-  grossCompensationCents      BigInt
-  taxableCompensationCents    BigInt
-  taxWithheldCents            BigInt
-  documentReference           String
-  recordedById                String
-  version                     Int      @default(1)
-  supersedesId                String?  @unique
-  supersedes                  PreviousEmployerIncome? @relation("PreviousIncomeSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
-  supersededBy                PreviousEmployerIncome? @relation("PreviousIncomeSupersession")
-  correctionReason            String?
-  reviewedById                String?
-  createdAt                   DateTime @default(now())
+  id                       String                  @id @default(uuid())
+  organizationId           String
+  organization             Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId               String
+  employee                 Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear                  Int
+  employerName             String
+  employerTin              String
+  periodStart              DateTime                @db.Date
+  periodEnd                DateTime                @db.Date
+  grossCompensationCents   BigInt
+  taxableCompensationCents BigInt
+  taxWithheldCents         BigInt
+  documentReference        String
+  recordedById             String
+  recordedBy               User                    @relation("PreviousEmployerIncomeRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+  version                  Int                     @default(1)
+  supersedesId             String?                 @unique
+  supersedes               PreviousEmployerIncome? @relation("PreviousIncomeSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy             PreviousEmployerIncome? @relation("PreviousIncomeSupersession")
+  correctionReason         String?
+  reviewedById             String?
+  reviewedBy               User?                   @relation("PreviousEmployerIncomeReviewedBy", fields: [reviewedById], references: [id], onDelete: Cascade)
+  createdAt                DateTime                @default(now())
 
   @@unique([employeeId, taxYear, employerTin, periodStart, periodEnd, version], map: "PreviousEmployerIncome_employee_year_tin_period_version_key")
   @@index([organizationId, taxYear])
@@ -744,21 +815,23 @@ model PreviousEmployerIncome {
 // proof of BIR acceptance or an automatic debit/refund instruction.
 // Corrections append a higher version; readers use the highest version.
 model MonthlyTaxRemittanceEvidence {
-  id                String       @id @default(uuid())
+  id                String                        @id @default(uuid())
   organizationId    String
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taxYear           Int
   month             Int
   remittedCents     BigInt
   documentReference String
   recordedById      String
-  version           Int      @default(1)
-  supersedesId      String?  @unique
+  recordedBy        User                          @relation("MonthlyTaxRemittanceRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+  version           Int                           @default(1)
+  supersedesId      String?                       @unique
   supersedes        MonthlyTaxRemittanceEvidence? @relation("RemittanceSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
   supersededBy      MonthlyTaxRemittanceEvidence? @relation("RemittanceSupersession")
   correctionReason  String?
   reviewedById      String?
-  createdAt         DateTime     @default(now())
+  reviewedBy        User?                         @relation("MonthlyTaxRemittanceReviewedBy", fields: [reviewedById], references: [id], onDelete: Cascade)
+  createdAt         DateTime                      @default(now())
 
   @@unique([organizationId, taxYear, month, version])
 }
@@ -768,26 +841,33 @@ model MonthlyTaxRemittanceEvidence {
 // actually withheld from (or a refund actually paid with) disbursed payroll.
 // Write-once per employee-year version; corrections append a higher version
 // that re-attests the total settled to date, and readers use the latest.
+enum YearEndSettlementType {
+  DEFICIENCY_WITHHELD
+  REFUND_PAID
+}
+
 model YearEndTaxSettlement {
-  id                      String   @id @default(uuid())
+  id                      String                @id @default(uuid())
   organizationId          String
-  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization            Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   employeeId              String
-  employee                Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee                Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   taxYear                 Int
-  settlementType          String   // DEFICIENCY_WITHHELD | REFUND_PAID
-  computedDifferenceCents BigInt   // Snapshot of the 2316 taxAdjustment at settlement
-  settledCents            BigInt   // Positive amount actually withheld/refunded
-  settlementDate          DateTime @db.Date
+  settlementType          YearEndSettlementType
+  computedDifferenceCents BigInt // Snapshot of the 2316 taxAdjustment at settlement
+  settledCents            BigInt // Positive amount actually withheld/refunded
+  settlementDate          DateTime              @db.Date
   documentReference       String
   recordedById            String
-  version                 Int      @default(1)
-  supersedesId            String?  @unique
+  recordedBy              User                  @relation("YearEndTaxSettlementRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+  version                 Int                   @default(1)
+  supersedesId            String?               @unique
   supersedes              YearEndTaxSettlement? @relation("SettlementSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
   supersededBy            YearEndTaxSettlement? @relation("SettlementSupersession")
   correctionReason        String?
   reviewedById            String?
-  createdAt               DateTime @default(now())
+  reviewedBy              User?                 @relation("YearEndTaxSettlementReviewedBy", fields: [reviewedById], references: [id], onDelete: Cascade)
+  createdAt               DateTime              @default(now())
 
   @@unique([employeeId, taxYear, version])
   @@index([organizationId, taxYear])
@@ -798,45 +878,53 @@ model YearEndTaxSettlement {
 // freezing the reconciled figures for audit. Certificates are voided (never
 // deleted); a re-issue appends a higher version. Filing eligibility
 // (e.g. substituted filing) is NOT decided here — only facts are stored.
+enum Bir2316Status {
+  ISSUED
+  VOIDED
+}
+
 model Bir2316Issuance {
-  id                String   @id @default(uuid())
-  organizationId    String
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId        String
-  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  taxYear           Int
-  status            String   // ISSUED | VOIDED
-  snapshot          Json     // Frozen partIVA figures (decimal strings), prior totals, settlement id
-  hadPriorEmployer  Boolean
-  issuedById        String
-  issuedAt          DateTime @default(now())
-  voidedById        String?
-  voidedAt          DateTime?
-  voidReason        String?
-  version           Int      @default(1)
-  supersedesId      String?  @unique
-  supersedes        Bir2316Issuance? @relation("IssuanceSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
-  supersededBy      Bir2316Issuance? @relation("IssuanceSupersession")
-  createdAt         DateTime @default(now())
+  id               String           @id @default(uuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taxYear          Int
+  status           Bir2316Status
+  snapshot         Json // Frozen partIVA figures (decimal strings), prior totals, settlement id
+  hadPriorEmployer Boolean
+  issuedById       String
+  issuedBy         User             @relation("Bir2316IssuanceIssuedBy", fields: [issuedById], references: [id], onDelete: Cascade)
+  issuedAt         DateTime         @default(now())
+  voidedById       String?
+  voidedBy         User?            @relation("Bir2316IssuanceVoidedBy", fields: [voidedById], references: [id], onDelete: Cascade)
+  voidedAt         DateTime?
+  voidReason       String?
+  version          Int              @default(1)
+  supersedesId     String?          @unique
+  supersedes       Bir2316Issuance? @relation("IssuanceSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy     Bir2316Issuance? @relation("IssuanceSupersession")
+  createdAt        DateTime         @default(now())
 
   @@unique([employeeId, taxYear, version])
   @@index([organizationId, taxYear])
 }
 
 model AuditLog {
-  id              String       @id @default(uuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  userId          String
-  userEmail       String
-  action          String       // e.g. "RECALCULATE_PAYROLL", "APPROVE_LOAN"
-  entityType      String       // "PayrollRun", "Employee", "Compensation"
-  entityId        String
-  previousData    Json?
-  newData         Json?
-  ipAddress       String?
-  userAgent       String?
-  createdAt       DateTime     @default(now())
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation("AuditLogActor", fields: [userId], references: [id], onDelete: Cascade)
+  userEmail      String
+  action         String // e.g. "RECALCULATE_PAYROLL", "APPROVE_LOAN"
+  entityType     String // "PayrollRun", "Employee", "Compensation"
+  entityId       String
+  previousData   Json?
+  newData        Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId, createdAt])
 }

@@ -129,7 +129,7 @@ test("real workspace persists onboarding, attendance, leave and maker-checker pa
     await expect(
       page.getByRole("region", { name: "Employee details", exact: true }),
     ).toContainText("₱30,000.00");
-    const employee = await prisma.employee.findUniqueOrThrow({
+    const employee = await prisma.employee.findFirstOrThrow({
       where: { email: employeeEmail },
       include: { compensation: true },
     });

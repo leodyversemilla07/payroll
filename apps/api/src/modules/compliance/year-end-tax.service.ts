@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { type Prisma, prisma } from '@workspace/db';
+import { type Prisma, type YearEndSettlementType, prisma } from '@workspace/db';
 import type {
   Bir1604CSchedule71Employee,
   Bir1604CSchedule72Employee,
@@ -499,7 +499,7 @@ export class YearEndTaxService {
     documentReference: string;
     settlementDate: Date;
     adjustment: bigint;
-    settlementType: string;
+    settlementType: YearEndSettlementType;
     settledCents: bigint;
   }> {
     assertSupportedTaxYear(input.taxYear);

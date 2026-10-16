@@ -192,7 +192,7 @@ describe('PostgreSQL-backed employee registration', () => {
       await expect(
         caller(own.user).employees.create({ ...input(email), ...override }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-      expect(await prisma.employee.findUnique({ where: { email } })).toBeNull();
+      expect(await prisma.employee.findFirst({ where: { email } })).toBeNull();
     }
   });
 
@@ -204,7 +204,7 @@ describe('PostgreSQL-backed employee registration', () => {
     await expect(
       caller(own.user).employees.create(input(email)),
     ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
-    expect(await prisma.employee.findUnique({ where: { email } })).toBeNull();
+    expect(await prisma.employee.findFirst({ where: { email } })).toBeNull();
     expect(
       await prisma.compensation.count({ where: { employee: { email } } }),
     ).toBe(0);
