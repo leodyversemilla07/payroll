@@ -3,9 +3,17 @@ import { Prisma, prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import type { AuthService } from '../../auth/auth.service';
 import type { AuditService } from '../../infrastructure/audit/audit.service';
+import type { DoleReportService } from '../../modules/compliance/dole-report.service';
+import type { MonthlyRemittanceService } from '../../modules/compliance/monthly-remittance.service';
+import type { PriorEmploymentService } from '../../modules/compliance/prior-employment.service';
+import type { WithholdingExportsService } from '../../modules/compliance/withholding-exports.service';
+import type { YearEndTaxService } from '../../modules/compliance/year-end-tax.service';
+import type { DashboardService } from '../../modules/dashboard/dashboard.service';
 import type { EmployeesService } from '../../modules/employees/employees.service';
+import type { HolidaysService } from '../../modules/holidays/holidays.service';
 import type { LeavesService } from '../../modules/leaves/leaves.service';
 import type { LoansService } from '../../modules/loans/loans.service';
+import type { NotificationService } from '../../modules/notifications/notifications.service';
 import type { PayrollService } from '../../modules/payroll/payroll.service';
 import type { TimekeepingService } from '../../modules/timekeeping/timekeeping.service';
 import { createApiRouter } from '../../trpc/app.router';
@@ -70,9 +78,9 @@ describe('employee registration tRPC workflow', () => {
   const getEmployeeById = jest.fn();
   const record = jest.fn();
   const transaction = {} as Prisma.TransactionClient;
-  const router = createApiRouter(
-    new TrpcService(),
-    {
+  const router = createApiRouter({
+    trpcService: new TrpcService(),
+    employeesService: {
       registerEmployee,
       updateEmployee,
       deleteEmployee,
@@ -80,13 +88,21 @@ describe('employee registration tRPC workflow', () => {
       listEmployees,
       getEmployeeById,
     } as unknown as EmployeesService,
-    {} as TimekeepingService,
-    {} as PayrollService,
-    {} as LoansService,
-    {} as LeavesService,
-    {} as AuthService,
-    { record } as unknown as AuditService,
-  );
+    timekeepingService: {} as TimekeepingService,
+    payrollService: {} as PayrollService,
+    loansService: {} as LoansService,
+    leavesService: {} as LeavesService,
+    authService: {} as AuthService,
+    auditService: { record } as unknown as AuditService,
+    dashboardService: {} as DashboardService,
+    holidaysService: {} as HolidaysService,
+    notificationService: {} as NotificationService,
+    priorEmploymentService: {} as PriorEmploymentService,
+    monthlyRemittanceService: {} as MonthlyRemittanceService,
+    withholdingExportsService: {} as WithholdingExportsService,
+    yearEndTaxService: {} as YearEndTaxService,
+    doleReportService: {} as DoleReportService,
+  });
   const employee = {
     id: 'employee-1',
     employeeNumber: 'EMP-test',

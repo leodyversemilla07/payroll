@@ -3,9 +3,17 @@ import { Prisma, prisma, Role } from '@workspace/db';
 import type { Request, Response } from 'express';
 import { AuthService } from '../src/auth/auth.service';
 import { AuditService } from '../src/infrastructure/audit/audit.service';
+import { DoleReportService } from '../src/modules/compliance/dole-report.service';
+import { MonthlyRemittanceService } from '../src/modules/compliance/monthly-remittance.service';
+import { PriorEmploymentService } from '../src/modules/compliance/prior-employment.service';
+import { WithholdingExportsService } from '../src/modules/compliance/withholding-exports.service';
+import { YearEndTaxService } from '../src/modules/compliance/year-end-tax.service';
+import { DashboardService } from '../src/modules/dashboard/dashboard.service';
 import { EmployeesService } from '../src/modules/employees/employees.service';
+import { HolidaysService } from '../src/modules/holidays/holidays.service';
 import { LeavesService } from '../src/modules/leaves/leaves.service';
 import { LoansService } from '../src/modules/loans/loans.service';
+import { NotificationService } from '../src/modules/notifications/notifications.service';
 import { PayrollService } from '../src/modules/payroll/payroll.service';
 import { TimekeepingService } from '../src/modules/timekeeping/timekeeping.service';
 import { createApiRouter } from '../src/trpc/app.router';
@@ -20,16 +28,24 @@ const ownedOrganizationIds: string[] = [];
 
 const timekeepingService = new TimekeepingService();
 const leavesService = new LeavesService();
-const router = createApiRouter(
-  new TrpcService(),
-  new EmployeesService(),
-  timekeepingService,
-  new PayrollService(timekeepingService),
-  new LoansService(),
-  leavesService,
-  new AuthService(),
-  new AuditService(),
-);
+const router = createApiRouter({
+  trpcService: new TrpcService(),
+  employeesService: new EmployeesService(),
+  timekeepingService: timekeepingService,
+  payrollService: new PayrollService(timekeepingService),
+  loansService: new LoansService(),
+  leavesService: leavesService,
+  authService: new AuthService(),
+  auditService: new AuditService(),
+  dashboardService: new DashboardService(),
+  holidaysService: new HolidaysService(),
+  notificationService: new NotificationService(),
+  priorEmploymentService: new PriorEmploymentService(),
+  monthlyRemittanceService: new MonthlyRemittanceService(),
+  withholdingExportsService: new WithholdingExportsService(),
+  yearEndTaxService: new YearEndTaxService(),
+  doleReportService: new DoleReportService(),
+});
 
 type CallerUser = NonNullable<Context['user']>;
 function callerFor(user: CallerUser) {

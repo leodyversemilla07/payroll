@@ -1,8 +1,16 @@
 import type { AuthService } from '../auth/auth.service';
 import type { AuditService } from '../infrastructure/audit/audit.service';
+import type { DoleReportService } from '../modules/compliance/dole-report.service';
+import type { MonthlyRemittanceService } from '../modules/compliance/monthly-remittance.service';
+import type { PriorEmploymentService } from '../modules/compliance/prior-employment.service';
+import type { WithholdingExportsService } from '../modules/compliance/withholding-exports.service';
+import type { YearEndTaxService } from '../modules/compliance/year-end-tax.service';
+import type { DashboardService } from '../modules/dashboard/dashboard.service';
 import type { EmployeesService } from '../modules/employees/employees.service';
+import type { HolidaysService } from '../modules/holidays/holidays.service';
 import type { LeavesService } from '../modules/leaves/leaves.service';
 import type { LoansService } from '../modules/loans/loans.service';
+import type { NotificationService } from '../modules/notifications/notifications.service';
 import type { PayrollService } from '../modules/payroll/payroll.service';
 import type { TimekeepingService } from '../modules/timekeeping/timekeeping.service';
 import { createApiRouter } from './app.router';
@@ -202,16 +210,24 @@ function stub<T>(): T {
 }
 
 describe('createApiRouter (shape)', () => {
-  const router = createApiRouter(
-    new TrpcService(),
-    stub<EmployeesService>(),
-    stub<TimekeepingService>(),
-    stub<PayrollService>(),
-    stub<LoansService>(),
-    stub<LeavesService>(),
-    stub<AuthService>(),
-    stub<AuditService>(),
-  );
+  const router = createApiRouter({
+    trpcService: new TrpcService(),
+    employeesService: stub<EmployeesService>(),
+    timekeepingService: stub<TimekeepingService>(),
+    payrollService: stub<PayrollService>(),
+    loansService: stub<LoansService>(),
+    leavesService: stub<LeavesService>(),
+    authService: stub<AuthService>(),
+    auditService: stub<AuditService>(),
+    dashboardService: stub<DashboardService>(),
+    holidaysService: stub<HolidaysService>(),
+    notificationService: stub<NotificationService>(),
+    priorEmploymentService: stub<PriorEmploymentService>(),
+    monthlyRemittanceService: stub<MonthlyRemittanceService>(),
+    withholdingExportsService: stub<WithholdingExportsService>(),
+    yearEndTaxService: stub<YearEndTaxService>(),
+    doleReportService: stub<DoleReportService>(),
+  });
 
   const procedures = router._def.procedures as unknown as Record<
     string,

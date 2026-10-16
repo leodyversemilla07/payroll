@@ -20,6 +20,7 @@ import { CutoffSchedulerService } from './modules/payroll/cutoff-scheduler.servi
 import { PayrollService } from './modules/payroll/payroll.service';
 import { PayslipPdfService } from './modules/payroll/payslip-pdf.service';
 import { TimekeepingService } from './modules/timekeeping/timekeeping.service';
+import { ApiRouterFactory } from './trpc/api-router.factory';
 import { TrpcModule } from './trpc/trpc.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { TrpcModule } from './trpc/trpc.module';
     NotificationService,
     StorageService,
     PayslipPdfService,
+    ApiRouterFactory,
   ],
   exports: [
     AuthService,
