@@ -273,6 +273,10 @@ export function processBiometricLogs(
 }
 
 const MINUTE_MS = 60_000;
+// Defined here rather than imported from ./manila-date so this module keeps
+// running standalone: the TZ-hermetic spec below strips types and loads the
+// source as a bare data: module, where sibling specifiers cannot resolve.
+// The value matches MANILA_OFFSET_MS and cannot drift: PH has no DST.
 const MANILA_OFFSET_MS = 8 * 60 * MINUTE_MS;
 
 function parseShiftTime(value: string): number {

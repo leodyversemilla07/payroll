@@ -20,6 +20,7 @@ export * from "./bir-2316";
 export * from "./de-minimis";
 export * from "./dole-rates";
 export * from "./final-pay";
+export * from "./manila-date";
 export * from "./money";
 export * from "./other-benefits";
 export * from "./pagibig";

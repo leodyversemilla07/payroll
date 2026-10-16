@@ -3,6 +3,7 @@
  * Compliant with Presidential Decree No. 851 & DOLE Labor Advisory on 13th Month Pay
  */
 
+import { manilaToday } from "./manila-date";
 import { formatCentavosGrouped } from "./money";
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
 
@@ -67,9 +68,13 @@ export function calculateMonthsWorkedInYear(
 ): number {
   const hired = typeof hireDate === "string" ? new Date(hireDate) : hireDate;
   if (Number.isNaN(hired.getTime())) return 0;
-  const hireYear = hired.getFullYear();
+  // Hire dates are civil (UTC-midnight) values; getUTC* keeps the year and
+  // month-steps correct no matter which timezone hosts the engine.
+  const hireYear = hired.getUTCFullYear();
   if (hireYear > taxYear) return 0;
-  if (hireYear === taxYear) return Math.max(1, 12 - hired.getMonth());
+  if (hireYear === taxYear) {
+    return Math.max(1, 12 - hired.getUTCMonth());
+  }
   return 12;
 }
 
@@ -224,7 +229,7 @@ export function formatDole13thMonthComplianceReport(
     "I hereby certify under oath that the above information is true and correct in accordance",
     "with the provisions of Presidential Decree No. 851 and its implementing guidelines.",
     "",
-    `Authorized Representative: ${input.contactPerson}          Date: ${new Date().toISOString().slice(0, 10)}`,
+    `Authorized Representative: ${input.contactPerson}          Date: ${manilaToday()}`,
     `Position / Title: ${input.contactTitle ?? "Not provided"}`,
   ].join("\r\n");
 }

@@ -4,6 +4,7 @@
  * not be signed, filed or sent to an employee as a substitute for the form.
  */
 
+import { manilaIsoDate } from "./manila-date";
 import { formatCentavosGrouped } from "./money";
 import { TAX_EXEMPT_BONUS_CEILING_CENTS } from "./thirteenth-month";
 import { annualizeTax } from "./withholding-tax";
@@ -260,7 +261,9 @@ export function generateBir2316Certificate(
       taxPayableByEmployeeCents,
     },
     isMwe,
-    generatedDate: new Date().toISOString(),
+    // Worksheet metadata drifts if left to the host zone; anchor it to the
+    // Manila civil date on which the worksheet is generated.
+    generatedDate: manilaIsoDate(new Date()),
   };
 }
 
