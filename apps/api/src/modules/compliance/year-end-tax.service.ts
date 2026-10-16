@@ -5,11 +5,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { type Prisma, prisma, type YearEndSettlementType } from '@workspace/db';
-import type {
-  Bir1604CSchedule71Employee,
-  Bir1604CSchedule72Employee,
+import {
+  type Bir1604CSchedule71Employee,
+  type Bir1604CSchedule72Employee,
+  formatCentavosToPesos,
+  manilaToday,
+  manilaYear,
 } from '@workspace/payroll-engine';
-import { formatCentavosToPesos } from '@workspace/payroll-engine';
 import { Bir2316PdfService } from './bir-2316-pdf.service';
 import { resolvePriorEmployerTotals } from './prior-employment.inputs';
 import {
@@ -933,7 +935,7 @@ export class YearEndTaxService {
   async generateBir2316(
     employeeId: string,
     organizationId: string,
-    taxYear = new Date().getFullYear(),
+    taxYear = manilaYear(),
   ) {
     assertSupportedTaxYear(taxYear);
     const {
@@ -1196,7 +1198,7 @@ export class YearEndTaxService {
   async generateBir2316Pdf(
     employeeId: string,
     organizationId: string,
-    taxYear = new Date().getFullYear(),
+    taxYear = manilaYear(),
     isPreview = false,
   ) {
     assertSupportedTaxYear(taxYear);
@@ -1301,7 +1303,7 @@ export class YearEndTaxService {
 
   async generateBir1604CAlphalist(
     organizationId: string,
-    taxYear = new Date().getFullYear(),
+    taxYear = manilaYear(),
   ) {
     assertSupportedTaxYear(taxYear);
     const {
@@ -1529,8 +1531,11 @@ function issuanceTiming(taxYear: number): {
   isLate: boolean;
 } {
   const deadline = new Date(Date.UTC(taxYear + 1, 0, 31));
+  const statutoryDeadline = deadline.toISOString().slice(0, 10);
   return {
-    statutoryDeadline: deadline.toISOString().slice(0, 10),
-    isLate: new Date() > deadline,
+    statutoryDeadline,
+    // The whole January 31 civil day counts: lateness is judged in Manila,
+    // so issuing during Jan 31 (evening Manila is already Feb 1 UTC) is not.
+    isLate: manilaToday() > statutoryDeadline,
   };
 }

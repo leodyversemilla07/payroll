@@ -11,7 +11,10 @@ import {
   Prisma,
   prisma,
 } from '@workspace/db';
-import { calculateSilCashConversion } from '@workspace/payroll-engine';
+import {
+  calculateSilCashConversion,
+  manilaYear,
+} from '@workspace/payroll-engine';
 import {
   type CreditAudit,
   type LeaveCreditInput,
@@ -123,7 +126,7 @@ export class LeavesService {
   async getEmployeeLeaveBalances(
     employeeId: string,
     organizationId: string,
-    year = new Date().getFullYear(),
+    year = manilaYear(),
   ) {
     await this.assertEmployeeInOrganization(employeeId, organizationId);
     return prisma.leaveBalance.findMany({
@@ -523,7 +526,7 @@ export class LeavesService {
     });
     if (!employee?.compensation)
       throw new NotFoundException('Employee or active compensation not found');
-    const currentYear = new Date().getFullYear();
+    const currentYear = manilaYear();
     const silBalance = await prisma.leaveBalance.findUnique({
       where: {
         employeeId_leaveType_year: {

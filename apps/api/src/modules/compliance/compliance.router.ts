@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
 import { Prisma, prisma, Role } from '@workspace/db';
+import { manilaToday, manilaYear } from '@workspace/payroll-engine';
 import { z } from 'zod';
 import { TaxCorrectionService } from '../../modules/compliance/tax-correction.service';
 import {
@@ -337,7 +338,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           entityId: input.payrollRunId,
         });
         return {
-          filename: `${input.bankFormat}_Transmittal_${new Date().toISOString().slice(0, 10)}.csv`,
+          filename: `${input.bankFormat}_Transmittal_${manilaToday()}.csv`,
           csvContent,
         };
       }),
@@ -696,7 +697,7 @@ export function createComplianceRouter(ctx: RouterContext) {
           });
         }
 
-        const taxYear = input.taxYear ?? new Date().getFullYear();
+        const taxYear = input.taxYear ?? manilaYear();
 
         if (!isStaff) {
           const issuance = await yearEndTaxService.getBir2316Issuance(

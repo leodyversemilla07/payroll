@@ -8,6 +8,7 @@ import type {
   ThirteenthMonthBatchResult,
   ThirteenthMonthEmployeeResult,
 } from '@workspace/payroll-engine';
+import { manilaYear } from '@workspace/payroll-engine';
 
 export interface DoleReportDetails {
   natureOfBusiness: string;
@@ -33,7 +34,7 @@ export class DoleReportService {
   async generateDole13thMonthReport(
     organizationId: string,
     details: DoleReportDetails,
-    taxYear = new Date().getFullYear(),
+    taxYear = manilaYear(),
   ) {
     const { calculateMonthsWorkedInYear, formatDole13thMonthComplianceReport } =
       await import('@workspace/payroll-engine');

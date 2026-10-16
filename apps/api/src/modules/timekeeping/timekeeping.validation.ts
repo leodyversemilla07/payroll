@@ -1,3 +1,4 @@
+import { manilaIsoDate } from '@workspace/payroll-engine';
 import { z } from 'zod';
 
 const minutes = z.number().int().min(0).max(1440);
@@ -83,10 +84,7 @@ export const attendanceCorrectionSchema = z
       if (duration <= 0 || duration > dayMs) {
         issue('timeOut', 'Time out must follow time in by at most 24 hours');
       }
-      if (
-        new Date(start + 8 * 3_600_000).toISOString().slice(0, 10) !==
-        input.date
-      ) {
+      if (manilaIsoDate(new Date(start)) !== input.date) {
         issue(
           'timeIn',
           'Time in must fall on the selected DTR date in Asia/Manila',

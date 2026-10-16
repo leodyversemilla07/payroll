@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
 import { Prisma, prisma, Role } from '@workspace/db';
+import { manilaToday } from '@workspace/payroll-engine';
 import { z } from 'zod';
 import { findDepartmentManagerDepartmentId } from '../../infrastructure/authorization/department-scope';
 import { finalPayPreviewSchema } from '../../modules/employees/final-pay.inputs';
@@ -192,7 +193,7 @@ export function createEmployeesRouter(ctx: RouterContext) {
                 message: 'Hourly basic rate is required for hourly pay basis',
               });
             }
-            if (input.dateOfBirth > new Date().toISOString().slice(0, 10)) {
+            if (input.dateOfBirth > manilaToday()) {
               context.addIssue({
                 code: 'custom',
                 path: ['dateOfBirth'],
@@ -334,10 +335,7 @@ export function createEmployeesRouter(ctx: RouterContext) {
             isManagerial: z.boolean().optional(),
           })
           .superRefine((input, context) => {
-            if (
-              input.dateOfBirth &&
-              input.dateOfBirth > new Date().toISOString().slice(0, 10)
-            ) {
+            if (input.dateOfBirth && input.dateOfBirth > manilaToday()) {
               context.addIssue({
                 code: 'custom',
                 path: ['dateOfBirth'],
