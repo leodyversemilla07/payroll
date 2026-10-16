@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { type Prisma, type YearEndSettlementType, prisma } from '@workspace/db';
+import { type Prisma, prisma, type YearEndSettlementType } from '@workspace/db';
 import type {
   Bir1604CSchedule71Employee,
   Bir1604CSchedule72Employee,
