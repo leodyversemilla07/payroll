@@ -40,7 +40,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { cn } from "@workspace/ui/lib/utils";
 import { Calendar, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { manilaToday } from "@/lib/attendance-time";
+import { manilaIsoDate, manilaToday } from "@/lib/attendance-time";
 import { leaveSchedule } from "@/lib/leave-schedule";
 import { trpc } from "@/lib/trpc";
 import { LeaveCancellationForm } from "./leave-cancellation";
@@ -68,7 +68,7 @@ function errorText(error: ApiError) {
   return "Could not complete the leave request. Please retry.";
 }
 function date(value: Date | string) {
-  return new Date(value).toISOString().slice(0, 10);
+  return manilaIsoDate(new Date(value));
 }
 
 export function LeavesSection({

@@ -58,6 +58,7 @@ import {
 import { PageHeaderAction } from "@/components/page-header-action";
 import {
   fromManilaInput,
+  manilaIsoDate,
   manilaToday,
   toManilaInput,
 } from "@/lib/attendance-time";
@@ -91,7 +92,7 @@ const minuteFields = [
 ] as const;
 
 function date(value: Date | string) {
-  return new Date(value).toISOString().slice(0, 10);
+  return manilaIsoDate(new Date(value));
 }
 function punchTime(value: Date | string | null) {
   return value

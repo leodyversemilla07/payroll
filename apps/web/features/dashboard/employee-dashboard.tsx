@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { manilaToday } from "@/lib/attendance-time";
+import { manilaIsoDate, manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
 
 function pesos(value: bigint | number | string) {
@@ -147,9 +147,7 @@ export function EmployeeDashboard({
   const totalHoursWorked = (totalWorkedMinutes / 60).toFixed(1);
   const holidays = holidaysQuery.data ?? [];
   const nextHoliday = holidays
-    .filter(
-      (holiday) => new Date(holiday.date).toISOString().slice(0, 10) >= today,
-    )
+    .filter((holiday) => manilaIsoDate(new Date(holiday.date)) >= today)
     .sort(
       (first, second) =>
         new Date(first.date).getTime() - new Date(second.date).getTime(),

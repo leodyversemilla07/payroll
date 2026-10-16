@@ -56,6 +56,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { DatePicker } from "@/components/date-picker";
 import { PageHeaderAction } from "@/components/page-header-action";
+import { manilaToday } from "@/lib/attendance-time";
 import { trpc } from "@/lib/trpc";
 import {
   EmployeeDataTable,
@@ -360,7 +361,7 @@ interface TextFieldConfig {
   max?: string;
 }
 
-const todayIso = new Date().toISOString().slice(0, 10);
+const todayIso = manilaToday();
 
 const profileFields: readonly TextFieldConfig[] = [
   { name: "firstName", label: "First name", maxLength: 100 },
@@ -464,7 +465,7 @@ function CreateEmployeeForm({
     const text = (name: string) => String(data.get(name) ?? "").trim();
     const birth = text("dateOfBirth");
     const hire = text("hireDate");
-    if (birth > new Date().toISOString().slice(0, 10) || hire < birth) {
+    if (birth > manilaToday() || hire < birth) {
       setValidationError(
         "Date of birth cannot be in the future, and hire date cannot precede date of birth.",
       );
@@ -1025,7 +1026,7 @@ function EditEmployeeForm({
     const regularization = text("regularizationDate") || null;
     const resignation = text("resignationDate") || null;
 
-    if (birth > new Date().toISOString().slice(0, 10) || hire < birth) {
+    if (birth > manilaToday() || hire < birth) {
       setValidationError(
         "Date of birth cannot be in the future, and hire date cannot precede date of birth.",
       );

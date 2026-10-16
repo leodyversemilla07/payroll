@@ -1,8 +1,14 @@
 // DTR dates and all editor punches use Asia/Manila, not the browser's timezone.
-// The Philippines uses UTC+08:00 without daylight-saving transitions.
+// The civil-date math lives in @workspace/payroll-engine/manila-date so the
+// web portal and the API cannot drift apart.
+import {
+  manilaToday as engineManilaToday,
+  MANILA_OFFSET_MS,
+} from "@workspace/payroll-engine/manila-date";
+
 export function toManilaInput(value: Date | string | null | undefined): string {
   if (!value) return "";
-  return new Date(new Date(value).getTime() + 8 * 3_600_000)
+  return new Date(new Date(value).getTime() + MANILA_OFFSET_MS)
     .toISOString()
     .slice(0, 23);
 }
@@ -12,5 +18,7 @@ export function fromManilaInput(value: string): string | null {
 }
 
 export function manilaToday(): string {
-  return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  return engineManilaToday();
 }
+
+export { manilaIsoDate } from "@workspace/payroll-engine/manila-date";

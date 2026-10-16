@@ -35,6 +35,7 @@ import { Separator } from "@workspace/ui/components/separator";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useWorkspaceUser } from "@/components/user-context";
+import { manilaIsoDate } from "@/lib/attendance-time";
 import { downloadBase64File, downloadTextFile } from "@/lib/download-file";
 import { trpc } from "@/lib/trpc";
 
@@ -1154,8 +1155,8 @@ function PreviousIncomeForms({
       taxYear,
       employerName: correctEmployerName,
       employerTin: target.employerTin,
-      periodStart: new Date(target.periodStart).toISOString().slice(0, 10),
-      periodEnd: new Date(target.periodEnd).toISOString().slice(0, 10),
+      periodStart: manilaIsoDate(new Date(target.periodStart)),
+      periodEnd: manilaIsoDate(new Date(target.periodEnd)),
       grossCompensationCents: grossCents,
       taxableCompensationCents: taxableCents,
       taxWithheldCents: withheldCents,
