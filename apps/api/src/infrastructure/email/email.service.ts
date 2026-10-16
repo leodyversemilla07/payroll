@@ -57,12 +57,20 @@ export class EmailService {
   private readonly sentEmailsQueue: SendEmailInput[] = [];
 
   constructor(config?: EmailConfig) {
+    // Fail-closed test isolation: when jest runs (NODE_ENV=test), ambient
+    // environment variables must never upgrade a unit test into a live
+    // network call (.env with EMAIL_DRIVER=resend / RESEND_API_KEY set used
+    // to leak real sends into the suite). An explicitly passed config still
+    // wins, so drivers can be tested deliberately with mocked fetch.
+    const ambientConfigDisabled = process.env.NODE_ENV === 'test';
     const rawDriver =
       config?.driver ??
-      (process.env.EMAIL_DRIVER as 'resend' | 'smtp' | 'mock' | undefined);
+      (ambientConfigDisabled
+        ? undefined
+        : (process.env.EMAIL_DRIVER as 'resend' | 'smtp' | 'mock' | undefined));
 
-    const resendKey = config?.resendApiKey ?? process.env.RESEND_API_KEY;
-    const smtpHost = config?.smtp?.host ?? process.env.SMTP_HOST;
+    const resendKey = config?.resendApiKey ?? (ambientConfigDisabled ? undefined : process.env.RESEND_API_KEY);
+    const smtpHost = config?.smtp?.host ?? (ambientConfigDisabled ? undefined : process.env.SMTP_HOST);
 
     if (rawDriver) {
       this.driver = rawDriver;
