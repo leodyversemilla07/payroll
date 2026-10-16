@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { ALL_ROLES, HR_ROLES, roleIsIn } from "@workspace/db/role-matrix";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -38,13 +39,7 @@ import { AppSidebar, AppSidebarSkeleton } from "./app-sidebar";
 import { UserProvider } from "./user-context";
 import { WorkspaceLoadingSkeleton } from "./workspace-loading-skeleton";
 
-const supportedRoles = [
-  "SUPER_ADMIN",
-  "HR_ADMIN",
-  "PAYROLL_SPECIALIST",
-  "DEPARTMENT_MANAGER",
-  "EMPLOYEE",
-];
+const supportedRoles = ALL_ROLES;
 
 export function WorkspaceShell({
   defaultSidebarOpen = true,
@@ -169,8 +164,7 @@ export function WorkspaceShell({
               </p>
               {me.data &&
                 !signedOut &&
-                (me.data.role === "SUPER_ADMIN" ||
-                  me.data.role === "HR_ADMIN") &&
+                roleIsIn(me.data.role, HR_ROLES) &&
                 !me.data.mfaEnabled && (
                   <aside
                     aria-label="Security Recommendation"

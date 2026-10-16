@@ -1,6 +1,13 @@
 "use client";
 
 import {
+  ALL_ROLES,
+  EMPLOYEE_RECORD_ROLES,
+  PAYROLL_ROLES,
+  roleIsIn,
+  STAFF_ROLES,
+} from "@workspace/db/role-matrix";
+import {
   Banknote,
   Bell,
   CalendarCheck,
@@ -141,71 +148,35 @@ export const navigationGroups = [
   },
 ];
 
+// Role sets come from @workspace/db/src/role-matrix.ts — the same constants
+// the API enforces with, so the portal cannot drift from server enforcement.
+// These choose who sees a section in the portal at all; every read and
+// mutation is still authorized server-side.
 export const SECTION_PERMISSIONS: Record<WorkspaceSection, readonly string[]> =
   {
-    dashboard: [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
-    employees: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    attendance: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    leaves: [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-    ],
-    holidays: [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
-    loans: ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    "process-payroll": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    "payroll-runs": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    "year-end-tax": ["SUPER_ADMIN", "HR_ADMIN", "PAYROLL_SPECIALIST"],
-    "my-profile": [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
-    "my-attendance": [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
-    security: [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
-    notifications: [
-      "SUPER_ADMIN",
-      "HR_ADMIN",
-      "PAYROLL_SPECIALIST",
-      "DEPARTMENT_MANAGER",
-      "EMPLOYEE",
-    ],
+    dashboard: ALL_ROLES,
+    employees: EMPLOYEE_RECORD_ROLES,
+    // The portal shows attendance review only to employee-record staff even
+    // though the API's TIMEKEEPING_WRITE_ROLES also cover department
+    // managers: managers self-serve via my-attendance/self-service instead.
+    attendance: EMPLOYEE_RECORD_ROLES,
+    leaves: STAFF_ROLES,
+    holidays: ALL_ROLES,
+    loans: EMPLOYEE_RECORD_ROLES,
+    "process-payroll": PAYROLL_ROLES,
+    "payroll-runs": PAYROLL_ROLES,
+    "year-end-tax": PAYROLL_ROLES,
+    "my-profile": ALL_ROLES,
+    "my-attendance": ALL_ROLES,
+    security: ALL_ROLES,
+    notifications: ALL_ROLES,
   };
 
 export function isSectionAllowedForRole(
   sectionId: WorkspaceSection,
   role?: string,
 ): boolean {
-  if (!role) return false;
-  const allowed = SECTION_PERMISSIONS[sectionId];
-  return allowed ? allowed.includes(role) : false;
+  return roleIsIn(role, SECTION_PERMISSIONS[sectionId]);
 }
 
 export function getNavigationGroupsForRole(role?: string) {

@@ -1,5 +1,15 @@
 import { TRPCError } from '@trpc/server';
-import { Role } from '@workspace/db';
+// Role assignments live in @workspace/db (packages/db/src/role-matrix.ts): the
+// web portal renders navigation and capability flags from the same constants,
+// so server and UI cannot drift apart.
+import {
+  HR_ROLES,
+  PAYROLL_ROLES,
+  Role,
+  STAFF_ROLES,
+  TIMEKEEPING_READ_ROLES,
+  TIMEKEEPING_WRITE_ROLES,
+} from '@workspace/db';
 import { type AuthenticatedUser, AuthService } from '../auth/auth.service';
 import { AuditService } from '../infrastructure/audit/audit.service';
 import { DoleReportService } from '../modules/compliance/dole-report.service';
@@ -18,51 +28,20 @@ import { PayrollService } from '../modules/payroll/payroll.service';
 import { TimekeepingService } from '../modules/timekeeping/timekeeping.service';
 import { TrpcService } from './trpc.service';
 
-export const EMPLOYEE_RECORD_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-  Role.PAYROLL_SPECIALIST,
-] as const;
-export const TIMEKEEPING_READ_ROLES = [
-  ...EMPLOYEE_RECORD_ROLES,
-  Role.DEPARTMENT_MANAGER,
-] as const;
-export const HR_ROLES = [Role.SUPER_ADMIN, Role.HR_ADMIN] as const;
-export const TIMEKEEPING_WRITE_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-  Role.PAYROLL_SPECIALIST,
-  Role.DEPARTMENT_MANAGER,
-] as const;
-export const PAYROLL_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-  Role.PAYROLL_SPECIALIST,
-] as const;
-// Intentional separation of duties (maker-checker): payroll specialists
-// and super admins execute runs; super admins and HR admins approve them.
-// HR admins can view payroll but cannot trigger execution, and the service
-// additionally forbids self-approval, so no single user can run and approve
-// their own payroll.
-export const PAYROLL_TRIGGER_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.PAYROLL_SPECIALIST,
-] as const;
-export const PAYROLL_APPROVAL_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-] as const;
-export const LEAVE_APPROVAL_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-  Role.DEPARTMENT_MANAGER,
-] as const;
-export const STAFF_ROLES = [
-  Role.SUPER_ADMIN,
-  Role.HR_ADMIN,
-  Role.PAYROLL_SPECIALIST,
-  Role.DEPARTMENT_MANAGER,
-] as const;
+// Re-exported under the same names so router modules that import roles from
+// this module keep working. The SoD rationale lives with the matrix in
+// packages/db/src/role-matrix.ts.
+export {
+  EMPLOYEE_RECORD_ROLES,
+  HR_ROLES,
+  LEAVE_APPROVAL_ROLES,
+  PAYROLL_APPROVAL_ROLES,
+  PAYROLL_ROLES,
+  PAYROLL_TRIGGER_ROLES,
+  STAFF_ROLES,
+  TIMEKEEPING_READ_ROLES,
+  TIMEKEEPING_WRITE_ROLES,
+} from '@workspace/db';
 
 export function assertEmployeeAccess(
   user: AuthenticatedUser,

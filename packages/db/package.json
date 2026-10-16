@@ -4,6 +4,16 @@
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./role-matrix": {
+      "types": "./src/role-matrix.ts",
+      "default": "./dist/role-matrix.js"
+    }
+  },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },

@@ -9,13 +9,7 @@ import { createApiRouter } from './app.router';
 import { TrpcService } from './trpc.service';
 
 jest.mock('@workspace/db', () => ({
-  Role: {
-    SUPER_ADMIN: 'SUPER_ADMIN',
-    HR_ADMIN: 'HR_ADMIN',
-    PAYROLL_SPECIALIST: 'PAYROLL_SPECIALIST',
-    DEPARTMENT_MANAGER: 'DEPARTMENT_MANAGER',
-    EMPLOYEE: 'EMPLOYEE',
-  },
+  ...jest.requireActual('@workspace/db'),
   prisma: {},
 }));
 
