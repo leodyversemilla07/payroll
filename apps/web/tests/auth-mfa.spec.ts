@@ -150,7 +150,9 @@ test.describe("Multi-Factor Authentication (TOTP)", () => {
       page.getByRole("heading", { name: "Two-Factor Authentication" }),
     ).toBeVisible();
     await expect(
-      page.getByText("Enter the 6-digit code from your authenticator app"),
+      page.getByText(
+        "Enter the 6-digit code from Google Authenticator, 1Password, or an 8-character backup code.",
+      ),
     ).toBeVisible();
 
     // 3. Enter incorrect code first -> verifies error state
