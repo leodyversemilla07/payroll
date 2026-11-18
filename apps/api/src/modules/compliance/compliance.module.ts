@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ComplianceDocumentService } from './compliance-document.service';
 import { DoleReportService } from './dole-report.service';
 import { MonthlyRemittanceService } from './monthly-remittance.service';
 import { PriorEmploymentService } from './prior-employment.service';
@@ -12,6 +13,7 @@ import { YearEndTaxService } from './year-end-tax.service';
     WithholdingExportsService,
     YearEndTaxService,
     DoleReportService,
+    ComplianceDocumentService,
   ],
   exports: [
     PriorEmploymentService,
@@ -19,6 +21,7 @@ import { YearEndTaxService } from './year-end-tax.service';
     WithholdingExportsService,
     YearEndTaxService,
     DoleReportService,
+    ComplianceDocumentService,
   ],
 })
 export class ComplianceModule {}

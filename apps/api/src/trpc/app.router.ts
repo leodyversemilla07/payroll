@@ -49,6 +49,7 @@ export function createApiRouter({
   withholdingExportsService,
   yearEndTaxService,
   doleReportService,
+  complianceDocumentService,
   cutoffSchedulerService,
 }: ApiRouterServices) {
   const publicProcedure = trpcService.publicProcedure;
@@ -68,6 +69,7 @@ export function createApiRouter({
     withholdingExportsService,
     yearEndTaxService,
     doleReportService,
+    complianceDocumentService,
     cutoffSchedulerService,
   });
 

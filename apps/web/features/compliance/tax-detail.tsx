@@ -11,6 +11,7 @@ import {
 import { Separator } from "@workspace/ui/components/separator";
 import { FileText, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { SourceDocuments } from "./source-documents";
 import {
   DeclarationForms,
   PreviousIncomeForms,
@@ -79,6 +80,7 @@ export function EmployeeTaxDetail({
       ) : (
         <>
           <EvidenceSummary evidence={evidence.data} />
+          <SourceDocuments employeeId={employee.id} evidence={evidence.data} />
           <DeclarationForms
             employeeId={employee.id}
             taxYear={taxYear}

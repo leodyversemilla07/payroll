@@ -12,6 +12,7 @@ import {
 } from '@workspace/db';
 import { type AuthenticatedUser, AuthService } from '../auth/auth.service';
 import { AuditService } from '../infrastructure/audit/audit.service';
+import { ComplianceDocumentService } from '../modules/compliance/compliance-document.service';
 import { DoleReportService } from '../modules/compliance/dole-report.service';
 import { MonthlyRemittanceService } from '../modules/compliance/monthly-remittance.service';
 import { PriorEmploymentService } from '../modules/compliance/prior-employment.service';
@@ -71,6 +72,9 @@ export interface RouterServices {
   withholdingExportsService: WithholdingExportsService;
   yearEndTaxService: YearEndTaxService;
   doleReportService: DoleReportService;
+  // Optional for legacy router fixtures that do not exercise document APIs.
+  // Nest production wiring always supplies this service.
+  complianceDocumentService?: ComplianceDocumentService;
   leavesService: LeavesService;
   dashboardService: DashboardService;
   holidaysService: HolidaysService;

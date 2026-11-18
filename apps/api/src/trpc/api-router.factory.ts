@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../infrastructure/audit/audit.service';
+import { ComplianceDocumentService } from '../modules/compliance/compliance-document.service';
 import { DoleReportService } from '../modules/compliance/dole-report.service';
 import { MonthlyRemittanceService } from '../modules/compliance/monthly-remittance.service';
 import { PriorEmploymentService } from '../modules/compliance/prior-employment.service';
@@ -49,6 +50,7 @@ export class ApiRouterFactory {
     readonly withholdingExportsService: WithholdingExportsService,
     readonly yearEndTaxService: YearEndTaxService,
     readonly doleReportService: DoleReportService,
+    readonly complianceDocumentService: ComplianceDocumentService,
     readonly cutoffSchedulerService: CutoffSchedulerService,
   ) {}
 

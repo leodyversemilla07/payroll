@@ -5,6 +5,7 @@ import { AuthService } from './auth/auth.service';
 import { AuditService } from './infrastructure/audit/audit.service';
 import { EmailModule } from './infrastructure/email/email.module';
 import { StorageService } from './infrastructure/storage/storage.service';
+import { ComplianceDocumentService } from './modules/compliance/compliance-document.service';
 import { DoleReportService } from './modules/compliance/dole-report.service';
 import { MonthlyRemittanceService } from './modules/compliance/monthly-remittance.service';
 import { PriorEmploymentService } from './modules/compliance/prior-employment.service';
@@ -40,6 +41,7 @@ import { TrpcModule } from './trpc/trpc.module';
     WithholdingExportsService,
     YearEndTaxService,
     DoleReportService,
+    ComplianceDocumentService,
     LeavesService,
     DashboardService,
     HolidaysService,
@@ -61,6 +63,7 @@ import { TrpcModule } from './trpc/trpc.module';
     WithholdingExportsService,
     YearEndTaxService,
     DoleReportService,
+    ComplianceDocumentService,
     LeavesService,
     DashboardService,
     HolidaysService,

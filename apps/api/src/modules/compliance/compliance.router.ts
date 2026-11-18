@@ -7,6 +7,7 @@ import { TRPCError } from '@trpc/server';
 import { Prisma, prisma, Role } from '@workspace/db';
 import { manilaToday, manilaYear } from '@workspace/payroll-engine';
 import { z } from 'zod';
+import { StorageService } from '../../infrastructure/storage/storage.service';
 import { TaxCorrectionService } from '../../modules/compliance/tax-correction.service';
 import {
   type CorrectionKind,
@@ -17,6 +18,7 @@ import {
 } from '../../modules/compliance/tax-correction.validation';
 import type { RouterContext } from '../../trpc/router-context';
 import type { Context } from '../../trpc/trpc.service';
+import { ComplianceDocumentService } from './compliance-document.service';
 
 // Centavos arrive as decimal strings so browsers never round large amounts.
 const centsInput = z
@@ -63,8 +65,14 @@ export function createComplianceRouter(ctx: RouterContext) {
     withholdingExportsService,
     yearEndTaxService,
     doleReportService,
+    complianceDocumentService,
     auditService,
   } = ctx;
+  // Existing isolated router tests predate the document service. Production
+  // always receives the Nest-managed instance through RouterContext.
+  const documentService =
+    complianceDocumentService ??
+    new ComplianceDocumentService(new StorageService());
 
   const submitCorrection = (
     userContext: Context & { user: NonNullable<Context['user']> },
@@ -98,6 +106,88 @@ export function createComplianceRouter(ctx: RouterContext) {
     );
 
   return trpc.router({
+    uploadComplianceDocument: hrProcedure
+      .input(
+        z.object({
+          employeeId: z.string().uuid().optional(),
+          entityType: z.enum([
+            'PriorEmployerDeclaration',
+            'PreviousEmployerIncome',
+            'MonthlyTaxRemittanceEvidence',
+            'YearEndTaxSettlement',
+            'TaxEvidenceCorrection',
+          ]),
+          entityId: z.string().uuid(),
+          originalName: z.string().trim().min(1).max(200),
+          contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+          // 10 MiB binary payload plus base64 expansion. The service repeats
+          // the binary-size check after decoding.
+          dataBase64: z
+            .string()
+            .regex(
+              /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
+            )
+            .max(14_000_000),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        prisma.$transaction(
+          async (transaction) => {
+            const document = await documentService
+              .withDatabase(transaction)
+              .upload({
+                ...input,
+                organizationId: ctx.user.organizationId,
+                uploadedById: ctx.user.id,
+              });
+            await auditService.record(
+              {
+                user: ctx.user,
+                request: ctx.req,
+                action: 'CREATE',
+                entityType: 'ComplianceDocument',
+                entityId: document.id,
+                newValue: {
+                  entityType: document.entityType,
+                  entityId: document.entityId,
+                  employeeId: document.employeeId,
+                  originalName: document.originalName,
+                  contentType: document.contentType,
+                  byteSize: document.byteSize,
+                  sha256: document.sha256,
+                },
+              },
+              transaction,
+            );
+            return document;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
+      ),
+
+    listComplianceDocuments: hrProcedure
+      .input(
+        z.object({
+          entityType: z.string().trim().min(1).max(80),
+          entityId: z.string().uuid(),
+        }),
+      )
+      .query(({ input, ctx }) =>
+        documentService.list({
+          ...input,
+          organizationId: ctx.user.organizationId,
+        }),
+      ),
+
+    readComplianceDocument: hrProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(({ input, ctx }) =>
+        documentService.read({
+          id: input.id,
+          organizationId: ctx.user.organizationId,
+        }),
+      ),
+
     recordPriorEmployerDeclaration: hrProcedure
       .input(
         z.object({
